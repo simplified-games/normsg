@@ -1060,7 +1060,6 @@ let toInterval   = null;
 
 // Spam tracking
 let spamTs       = [];     // timestamps of recent sends
-let localTOUntil = null;   // Date — local spam timeout
 
 // Unsubscribe handles
 let unsubF = null, unsubR = null, unsubG = null;
@@ -1651,46 +1650,6 @@ async function runCleanup(msgPath) {
 const SWEAR = /\b(fuck|shit|bitch|cunt|dick|piss|asshole|bastard|cock)\b/i;
 
 async function checkSend(type, text) {
-    // 1. Firestore timeout (swear)
-    const snap = await db.collection('users').doc(me.uid).get();
-    const dat  = snap.data() || {};
-    const dbTO = dat.timeoutUntil?.toDate?.();
-    if (dbTO && dbTO > new Date()) {
-        const s = Math.ceil((dbTO - new Date()) / 1000);
-        showToBanner(`🤐 Timed out for swearing — ${s}s remaining.`, dbTO);
-        return false;
-    }
-
-    // 2. Local spam timeout
-    if (localTOUntil && localTOUntil > new Date()) {
-        const s = Math.ceil((localTOUntil - new Date()) / 1000);
-        showToBanner(`⚡ Slow down! ${s}s remaining.`, localTOUntil);
-        return false;
-    }
-
-    // 3. Spam rate (>10 per 60s)
-    const now = Date.now();
-    spamTs = spamTs.filter(t => now-t < 60000);
-    if (spamTs.length >= 10) {
-        localTOUntil = new Date(now + 60000);
-        spamTs = [];
-        showToBanner('⚡ Sending too fast! Timed out for 1 minute.', localTOUntil);
-        return false;
-    }
-    spamTs.push(now);
-
-    // 4. Swear filter
-    if (type==='text' && SWEAR.test(text)) {
-        const until = new Date(Date.now() + 5*60000);
-        await db.collection('users').doc(me.uid).update({
-            timeoutUntil:  TS.fromDate(until),
-            timeoutReason: 'swearing'
-        });
-        showToBanner('🤐 Watch the language! Timed out for 5 minutes.', until);
-        return false;
-    }
-
-    clearToBanner();
     return true;
 }
 
