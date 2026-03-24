@@ -711,6 +711,55 @@
         .reaction-chip.mine  { border-color: var(--accent); background: rgba(124,92,252,0.15); }
         .reaction-count { font-size: 11px; color: var(--muted); font-weight: 700; }
 
+        /* ── REPLY BAR ───────────────────────────────────── */
+        #replyBar {
+            display: none; align-items: center; gap: 8px;
+            padding: 6px 12px; margin-bottom: 5px;
+            background: rgba(124,92,252,0.08);
+            border-left: 3px solid var(--accent);
+            border-radius: 0 10px 10px 0;
+        }
+        #replyBar.on { display: flex; }
+        .reply-preview {
+            flex: 1; min-width: 0;
+            font-size: 11px; color: var(--a2); font-weight: 600;
+        }
+        .reply-preview span {
+            display: block; color: var(--muted);
+            font-weight: 400; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis;
+        }
+        .reply-cancel {
+            background: none; border: none; color: var(--muted);
+            font-size: 16px; cursor: pointer; padding: 2px 4px;
+            transition: color 0.12s;
+        }
+        .reply-cancel:hover { color: var(--danger); }
+
+        /* Quoted reply inside a bubble */
+        .reply-quote {
+            background: rgba(0,0,0,0.2);
+            border-left: 3px solid rgba(255,255,255,0.3);
+            border-radius: 6px; padding: 5px 9px;
+            margin-bottom: 6px; font-size: 11px;
+            opacity: 0.75; cursor: pointer;
+        }
+        .bubble.recv .reply-quote {
+            background: rgba(124,92,252,0.1);
+            border-left-color: var(--accent);
+        }
+        .reply-quote-who { font-weight: 700; color: var(--a2); margin-bottom: 2px; }
+        .reply-quote-txt { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+        /* Reply button on hover */
+        .msg-reply-btn {
+            opacity: 0; background: none; border: none;
+            color: var(--muted); font-size: 13px; cursor: pointer;
+            padding: 3px 6px; border-radius: 7px; transition: all 0.12s;
+        }
+        .bwrap:hover .msg-reply-btn { opacity: 1; }
+        .msg-reply-btn:hover { color: var(--a2); background: var(--card); }
+
         /* ── PASTE PREVIEW ───────────────────────────────── */
         #pastePreview {
             display: none; align-items: center; gap: 10px;
@@ -988,7 +1037,8 @@
                     <div class="ch-sub"  id="chatSub">—</div>
                 </div>
                 <div class="ch-btns">
-                    <button class="ic-btn" title="Download chat history" onclick="downloadHistory()" style="font-size:17px;" title="⬇ Download history">⬇</button>
+                    <button class="ic-btn" onclick="downloadHistory()" style="font-size:17px;" title="Download history">⬇</button>
+                    <button class="ic-btn" id="leaveBtn" onclick="leaveChat()" style="font-size:17px;color:var(--danger);" title="Leave chat">🚪</button>
                 </div>
             </div>
 
@@ -1001,6 +1051,13 @@
             <div id="chatInputArea">
                 <div class="upload-ind" id="upInd">
                     <span class="spinner">⟳</span> Uploading image…
+                </div>
+                <div id="replyBar">
+                    <div class="reply-preview">
+                        <strong id="replyWho">—</strong>
+                        <span id="replySnippet">—</span>
+                    </div>
+                    <button class="reply-cancel" onclick="clearReply()" title="Cancel reply">✕</button>
                 </div>
                 <div id="pastePreview">
                     <img id="pasteThumb" src="" alt="">
@@ -1392,12 +1449,19 @@ async function createGroup() {
 function openDM(friend) {
     chatType = 'dm';
     chatId   = dmId(me.uid, friend.uid);
+    clearReply();
 
     const av = document.getElementById('chatAv');
     av.innerHTML = friend.photoURL ? `<img src="${friend.photoURL}" alt="">` : initials(friend.displayName||'?');
     av.classList.remove('av-grp');
-    document.getElementById('chatName').textContent = friend.displayName;
+
+    // Show nickname if set
+    const nicks = getNicknames();
+    const nick  = nicks[friend.uid];
+    document.getElementById('chatName').textContent = nick || friend.displayName;
     document.getElementById('chatSub').textContent  = '@' + (friend.username||'');
+
+    document.getElementById('leaveBtn').title = 'Hide conversation';
 
     activateChat();
     renderFriends();
@@ -1410,12 +1474,15 @@ function openDM(friend) {
 function openGroup(group) {
     chatType = 'group';
     chatId   = group.id;
+    clearReply();
 
     const av = document.getElementById('chatAv');
     av.innerHTML = esc((group.name[0]||'G').toUpperCase());
     av.classList.add('av-grp');
     document.getElementById('chatName').textContent = group.name;
     document.getElementById('chatSub').textContent  = (group.members?.length||0) + ' members';
+
+    document.getElementById('leaveBtn').title = 'Leave group';
 
     activateChat();
     renderGroups();
@@ -1478,12 +1545,16 @@ function renderMsgs(msgs) {
         if (msg.type === 'image') {
             const exp = expLabel(ts, 72);
             bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
+                ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
                 <img class="msg-img" src="${esc(msg.imageUrl)}" loading="lazy"
                     onclick="openLB('${esc(msg.imageUrl)}')">
                 ${exp ? `<div class="img-exp">⏱ ${exp}</div>` : ''}
             </div>`;
         } else {
-            bubble = `<div class="bubble ${mine?'sent':'recv'}">${esc(msg.text)}</div>`;
+            bubble = `<div class="bubble ${mine?'sent':'recv'}">
+                ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
+                ${esc(msg.text)}
+            </div>`;
         }
 
         const showName = chatType==='group' && !mine && !same;
@@ -1494,6 +1565,9 @@ function renderMsgs(msgs) {
         const actionBtn = mine
             ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}')">Delete</button>`
             : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`;
+
+        const replySnip = msg.type === 'image' ? '[Image]' : (msg.text||'').slice(0,60);
+        const replyBtn  = `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
 
         // Reactions
         const reactions = msg.reactions || {};
@@ -1522,6 +1596,7 @@ function renderMsgs(msgs) {
                 <div class="msg-meta">
                     ${showName ? `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>` : ''}
                     ${!same ? `<span class="msg-time">${fmtTime(ts)}</span>` : ''}
+                    ${replyBtn}
                     ${actionBtn}
                 </div>
             </div>`;
@@ -1532,6 +1607,29 @@ function renderMsgs(msgs) {
     area.scrollTop = area.scrollHeight;
 }
 
+// ── REPLY STATE ────────────────────────────────────────────
+let replyTo = null; // { msgId, who, snippet }
+
+function setReply(msgId, who, snippet) {
+    replyTo = { msgId, who, snippet };
+    document.getElementById('replyWho').textContent = '↩ ' + who;
+    document.getElementById('replySnippet').textContent = snippet;
+    document.getElementById('replyBar').classList.add('on');
+    document.getElementById('msgInput').focus();
+}
+
+function clearReply() {
+    replyTo = null;
+    document.getElementById('replyBar').classList.remove('on');
+}
+
+function renderQuote(rt, isSent) {
+    return `<div class="reply-quote" onclick="">
+        <div class="reply-quote-who">↩ ${esc(rt.who)}</div>
+        <div class="reply-quote-txt">${esc(rt.snippet)}</div>
+    </div>`;
+}
+
 // ── SEND ───────────────────────────────────────────────────
 async function sendMsg() {
     const inp  = document.getElementById('msgInput');
@@ -1540,7 +1638,9 @@ async function sendMsg() {
 
     if (!await checkSend('text', text)) return;
     inp.value = ''; inp.style.height = '';
-    await pushMsg({ type:'text', text });
+    const rt = replyTo ? { ...replyTo } : null;
+    clearReply();
+    await pushMsg({ type:'text', text, ...(rt ? { replyTo: rt } : {}) });
 }
 
 // ── IMAGE COMPRESSION ──────────────────────────────────────
@@ -1582,11 +1682,14 @@ async function handleImg(event) {
         const compressed = await compressImage(file);
         const path = `images/${me.uid}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'')}`;
         const ref  = storage.ref(path);
-        await ref.put(compressed);
+        // Always pass contentType so Storage rules don't reject the blob
+        await ref.put(compressed, { contentType: 'image/jpeg' });
         const url  = await ref.getDownloadURL();
-        await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'' });
+        const rt   = replyTo ? { ...replyTo } : null;
+        clearReply();
+        await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'', ...(rt ? { replyTo: rt } : {}) });
     } catch(e) {
-        showToast('Upload failed. Ensure Firebase Storage is enabled.');
+        showToast('Upload failed: ' + e.message);
         console.error(e);
     } finally {
         ind.classList.remove('on');
@@ -1787,7 +1890,26 @@ function closeChat() {
     ac.style.display = 'none';
 }
 
-// ── PROFILE MODAL ──────────────────────────────────────────
+// ── LEAVE CHAT ─────────────────────────────────────────────
+async function leaveChat() {
+    if (chatType === 'dm') {
+        if (!confirm('Hide this conversation on your side?')) return;
+        hideDM(chatId);
+    } else if (chatType === 'group') {
+        if (!confirm('Leave this group? You will be removed from the member list.')) return;
+        try {
+            await db.collection('groups').doc(chatId).update({
+                members: firebase.firestore.FieldValue.arrayRemove(me.uid)
+            });
+            closeChat();
+            showToast('You left the group.');
+        } catch(e) {
+            showToast('Could not leave group: ' + e.message);
+        }
+    }
+}
+
+
 async function openProfileModal() {
     // Pre-fill current avatar
     const av = document.getElementById('profAvPreview');
@@ -1838,7 +1960,7 @@ async function uploadPfp(event) {
         const compressed = await compressImage(file, 400, 0.88);
         const path = `avatars/${me.uid}/pfp_${Date.now()}.jpg`;
         const ref  = storage.ref(path);
-        await ref.put(compressed);
+        await ref.put(compressed, { contentType: 'image/jpeg' });
         const url  = await ref.getDownloadURL();
 
         // Update auth profile
@@ -2152,10 +2274,10 @@ async function sendPastedImg() {
         const compressed = await compressImage(f);
         const path = `images/${me.uid}/${Date.now()}_paste.jpg`;
         const ref  = storage.ref(path);
-        await ref.put(compressed);
+        await ref.put(compressed, { contentType: 'image/jpeg' });
         const url  = await ref.getDownloadURL();
         await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'' });
-    } catch(e) { showToast('Upload failed.'); }
+    } catch(e) { showToast('Upload failed: ' + e.message); console.error(e); }
     finally    { document.getElementById('upInd').classList.remove('on'); }
 }
 
