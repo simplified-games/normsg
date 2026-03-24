@@ -2556,11 +2556,10 @@ function startTypingWatch(convPath) {
 function onMsgInputChange() {
     if (!chatId || !me) return;
     const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
-    // Set typing
-    if (!isTyping) {
-        isTyping = true;
-        db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
-    }
+    // Set typing every input so other users see active typing while the user is composing.
+    isTyping = true;
+    db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
+
     // Reset timer to clear typing after 3s idle
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
