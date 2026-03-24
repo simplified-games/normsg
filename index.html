@@ -1668,10 +1668,10 @@ async function checkSend(type, text) {
         return false;
     }
 
-    // 3. Spam rate (>10 per 60s)
+    // 3. Spam rate (>25 per 60s)
     const now = Date.now();
     spamTs = spamTs.filter(t => now-t < 60000);
-    if (spamTs.length >= 10) {
+    if (spamTs.length >= 25) {
         localTOUntil = new Date(now + 60000);
         spamTs = [];
         showToBanner('⚡ Sending too fast! Timed out for 1 minute.', localTOUntil);
