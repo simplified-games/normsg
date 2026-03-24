@@ -943,8 +943,8 @@
 <div id="delGroupModal" class="modal-overlay hidden">
     <div class="modal-card" style="text-align:center;">
         <div class="modal-title" style="color:var(--danger);">⚠ Delete Group?</div>
-        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 5 minutes to confirm.</div>
-        <div class="del-countdown" id="delCountdown">5:00</div>
+        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 10 seconds to confirm.</div>
+        <div class="del-countdown" id="delCountdown">0:10</div>
         <div class="del-sub" id="delCountSub">Please wait before you can confirm…</div>
         <div class="m-msg" id="delGrpMsg"></div>
         <div class="modal-row">
@@ -1562,6 +1562,7 @@ function openDM(friend) {
     document.getElementById('chatSub').textContent  = '@' + (friend.username||'');
 
     document.getElementById('leaveBtn').title = 'Hide conversation';
+    document.getElementById('renameChatBtn').classList.add('hidden');
 
     activateChat();
     renderFriends();
@@ -1584,6 +1585,9 @@ function openGroup(group) {
     document.getElementById('chatSub').textContent  = (group.members?.length||0) + ' members';
 
     document.getElementById('leaveBtn').title = 'Leave group';
+
+    const canManage = group.createdBy === me.uid || (group.admins || []).includes(me.uid);
+    document.getElementById('renameChatBtn').classList.toggle('hidden', !canManage);
 
     activateChat();
     renderGroups();
@@ -1740,6 +1744,7 @@ async function sendMsg() {
 
     if (!await checkSend('text', text)) return;
     inp.value = ''; inp.style.height = '';
+    clearMyTyping();
     const rt = replyTo ? { ...replyTo } : null;
     clearReply();
     await pushMsg({ type:'text', text, ...(rt ? { replyTo: rt } : {}) });
@@ -1799,6 +1804,7 @@ async function handleImg(event) {
         const dataUrl  = await compressToDataUrl(file);
         const path     = `images/${me.uid}/${Date.now()}.jpg`;
         const url      = await uploadDataUrl(dataUrl, path);
+        clearMyTyping();
         const rt       = replyTo ? { ...replyTo } : null;
         clearReply();
         await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'', ...(rt ? { replyTo: rt } : {}) });
@@ -1995,6 +2001,7 @@ function hideForMe(msgId) {
 
 // ── CLOSE CHAT helper ──────────────────────────────────────
 function closeChat() {
+    clearMyTyping();
     chatId = null; chatType = null;
     if (msgUnsub) { msgUnsub(); msgUnsub = null; }
     document.getElementById('emptyState').style.display = '';
@@ -2002,6 +2009,7 @@ function closeChat() {
     const ac = document.getElementById('activeChat');
     ac.classList.add('hidden');
     ac.style.display = 'none';
+    document.getElementById('renameChatBtn').classList.add('hidden');
 }
 
 // ── LEAVE CHAT ─────────────────────────────────────────────
@@ -2142,7 +2150,7 @@ async function changeTag() {
     showToast('Username updated! 🎉');
 }
 
-// ── DELETE GROUP (5-min countdown) ────────────────────────
+// ── DELETE GROUP (10-sec countdown) ────────────────────────
 let delGroupTarget = null;   // { id, name }
 let delGroupTimer  = null;
 
@@ -2154,7 +2162,7 @@ function startDeleteGroup(groupId, groupName) {
     btn.style.pointerEvents = 'none';
     document.getElementById('delGroupModal').classList.remove('hidden');
 
-    let secsLeft = 300; // 5 minutes
+    let secsLeft = 10; // 10 seconds
     function tick() {
         if (secsLeft <= 0) {
             clearInterval(delGroupTimer);
