@@ -1161,7 +1161,7 @@
                 <div class="in-row">
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
-                        oninput="autoGrow(this)"
+                        oninput="autoGrow(this); onMsgInputChange()"
                         onpaste="handlePaste(event)"
                         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg();}"></textarea>
                     <button class="send-btn" onclick="sendMsg()">➤</button>
@@ -1291,6 +1291,7 @@ function subscribeAll() {
     subFriends();
     subRequests();
     subGroups();
+    subscribePresence();
     // Presence heartbeat every 60s
     setPresence(true);
     clearInterval(presenceTimer);
@@ -1311,6 +1312,7 @@ function subFriends() {
             });
             friends = dedup([...fromF, ...toF]);
             renderFriends();
+            subscribePresence();
         });
 
     const u2 = db.collection('friendRequests')
@@ -1322,6 +1324,7 @@ function subFriends() {
             });
             friends = dedup([...fromF, ...toF]);
             renderFriends();
+            subscribePresence();
         });
 
     unsubF = () => { u1(); u2(); };
@@ -1430,7 +1433,7 @@ function renderGroups() {
         const d = ce('div');
         d.className = 'conv-item' + (chatId === g.id ? ' on' : '');
         const isCreator = g.createdBy === me.uid;
-        d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name[0]||'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
+        d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name?.[0] || 'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
         d.onclick = () => openGroup(g);
         el.appendChild(d);
     });
@@ -1564,6 +1567,7 @@ function openDM(friend) {
     renderFriends();
     document.getElementById('sidebar').classList.remove('open');
 
+    startTypingWatch(`conversations/${chatId}`);
     subMessages(`conversations/${chatId}/messages`);
     runCleanup(`conversations/${chatId}/messages`);
 }
@@ -1574,7 +1578,7 @@ function openGroup(group) {
     clearReply();
 
     const av = document.getElementById('chatAv');
-    av.innerHTML = esc((group.name[0]||'G').toUpperCase());
+    av.innerHTML = esc((group.name?.[0] || 'G').toUpperCase());
     av.classList.add('av-grp');
     document.getElementById('chatName').textContent = group.name;
     document.getElementById('chatSub').textContent  = (group.members?.length||0) + ' members';
@@ -1585,6 +1589,7 @@ function openGroup(group) {
     renderGroups();
     document.getElementById('sidebar').classList.remove('open');
 
+    startTypingWatch(`groups/${chatId}`);
     subMessages(`groups/${chatId}/messages`);
     runCleanup(`groups/${chatId}/messages`);
 }
