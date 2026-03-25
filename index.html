@@ -827,6 +827,33 @@
         }
         .btn-unfriend:hover { background: rgba(244,63,94,0.2); }
 
+        /* ── PEOPLE MODAL ────────────────────────────────── */
+        .people-section { margin-bottom: 16px; }
+        .people-sec-label {
+            font-size: 9px; font-weight: 800; letter-spacing: 0.13em;
+            text-transform: uppercase; color: var(--muted);
+            margin-bottom: 8px; display: block;
+        }
+        .people-card {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 10px; border-radius: 12px;
+            border: 1px solid var(--border); background: var(--card);
+            margin-bottom: 6px; transition: border-color 0.15s;
+        }
+        .people-card:hover { border-color: var(--border2); }
+        .people-card-info { flex: 1; min-width: 0; }
+        .people-card-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .people-card-tag  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+        .people-via  { font-size: 10px; color: var(--a2); margin-top: 2px; font-style: italic; }
+        .btn-add-person {
+            background: rgba(124,92,252,0.15); border: 1px solid rgba(124,92,252,0.3);
+            color: var(--a2); border-radius: 9px; padding: 5px 12px;
+            font-size: 11px; font-weight: 700; cursor: pointer; transition: all 0.13s;
+            font-family: 'Figtree', sans-serif; white-space: nowrap; flex-shrink: 0;
+        }
+        .btn-add-person:hover { background: rgba(124,92,252,0.28); }
+        .btn-add-person:disabled { opacity: 0.4; cursor: default; }
+
         /* ── PASTE PREVIEW ───────────────────────────────── */
         #pastePreview {
             display: none; align-items: center; gap: 10px;
@@ -992,6 +1019,18 @@
     </div>
 </div>
 
+<!-- ═══════════════ PEOPLE / DISCOVER MODAL ════════════════ -->
+<div id="peopleModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:85vh;overflow-y:auto;width:min(480px,95vw);">
+        <div class="modal-title">Discover People</div>
+        <div class="modal-sub">Friends, friends of friends, and beyond — based on your network.</div>
+        <div id="peopleList"><div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">Loading…</div></div>
+        <div class="modal-row" style="margin-top:14px;">
+            <button class="btn-sec" onclick="closeModal('peopleModal')">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- ═══════════════ MANAGE GROUP MODAL ════════════════ -->
 <div id="manageGroupModal" class="modal-overlay hidden">
     <div class="modal-card" style="max-height:85vh;overflow-y:auto;">
@@ -1039,7 +1078,10 @@
         <div class="sb-header">
             <div style="display:flex;align-items:center;justify-content:space-between;">
                 <div class="app-logo">NorMSG</div>
-                <button class="ic-btn" onclick="logout()" title="Sign out" style="font-size:17px;">⏻</button>
+                <div style="display:flex;gap:3px;">
+                    <button class="ic-btn" onclick="openPeopleModal()" title="Discover people" style="font-size:16px;">🌐</button>
+                    <button class="ic-btn" onclick="logout()" title="Sign out" style="font-size:17px;">⏻</button>
+                </div>
             </div>
             <div class="me-row">
                 <div class="av-wrap" onclick="openProfileModal()" title="Edit profile" style="width:30px;height:30px;">
@@ -1143,7 +1185,9 @@
 
             <div id="chatInputArea">
                 <div class="upload-ind" id="upInd">
-                    <span class="spinner">⟳</span> Uploading image…
+                    <span class="spinner">⟳</span>
+                    <span>Uploading image…</span>
+                    <button onclick="cancelUpload()" style="margin-left:auto;background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);color:var(--danger);border-radius:7px;padding:2px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Figtree',sans-serif;">Cancel</button>
                 </div>
                 <div id="replyBar">
                     <div class="reply-preview">
@@ -1386,8 +1430,9 @@ function renderFriends() {
         const displayLabel = nick
             ? `${esc(nick)} <span class="nick-badge">@${esc(f.username||'')}</span>`
             : esc(f.displayName);
-        const statusTxt = isOnline ? '<span style="font-size:10px;color:var(--green);font-weight:600;">● Online</span>'
-                        : (pres?.lastSeen ? `<span style="font-size:10px;color:var(--muted);">${timeAgo(pres.lastSeen)}</span>` : `<span style="font-size:10px;color:var(--muted);">@${esc(f.username||'')}</span>`);
+        const statusTxt = isOnline
+            ? '<span style="font-size:10px;color:var(--green);font-weight:600;">● Online</span>'
+            : (() => { const ago = timeAgo(pres?.lastSeen); return ago ? `<span style="font-size:10px;color:var(--muted);">${ago}</span>` : `<span style="font-size:10px;color:var(--muted);">@${esc(f.username||'')}</span>`; })();
 
         const d = ce('div');
         d.className = 'conv-item' + (chatId === cid ? ' on' : '');
@@ -1770,8 +1815,8 @@ async function sendMsg() {
 }
 
 // ── IMAGE UPLOAD HELPERS ───────────────────────────────────
-// Converts file/blob → data URL (base64). Firebase putString('data_url')
-// reads the MIME type from the prefix so storage rules always pass.
+let currentUploadTask = null; // Firebase UploadTask — allows cancel
+
 function fileToDataUrl(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -1781,7 +1826,6 @@ function fileToDataUrl(file) {
     });
 }
 
-// Resize + convert to JPEG data URL (keeps quality, drops file size).
 function compressToDataUrl(file, maxPx = 1200, quality = 0.82) {
     return new Promise((resolve, reject) => {
         const img = new Image();
@@ -1804,10 +1848,21 @@ function compressToDataUrl(file, maxPx = 1200, quality = 0.82) {
 }
 
 async function uploadDataUrl(dataUrl, storagePath) {
-    const ref = storage.ref(storagePath);
-    // putString with 'data_url' format — Firebase reads MIME from prefix
-    await ref.putString(dataUrl, 'data_url');
+    const ref  = storage.ref(storagePath);
+    const task = ref.putString(dataUrl, 'data_url');
+    currentUploadTask = task;
+    await task;
+    currentUploadTask = null;
     return await ref.getDownloadURL();
+}
+
+function cancelUpload() {
+    if (currentUploadTask) {
+        currentUploadTask.cancel();
+        currentUploadTask = null;
+    }
+    document.getElementById('upInd').classList.remove('on');
+    showToast('Upload cancelled.');
 }
 
 async function handleImg(event) {
@@ -1827,8 +1882,8 @@ async function handleImg(event) {
         clearReply();
         await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'', ...(rt ? { replyTo: rt } : {}) });
     } catch(e) {
-        showToast('Upload failed: ' + e.message);
-        console.error('handleImg error:', e);
+        if (e?.code === 'storage/cancelled') { showToast('Upload cancelled.'); }
+        else { showToast('Upload failed: ' + e.message); console.error('handleImg error:', e); }
     } finally {
         document.getElementById('upInd').classList.remove('on');
     }
@@ -2036,11 +2091,29 @@ async function leaveChat() {
     } else if (chatType === 'group') {
         if (!confirm('Leave this group? You will be removed from the member list.')) return;
         try {
-            await db.collection('groups').doc(chatId).update({
-                members: firebase.firestore.FieldValue.arrayRemove(me.uid)
-            });
+            const gRef  = db.collection('groups').doc(chatId);
+            const gSnap = await gRef.get();
+            const members = (gSnap.data()?.members || []).filter(uid => uid !== me.uid);
+
+            if (members.length === 0) {
+                // Last person — delete the whole group and messages
+                const msgs  = await db.collection(`groups/${chatId}/messages`).get();
+                const batch = db.batch();
+                const storeDels = [];
+                msgs.docs.forEach(doc => {
+                    batch.delete(doc.ref);
+                    const sp = doc.data().storagePath;
+                    if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
+                });
+                batch.delete(gRef);
+                await batch.commit();
+                await Promise.all(storeDels);
+                showToast('Group deleted (you were the last member).');
+            } else {
+                await gRef.update({ members: firebase.firestore.FieldValue.arrayRemove(me.uid) });
+                showToast('You left the group.');
+            }
             closeChat();
-            showToast('You left the group.');
         } catch(e) {
             showToast('Could not leave group: ' + e.message);
         }
@@ -2413,8 +2486,10 @@ async function sendPastedImg() {
         const rt      = replyTo ? { ...replyTo } : null;
         clearReply();
         await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'', ...(rt ? { replyTo: rt } : {}) });
-    } catch(e) { showToast('Upload failed: ' + e.message); console.error('paste upload:', e); }
-    finally    { document.getElementById('upInd').classList.remove('on'); }
+    } catch(e) {
+        if (e?.code === 'storage/cancelled') showToast('Upload cancelled.');
+        else { showToast('Upload failed: ' + e.message); console.error('paste upload:', e); }
+    } finally    { document.getElementById('upInd').classList.remove('on'); }
 }
 
 function clearPaste() {
@@ -2528,15 +2603,14 @@ function updateChatSubStatus(isOnline, lastSeen) {
     if (!friend) return;
     if (isOnline) {
         el.innerHTML = `<span class="ch-online">● Online</span>`;
-    } else if (lastSeen && lastSeen > new Date('2020-01-01')) {
-        el.textContent = `Last seen ${timeAgo(lastSeen)}`;
     } else {
-        el.textContent = `@${friend.username||''}`;
+        const ago = timeAgo(lastSeen);
+        el.textContent = ago ? `Last seen ${ago}` : `@${friend.username||''}`;
     }
 }
 
 function timeAgo(date) {
-    if (!date || date < new Date('2020-01-01')) return null;
+    if (!date || !(date instanceof Date) || isNaN(date) || date < new Date('2020-01-01')) return '';
     const s = Math.floor((Date.now() - date) / 1000);
     if (s < 60)   return 'just now';
     if (s < 3600) return `${Math.floor(s/60)}m ago`;
@@ -2701,6 +2775,120 @@ function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
     setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+// ── PEOPLE DISCOVERY ───────────────────────────────────────
+async function openPeopleModal() {
+    document.getElementById('peopleModal').classList.remove('hidden');
+    const el = document.getElementById('peopleList');
+    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">Loading…</div>`;
+
+    const myFriendUids = new Set(friends.map(f => f.uid));
+    myFriendUids.add(me.uid);
+
+    // Collect friend-of-friend UIDs and who introduced them
+    const fofMap = {}; // uid -> [mutual friend name]
+    const fofUids = new Set();
+
+    for (const f of friends) {
+        const [q1, q2] = await Promise.all([
+            db.collection('friendRequests').where('fromUid','==',f.uid).where('status','==','accepted').get(),
+            db.collection('friendRequests').where('toUid','==',f.uid).where('status','==','accepted').get()
+        ]);
+        const fFriends = new Set();
+        q1.docs.forEach(d => fFriends.add(d.data().toUid));
+        q2.docs.forEach(d => fFriends.add(d.data().fromUid));
+        fFriends.forEach(uid => {
+            if (!myFriendUids.has(uid)) {
+                fofUids.add(uid);
+                if (!fofMap[uid]) fofMap[uid] = [];
+                fofMap[uid].push(f.displayName || f.username);
+            }
+        });
+    }
+
+    // 3rd-degree (capped to avoid too many reads)
+    const fof3Map = {};
+    const fof3Uids = new Set();
+    for (const fofUid of [...fofUids].slice(0, 8)) {
+        const [q1, q2] = await Promise.all([
+            db.collection('friendRequests').where('fromUid','==',fofUid).where('status','==','accepted').get(),
+            db.collection('friendRequests').where('toUid','==',fofUid).where('status','==','accepted').get()
+        ]);
+        const f2 = new Set();
+        q1.docs.forEach(d => f2.add(d.data().toUid));
+        q2.docs.forEach(d => f2.add(d.data().fromUid));
+        f2.forEach(uid => {
+            if (!myFriendUids.has(uid) && !fofUids.has(uid)) {
+                fof3Uids.add(uid);
+                if (!fof3Map[uid]) fof3Map[uid] = [];
+                fof3Map[uid].push(fofMap[fofUid]?.[0] || 'a mutual');
+            }
+        });
+    }
+
+    // Batch-fetch profiles using 'in' queries (max 10 per query)
+    const allUids = [...new Set([...fofUids, ...[...fof3Uids].slice(0,8)])];
+    const profiles = {};
+    for (let i = 0; i < allUids.length; i += 10) {
+        const chunk = allUids.slice(i, i+10);
+        if (!chunk.length) continue;
+        const snap = await db.collection('users')
+            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
+        snap.docs.forEach(d => { profiles[d.id] = { uid: d.id, ...d.data() }; });
+    }
+
+    el.innerHTML = '';
+
+    const fofList = [...fofUids].filter(uid => profiles[uid]);
+    if (fofList.length) {
+        const sec = ce('div'); sec.className = 'people-section';
+        sec.innerHTML = `<span class="people-sec-label">👥 Friends of Friends</span>`;
+        fofList.slice(0,15).forEach(uid => {
+            const via = (fofMap[uid]||[]).slice(0,2).join(' & ');
+            sec.appendChild(buildPersonCard(profiles[uid], `via ${via}`));
+        });
+        el.appendChild(sec);
+    }
+
+    const fof3List = [...fof3Uids].filter(uid => profiles[uid]);
+    if (fof3List.length) {
+        const sec = ce('div'); sec.className = 'people-section';
+        sec.innerHTML = `<span class="people-sec-label">🌐 Extended Network</span>`;
+        fof3List.slice(0,8).forEach(uid => {
+            const via = (fof3Map[uid]||[]).slice(0,1).join('');
+            sec.appendChild(buildPersonCard(profiles[uid], `3° via ${via}`));
+        });
+        el.appendChild(sec);
+    }
+
+    if (!fofList.length && !fof3List.length) {
+        el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+    }
+}
+
+function buildPersonCard(u, via) {
+    const alreadyFriend = friends.some(f => f.uid === u.uid);
+    const card = ce('div'); card.className = 'people-card';
+    card.innerHTML = `
+        ${mkAv(u.displayName||'?', u.photoURL||null, 36)}
+        <div class="people-card-info">
+            <div class="people-card-name">${esc(u.displayName||u.username||'?')}</div>
+            <div class="people-card-tag">@${esc(u.username||'')}</div>
+            ${via ? `<div class="people-via">${esc(via)}</div>` : ''}
+        </div>
+        <button class="btn-add-person" ${alreadyFriend?'disabled':''} onclick="addPersonFromDiscover('${esc(u.username||'')}',this)">
+            ${alreadyFriend ? '✓ Friends' : '+ Add'}
+        </button>`;
+    return card;
+}
+
+async function addPersonFromDiscover(username, btn) {
+    if (!username) return;
+    btn.disabled = true; btn.textContent = '…';
+    document.getElementById('addIn').value = username;
+    await sendFriendReq();
+    btn.textContent = '✓ Sent';
 }
 </script>
 </body>
