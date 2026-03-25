@@ -943,8 +943,8 @@
 <div id="delGroupModal" class="modal-overlay hidden">
     <div class="modal-card" style="text-align:center;">
         <div class="modal-title" style="color:var(--danger);">⚠ Delete Group?</div>
-        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 10 seconds to confirm.</div>
-        <div class="del-countdown" id="delCountdown">0:10</div>
+        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 5 minutes to confirm.</div>
+        <div class="del-countdown" id="delCountdown">5:00</div>
         <div class="del-sub" id="delCountSub">Please wait before you can confirm…</div>
         <div class="m-msg" id="delGrpMsg"></div>
         <div class="modal-row">
@@ -1161,7 +1161,7 @@
                 <div class="in-row">
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
-                        oninput="autoGrow(this); onMsgInputChange()"
+                        oninput="autoGrow(this);onMsgInputChange()"
                         onpaste="handlePaste(event)"
                         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg();}"></textarea>
                     <button class="send-btn" onclick="sendMsg()">➤</button>
@@ -1218,7 +1218,12 @@ let unsubF = null, unsubR = null, unsubG = null;
 // ── AUTH ───────────────────────────────────────────────────
 function login()  { auth.signInWithPopup(gProv).catch(e => showToast('Sign-in failed: ' + e.message)); }
 function logout() {
+    setPresence(false);
+    clearInterval(presenceTimer);
     [msgUnsub, unsubF, unsubR, unsubG].forEach(u => u && u());
+    Object.values(presenceUnsubs).forEach(u => u && u());
+    presenceUnsubs = {};
+    if (typingUnsub) { typingUnsub(); typingUnsub = null; }
     auth.signOut();
 }
 
@@ -1291,7 +1296,6 @@ function subscribeAll() {
     subFriends();
     subRequests();
     subGroups();
-    subscribePresence();
     // Presence heartbeat every 60s
     setPresence(true);
     clearInterval(presenceTimer);
@@ -1311,8 +1315,8 @@ function subFriends() {
                 return { uid: x.toUid, displayName: x.toName, username: x.toUsername, photoURL: x.toPhoto };
             });
             friends = dedup([...fromF, ...toF]);
-            renderFriends();
             subscribePresence();
+            renderFriends();
         });
 
     const u2 = db.collection('friendRequests')
@@ -1323,8 +1327,8 @@ function subFriends() {
                 return { uid: x.fromUid, displayName: x.fromName, username: x.fromUsername, photoURL: x.fromPhoto };
             });
             friends = dedup([...fromF, ...toF]);
-            renderFriends();
             subscribePresence();
+            renderFriends();
         });
 
     unsubF = () => { u1(); u2(); };
@@ -1375,23 +1379,32 @@ function renderFriends() {
     }
     el.innerHTML = '';
     vis.forEach(f => {
-        const cid  = dmId(me.uid, f.uid);
-        const nick = nicks[f.uid];
+        const cid      = dmId(me.uid, f.uid);
+        const nick     = nicks[f.uid];
+        const pres     = friendPresence[f.uid];
+        const isOnline = pres?.online === true;
         const displayLabel = nick
             ? `${esc(nick)} <span class="nick-badge">@${esc(f.username||'')}</span>`
             : esc(f.displayName);
-        const d   = ce('div');
+        const statusTxt = isOnline ? '<span style="font-size:10px;color:var(--green);font-weight:600;">● Online</span>'
+                        : (pres?.lastSeen ? `<span style="font-size:10px;color:var(--muted);">${timeAgo(pres.lastSeen)}</span>` : `<span style="font-size:10px;color:var(--muted);">@${esc(f.username||'')}</span>`);
+
+        const d = ce('div');
         d.className = 'conv-item' + (chatId === cid ? ' on' : '');
-        d.innerHTML = `${mkAv(f.displayName, f.photoURL, 34)}
+        d.innerHTML = `
+            <div style="position:relative;flex-shrink:0;">
+                ${mkAv(f.displayName, f.photoURL, 34)}
+                ${isOnline ? `<span class="online-dot" style="position:absolute;bottom:0;right:0;"></span>` : ''}
+            </div>
             <div class="cv-info min-w-0">
                 <div class="cv-name">${displayLabel}</div>
-                <div class="cv-last">@${esc(f.username||'')}</div>
+                <div class="cv-last">${statusTxt}</div>
             </div>
             <div style="display:flex;gap:3px;flex-shrink:0;">
                 <button class="conv-del" style="opacity:0;position:static;transform:none;background:rgba(167,139,250,0.12);color:var(--a2);border-radius:7px;padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();openNicknameModal('${f.uid}','${esc(f.displayName).replace(/'/g,"\\'")}')">✎</button>
                 <button class="conv-del" style="opacity:0;position:static;transform:none;" onclick="event.stopPropagation();hideDM('${cid}')">✕</button>
+                <button class="conv-del" style="opacity:0;position:static;transform:none;background:rgba(244,63,94,0.1);color:var(--danger);border-radius:7px;padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();unfriend('${f.uid}')">🚫</button>
             </div>`;
-        // Show buttons on hover
         d.addEventListener('mouseenter', () => d.querySelectorAll('.conv-del').forEach(b => b.style.opacity='1'));
         d.addEventListener('mouseleave', () => d.querySelectorAll('.conv-del').forEach(b => b.style.opacity='0'));
         d.onclick = () => openDM(f);
@@ -1433,7 +1446,7 @@ function renderGroups() {
         const d = ce('div');
         d.className = 'conv-item' + (chatId === g.id ? ' on' : '');
         const isCreator = g.createdBy === me.uid;
-        d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name?.[0] || 'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
+        d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name[0]||'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
         d.onclick = () => openGroup(g);
         el.appendChild(d);
     });
@@ -1550,52 +1563,58 @@ function openDM(friend) {
     chatType = 'dm';
     chatId   = dmId(me.uid, friend.uid);
     clearReply();
+    clearMyTyping();
 
     const av = document.getElementById('chatAv');
     av.innerHTML = friend.photoURL ? `<img src="${friend.photoURL}" alt="">` : initials(friend.displayName||'?');
     av.classList.remove('av-grp');
 
-    // Show nickname if set
     const nicks = getNicknames();
     const nick  = nicks[friend.uid];
     document.getElementById('chatName').textContent = nick || friend.displayName;
-    document.getElementById('chatSub').textContent  = '@' + (friend.username||'');
 
-    document.getElementById('leaveBtn').title = 'Hide conversation';
+    // Show presence in subtitle
+    const pres = friendPresence[friend.uid];
+    updateChatSubStatus(pres?.online === true, pres?.lastSeen || null);
+
+    // Hide manage group button for DMs
     document.getElementById('renameChatBtn').classList.add('hidden');
+    document.getElementById('leaveBtn').title = 'Hide conversation';
 
     activateChat();
     renderFriends();
     document.getElementById('sidebar').classList.remove('open');
 
-    startTypingWatch(`conversations/${chatId}`);
     subMessages(`conversations/${chatId}/messages`);
     runCleanup(`conversations/${chatId}/messages`);
+    startTypingWatch(`conversations/${chatId}`);
 }
 
 function openGroup(group) {
     chatType = 'group';
     chatId   = group.id;
     clearReply();
+    clearMyTyping();
 
     const av = document.getElementById('chatAv');
-    av.innerHTML = esc((group.name?.[0] || 'G').toUpperCase());
+    av.innerHTML = esc((group.name[0]||'G').toUpperCase());
     av.classList.add('av-grp');
     document.getElementById('chatName').textContent = group.name;
     document.getElementById('chatSub').textContent  = (group.members?.length||0) + ' members';
 
+    // Show manage button only if admin or owner
+    const isAdmin = (group.admins||[]).includes(me.uid) || group.createdBy === me.uid;
+    const btn = document.getElementById('renameChatBtn');
+    if (isAdmin) btn.classList.remove('hidden'); else btn.classList.add('hidden');
     document.getElementById('leaveBtn').title = 'Leave group';
-
-    const canManage = group.createdBy === me.uid || (group.admins || []).includes(me.uid);
-    document.getElementById('renameChatBtn').classList.toggle('hidden', !canManage);
 
     activateChat();
     renderGroups();
     document.getElementById('sidebar').classList.remove('open');
 
-    startTypingWatch(`groups/${chatId}`);
     subMessages(`groups/${chatId}/messages`);
     runCleanup(`groups/${chatId}/messages`);
+    startTypingWatch(`groups/${chatId}`);
 }
 
 function activateChat() {
@@ -1804,7 +1823,6 @@ async function handleImg(event) {
         const dataUrl  = await compressToDataUrl(file);
         const path     = `images/${me.uid}/${Date.now()}.jpg`;
         const url      = await uploadDataUrl(dataUrl, path);
-        clearMyTyping();
         const rt       = replyTo ? { ...replyTo } : null;
         clearReply();
         await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'', ...(rt ? { replyTo: rt } : {}) });
@@ -2001,7 +2019,6 @@ function hideForMe(msgId) {
 
 // ── CLOSE CHAT helper ──────────────────────────────────────
 function closeChat() {
-    clearMyTyping();
     chatId = null; chatType = null;
     if (msgUnsub) { msgUnsub(); msgUnsub = null; }
     document.getElementById('emptyState').style.display = '';
@@ -2009,7 +2026,6 @@ function closeChat() {
     const ac = document.getElementById('activeChat');
     ac.classList.add('hidden');
     ac.style.display = 'none';
-    document.getElementById('renameChatBtn').classList.add('hidden');
 }
 
 // ── LEAVE CHAT ─────────────────────────────────────────────
@@ -2150,7 +2166,7 @@ async function changeTag() {
     showToast('Username updated! 🎉');
 }
 
-// ── DELETE GROUP (10-sec countdown) ────────────────────────
+// ── DELETE GROUP (5-min countdown) ────────────────────────
 let delGroupTarget = null;   // { id, name }
 let delGroupTimer  = null;
 
@@ -2162,7 +2178,7 @@ function startDeleteGroup(groupId, groupName) {
     btn.style.pointerEvents = 'none';
     document.getElementById('delGroupModal').classList.remove('hidden');
 
-    let secsLeft = 10; // 10 seconds
+    let secsLeft = 300; // 5 minutes
     function tick() {
         if (secsLeft <= 0) {
             clearInterval(delGroupTimer);
@@ -2507,15 +2523,15 @@ function subscribePresence() {
 
 function updateChatSubStatus(isOnline, lastSeen) {
     const el = document.getElementById('chatSub');
-    if (!el) return;
-    if (chatType !== 'dm') return;
+    if (!el || chatType !== 'dm') return;
     const friend = friends.find(f => dmId(me.uid, f.uid) === chatId);
     if (!friend) return;
     if (isOnline) {
         el.innerHTML = `<span class="ch-online">● Online</span>`;
+    } else if (lastSeen && lastSeen > new Date('2020-01-01')) {
+        el.textContent = `Last seen ${timeAgo(lastSeen)}`;
     } else {
-        const ago = timeAgo(lastSeen);
-        el.textContent = ago ? `Last seen ${ago}` : `@${friend.username||''}`;
+        el.textContent = `@${friend.username||''}`;
     }
 }
 
@@ -2556,10 +2572,11 @@ function startTypingWatch(convPath) {
 function onMsgInputChange() {
     if (!chatId || !me) return;
     const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
-    // Set typing every input so other users see active typing while the user is composing.
-    isTyping = true;
-    db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
-
+    // Set typing
+    if (!isTyping) {
+        isTyping = true;
+        db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
+    }
     // Reset timer to clear typing after 3s idle
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => {
