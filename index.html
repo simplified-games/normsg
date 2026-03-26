@@ -2300,7 +2300,7 @@ async function changeTag() {
     showToast('Username updated! 🎉');
 }
 
-// ── DELETE GROUP (5-min countdown) ────────────────────────
+// ── DELETE GROUP (10-sec countdown) ────────────────────────
 let delGroupTarget = null;   // { id, name }
 let delGroupTimer  = null;
 
@@ -2312,7 +2312,7 @@ function startDeleteGroup(groupId, groupName) {
     btn.style.pointerEvents = 'none';
     document.getElementById('delGroupModal').classList.remove('hidden');
 
-    let secsLeft = 300; // 5 minutes
+    let secsLeft = 10; // 10 seconds
     function tick() {
         if (secsLeft <= 0) {
             clearInterval(delGroupTimer);
