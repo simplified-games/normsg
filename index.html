@@ -854,6 +854,33 @@
         .btn-add-person:hover { background: rgba(124,92,252,0.28); }
         .btn-add-person:disabled { opacity: 0.4; cursor: default; }
 
+        /* ── @ MENTION DROPDOWN ──────────────────────────── */
+        #mentionBox {
+            position: absolute; bottom: calc(100% + 6px); left: 0;
+            background: var(--panel); border: 1px solid var(--border2);
+            border-radius: 13px; overflow: hidden;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+            z-index: 50; min-width: 200px; display: none;
+        }
+        .mention-item {
+            display: flex; align-items: center; gap: 9px;
+            padding: 9px 12px; cursor: pointer; transition: background 0.12s;
+        }
+        .mention-item:hover, .mention-item.active { background: rgba(124,92,252,0.15); }
+        .mention-name  { font-size: 13px; font-weight: 600; }
+        .mention-handle{ font-size: 11px; color: var(--muted); }
+
+        /* Ping highlight in bubble */
+        .ping-highlight {
+            background: rgba(167,139,250,0.25);
+            color: var(--a2); font-weight: 700;
+            border-radius: 4px; padding: 0 3px;
+        }
+        .ping-highlight.me {
+            background: rgba(45,212,191,0.25);
+            color: var(--teal);
+        }
+
         /* ── PASTE PREVIEW ───────────────────────────────── */
         #pastePreview {
             display: none; align-items: center; gap: 10px;
@@ -970,8 +997,8 @@
 <div id="delGroupModal" class="modal-overlay hidden">
     <div class="modal-card" style="text-align:center;">
         <div class="modal-title" style="color:var(--danger);">⚠ Delete Group?</div>
-        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 5 minutes to confirm.</div>
-        <div class="del-countdown" id="delCountdown">5:00</div>
+        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 10 seconds to confirm.</div>
+        <div class="del-countdown" id="delCountdown">0:10</div>
         <div class="del-sub" id="delCountSub">Please wait before you can confirm…</div>
         <div class="m-msg" id="delGrpMsg"></div>
         <div class="modal-row">
@@ -1044,7 +1071,27 @@
         </div>
         <div class="m-msg" id="renameMsg"></div>
 
-        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 7px;">Members &amp; Admins</div>
+        <!-- Add Member -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 7px;">Add Member</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="addMemberIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') addMemberToGroup()">
+            </div>
+            <button class="btn-add" onclick="addMemberToGroup()" style="white-space:nowrap;">Add</button>
+        </div>
+        <div class="m-msg" id="addMemberMsg"></div>
+
+        <!-- Open/Admin-only adding toggle (owner only) -->
+        <div id="addPermRow" style="display:none;align-items:center;gap:10px;margin-bottom:14px;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:11px;">
+            <div style="flex:1;">
+                <div style="font-size:12px;font-weight:600;">Who can add members?</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="addPermDesc">Everyone can add</div>
+            </div>
+            <button class="btn-toggle-admin" id="addPermBtn" onclick="toggleAddPerm()">Change</button>
+        </div>
+
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:6px 0 7px;">Members &amp; Admins</div>
         <div id="manageAdminList" style="margin-bottom:14px;"></div>
 
         <div class="modal-row">
@@ -1202,7 +1249,8 @@
                     <button class="paste-send" onclick="sendPastedImg()">Send 📤</button>
                     <button class="paste-cancel" onclick="clearPaste()" title="Cancel">✕</button>
                 </div>
-                <div class="in-row">
+                <div class="in-row" style="position:relative;">
+                    <div id="mentionBox"></div>
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
                         oninput="autoGrow(this);onMsgInputChange()"
@@ -1660,6 +1708,7 @@ function openGroup(group) {
     subMessages(`groups/${chatId}/messages`);
     runCleanup(`groups/${chatId}/messages`);
     startTypingWatch(`groups/${chatId}`);
+    mentionMembers = []; // reset @ cache for new group
 }
 
 function activateChat() {
@@ -1723,7 +1772,7 @@ function renderMsgs(msgs) {
         } else {
             bubble = `<div class="bubble ${mine?'sent':'recv'}">
                 ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
-                ${esc(msg.text)}
+                ${renderMsgText(msg.text)}
             </div>`;
         }
 
@@ -1814,17 +1863,10 @@ async function sendMsg() {
     await pushMsg({ type:'text', text, ...(rt ? { replyTo: rt } : {}) });
 }
 
-// ── IMAGE UPLOAD HELPERS ───────────────────────────────────
-let currentUploadTask = null; // Firebase UploadTask — allows cancel
-
-function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload  = e => resolve(e.target.result);
-        reader.onerror = () => reject(new Error('Could not read file.'));
-        reader.readAsDataURL(file);
-    });
-}
+// ── IMAGE UPLOAD — CLOUDINARY ─────────────────────────────
+const CLOUDINARY_CLOUD  = 'dc6349v8c';
+const CLOUDINARY_PRESET = 'NorMSG';
+let uploadAbortController = null; // allows cancel
 
 function compressToDataUrl(file, maxPx = 1200, quality = 0.82) {
     return new Promise((resolve, reject) => {
@@ -1842,24 +1884,44 @@ function compressToDataUrl(file, maxPx = 1200, quality = 0.82) {
             canvas.getContext('2d').drawImage(img, 0, 0, width, height);
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
-        img.onerror = () => fileToDataUrl(file).then(resolve).catch(reject);
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            const reader = new FileReader();
+            reader.onload = e => resolve(e.target.result);
+            reader.onerror = () => reject(new Error('Could not read file.'));
+            reader.readAsDataURL(file);
+        };
         img.src = url;
     });
 }
 
-async function uploadDataUrl(dataUrl, storagePath) {
-    const ref  = storage.ref(storagePath);
-    const task = ref.putString(dataUrl, 'data_url');
-    currentUploadTask = task;
-    await task;
-    currentUploadTask = null;
-    return await ref.getDownloadURL();
+// Returns { url, publicId } — publicId used for deletion
+async function uploadToCloudinary(dataUrl) {
+    uploadAbortController = new AbortController();
+    const fd = new FormData();
+    fd.append('file',           dataUrl);
+    fd.append('upload_preset',  CLOUDINARY_PRESET);
+
+    const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+        { method: 'POST', body: fd, signal: uploadAbortController.signal }
+    );
+    uploadAbortController = null;
+    if (!res.ok) throw new Error(`Cloudinary error ${res.status}`);
+    const data = await res.json();
+    return { url: data.secure_url, publicId: data.public_id };
+}
+
+// Legacy alias so existing call-sites still work
+async function uploadDataUrl(dataUrl, _storagePath) {
+    const { url } = await uploadToCloudinary(dataUrl);
+    return url;
 }
 
 function cancelUpload() {
-    if (currentUploadTask) {
-        currentUploadTask.cancel();
-        currentUploadTask = null;
+    if (uploadAbortController) {
+        uploadAbortController.abort();
+        uploadAbortController = null;
     }
     document.getElementById('upInd').classList.remove('on');
     showToast('Upload cancelled.');
@@ -1875,15 +1937,15 @@ async function handleImg(event) {
 
     document.getElementById('upInd').classList.add('on');
     try {
-        const dataUrl  = await compressToDataUrl(file);
-        const path     = `images/${me.uid}/${Date.now()}.jpg`;
-        const url      = await uploadDataUrl(dataUrl, path);
-        const rt       = replyTo ? { ...replyTo } : null;
+        const dataUrl          = await compressToDataUrl(file);
+        const { url, publicId } = await uploadToCloudinary(dataUrl);
+        const rt               = replyTo ? { ...replyTo } : null;
         clearReply();
-        await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'', ...(rt ? { replyTo: rt } : {}) });
+        // storagePath stores Cloudinary public_id for deletion
+        await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
     } catch(e) {
-        if (e?.code === 'storage/cancelled') { showToast('Upload cancelled.'); }
-        else { showToast('Upload failed: ' + e.message); console.error('handleImg error:', e); }
+        if (e?.name === 'AbortError') showToast('Upload cancelled.');
+        else { showToast('Upload failed: ' + e.message); console.error('handleImg:', e); }
     } finally {
         document.getElementById('upInd').classList.remove('on');
     }
@@ -1910,11 +1972,11 @@ async function pushMsg(extra) {
 }
 
 // ── DELETE ─────────────────────────────────────────────────
-async function delMsg(msgId, msgPath, storagePath) {
+async function delMsg(msgId, msgPath, _storagePath) {
     if (!confirm('Delete this message?')) return;
     try {
         await db.collection(msgPath).doc(msgId).delete();
-        if (storagePath) await storage.ref(storagePath).delete().catch(()=>{});
+        // Note: Cloudinary images expire automatically per the 72h deleteAt rule
     } catch(e) {
         showToast('Could not delete message.');
     }
@@ -2169,8 +2231,7 @@ async function uploadPfp(event) {
 
     try {
         const dataUrl = await compressToDataUrl(file, 400, 0.88);
-        const path    = `avatars/${me.uid}/pfp_${Date.now()}.jpg`;
-        const url     = await uploadDataUrl(dataUrl, path);
+        const { url } = await uploadToCloudinary(dataUrl);
 
         // Update auth profile
         await me.updateProfile({ photoURL: url });
@@ -2480,16 +2541,15 @@ async function sendPastedImg() {
     if (!await checkSend('image','')) return;
     document.getElementById('upInd').classList.add('on');
     try {
-        const dataUrl = await compressToDataUrl(f);
-        const path    = `images/${me.uid}/${Date.now()}_paste.jpg`;
-        const url     = await uploadDataUrl(dataUrl, path);
-        const rt      = replyTo ? { ...replyTo } : null;
+        const dataUrl          = await compressToDataUrl(f);
+        const { url, publicId } = await uploadToCloudinary(dataUrl);
+        const rt               = replyTo ? { ...replyTo } : null;
         clearReply();
-        await pushMsg({ type:'image', imageUrl: url, storagePath: path, text:'', ...(rt ? { replyTo: rt } : {}) });
+        await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
     } catch(e) {
-        if (e?.code === 'storage/cancelled') showToast('Upload cancelled.');
+        if (e?.name === 'AbortError') showToast('Upload cancelled.');
         else { showToast('Upload failed: ' + e.message); console.error('paste upload:', e); }
-    } finally    { document.getElementById('upInd').classList.remove('on'); }
+    } finally { document.getElementById('upInd').classList.remove('on'); }
 }
 
 function clearPaste() {
@@ -2705,19 +2765,41 @@ async function openManageGroup() {
     if (!isAdmin) { showToast('Only admins can manage this group.'); return; }
 
     document.getElementById('grpRenameIn').value = gdata.name || '';
+    document.getElementById('addMemberIn').value = '';
     mmsg('renameMsg','','');
+    mmsg('addMemberMsg','','');
 
-    // Build admin member list
+    // Show add-perm toggle for owners only
+    const permRow = document.getElementById('addPermRow');
+    if (isOwner) {
+        permRow.style.display = 'flex';
+        const adminOnly = gdata.addMembersAdminOnly === true;
+        document.getElementById('addPermDesc').textContent = adminOnly ? 'Admins only can add' : 'Everyone can add';
+        document.getElementById('addPermBtn').textContent  = adminOnly ? 'Allow Everyone' : 'Admin Only';
+    } else {
+        permRow.style.display = 'none';
+    }
+
+    // Build member list
     const el = document.getElementById('manageAdminList');
-    el.innerHTML = '';
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:6px 0;">Loading members…</div>';
 
     const memberUids = gdata.members || [];
     const admins     = gdata.admins  || [];
     const owner      = gdata.createdBy;
 
+    // Batch fetch member profiles
+    const profiles = {};
+    for (let i = 0; i < memberUids.length; i += 10) {
+        const chunk = memberUids.slice(i, i+10);
+        if (!chunk.length) continue;
+        const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
+        s.docs.forEach(d => { profiles[d.id] = d.data(); });
+    }
+
+    el.innerHTML = '';
     for (const uid of memberUids) {
-        const udoc  = await db.collection('users').doc(uid).get();
-        const udata = udoc.data() || {};
+        const udata       = profiles[uid] || {};
         const isThisOwner = uid === owner;
         const isThisAdmin = admins.includes(uid) || isThisOwner;
         const isMe        = uid === me.uid;
@@ -2777,7 +2859,183 @@ function showToast(msg) {
     setTimeout(()=>t.classList.remove('show'), 3000);
 }
 
-// ── PEOPLE DISCOVERY ───────────────────────────────────────
+// ── @ MENTION SYSTEM ───────────────────────────────────────
+let mentionSearch  = null; // current search string after @
+let mentionStart   = -1;   // cursor pos where @ was typed
+let mentionIndex   = 0;    // selected item index
+let mentionMembers = [];   // group members for suggestions
+
+function onMsgInputChange() {
+    if (!chatId || !me) return;
+    const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
+    if (!isTyping) {
+        isTyping = true;
+        db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
+    }
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+        isTyping = false;
+        db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
+    }, 3000);
+
+    // @ mention detection (groups only)
+    if (chatType !== 'group') return;
+    const inp = document.getElementById('msgInput');
+    const val = inp.value;
+    const pos = inp.selectionStart;
+    // Find the last @ before cursor
+    const before = val.slice(0, pos);
+    const atIdx  = before.lastIndexOf('@');
+    if (atIdx !== -1 && !before.slice(atIdx+1).includes(' ')) {
+        mentionSearch = before.slice(atIdx+1).toLowerCase();
+        mentionStart  = atIdx;
+        showMentionBox();
+    } else {
+        hideMentionBox();
+    }
+}
+
+async function showMentionBox() {
+    // Get group members if not cached
+    if (!mentionMembers.length && chatId) {
+        const snap = await db.collection('groups').doc(chatId).get();
+        const uids = (snap.data()?.members || []).filter(u => u !== me.uid);
+        const chunks = [];
+        for (let i = 0; i < uids.length; i+=10) chunks.push(uids.slice(i,i+10));
+        mentionMembers = [];
+        for (const chunk of chunks) {
+            if (!chunk.length) continue;
+            const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
+            s.docs.forEach(d => mentionMembers.push({ uid: d.id, ...d.data() }));
+        }
+    }
+
+    const filtered = mentionMembers.filter(u =>
+        (u.username||'').toLowerCase().startsWith(mentionSearch) ||
+        (u.displayName||'').toLowerCase().startsWith(mentionSearch)
+    ).slice(0, 6);
+
+    const box = document.getElementById('mentionBox');
+    if (!filtered.length) { box.style.display='none'; return; }
+
+    box.innerHTML = '';
+    mentionIndex = 0;
+    filtered.forEach((u, i) => {
+        const it = ce('div');
+        it.className = 'mention-item' + (i===0?' active':'');
+        it.innerHTML = `${mkAv(u.displayName||'?', u.photoURL||null, 26)}<div><div class="mention-name">${esc(u.displayName||'')}</div><div class="mention-handle">@${esc(u.username||'')}</div></div>`;
+        it.onmousedown = (e) => { e.preventDefault(); insertMention(u.username); };
+        box.appendChild(it);
+    });
+    box.style.display = 'block';
+    box._filtered = filtered;
+}
+
+function hideMentionBox() {
+    document.getElementById('mentionBox').style.display = 'none';
+    mentionSearch = null; mentionStart = -1;
+}
+
+function insertMention(username) {
+    const inp = document.getElementById('msgInput');
+    const val = inp.value;
+    const before = val.slice(0, mentionStart);
+    const after  = val.slice(inp.selectionStart);
+    inp.value = before + '@' + username + ' ' + after;
+    const newPos = before.length + username.length + 2;
+    inp.setSelectionRange(newPos, newPos);
+    hideMentionBox();
+    inp.focus();
+}
+
+// Handle keyboard nav in mention box
+document.addEventListener('keydown', (e) => {
+    const box = document.getElementById('mentionBox');
+    if (!box || box.style.display==='none') return;
+    const items = box.querySelectorAll('.mention-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); mentionIndex = (mentionIndex+1)%items.length; items.forEach((it,i)=>it.classList.toggle('active',i===mentionIndex)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); mentionIndex = (mentionIndex-1+items.length)%items.length; items.forEach((it,i)=>it.classList.toggle('active',i===mentionIndex)); }
+    else if (e.key === 'Tab' || (e.key==='Enter' && box.style.display!=='none')) {
+        const u = box._filtered?.[mentionIndex];
+        if (u) { e.preventDefault(); insertMention(u.username); }
+    } else if (e.key === 'Escape') { hideMentionBox(); }
+});
+
+// Render @ mentions as highlighted spans in bubbles
+function renderMsgText(text) {
+    if (!text) return '';
+    // Highlight @mentions
+    return esc(text).replace(/@([a-z0-9_.]+)/gi, (match, uname) => {
+        const isMe = uname.toLowerCase() === (myUsername||'').toLowerCase();
+        return `<span class="ping-highlight${isMe?' me':''}">${match}</span>`;
+    });
+}
+
+// ── FIX PEOPLE DISCOVERY — standalone sendFriendReqTo ──────
+async function sendFriendReqTo(username, btn) {
+    if (!username) return;
+    btn.disabled = true; btn.textContent = '…';
+    try {
+        const udoc = await db.collection('usernames').doc(username).get();
+        if (!udoc.exists) { btn.textContent = '✗ Not found'; return; }
+        const targetUid = udoc.data().uid;
+        const alreadyFriend = friends.some(f => f.uid === targetUid);
+        if (alreadyFriend) { btn.textContent = '✓ Friends'; btn.disabled = true; return; }
+        const dup = await db.collection('friendRequests')
+            .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending').limit(1).get();
+        if (!dup.empty) { btn.textContent = '✓ Sent'; return; }
+        const upro = await db.collection('users').doc(targetUid).get();
+        const updata = upro.data() || {};
+        await db.collection('friendRequests').add({
+            fromUid: me.uid, fromName: me.displayName||me.email, fromUsername: myUsername, fromPhoto: me.photoURL||null,
+            toUid: targetUid, toName: updata.displayName||updata.email, toUsername: updata.username||'', toPhoto: updata.photoURL||null,
+            status: 'pending', createdAt: SV()
+        });
+        btn.textContent = '✓ Sent';
+        showToast(`Request sent! 🎉`);
+    } catch(e) { btn.textContent = '✗ Error'; console.error(e); }
+}
+
+// ── ADD MEMBER TO GROUP ────────────────────────────────────
+async function addMemberToGroup() {
+    const uname = document.getElementById('addMemberIn').value.trim().toLowerCase().replace('@','');
+    if (!uname) return;
+    mmsg('addMemberMsg','','');
+
+    // Check permission
+    const gSnap = await db.collection('groups').doc(manageGroupId).get();
+    const gdata = gSnap.data() || {};
+    const isOwner = gdata.createdBy === me.uid;
+    const isAdmin = (gdata.admins||[]).includes(me.uid) || isOwner;
+    const adminOnly = gdata.addMembersAdminOnly === true;
+    if (adminOnly && !isAdmin) return mmsg('addMemberMsg','Only admins can add members.','err');
+
+    const udoc = await db.collection('usernames').doc(uname).get();
+    if (!udoc.exists) return mmsg('addMemberMsg',`@${uname} not found.`,'err');
+    const targetUid = udoc.data().uid;
+
+    if ((gdata.members||[]).includes(targetUid)) return mmsg('addMemberMsg','Already a member!','err');
+
+    await db.collection('groups').doc(manageGroupId).update({
+        members: firebase.firestore.FieldValue.arrayUnion(targetUid)
+    });
+    document.getElementById('addMemberIn').value = '';
+    mmsg('addMemberMsg',`✓ @${uname} added!`,'ok');
+    showToast(`@${uname} added to group!`);
+    mentionMembers = []; // reset cache
+    openManageGroup(); // refresh
+}
+
+// ── TOGGLE ADD PERMISSION ──────────────────────────────────
+async function toggleAddPerm() {
+    const gSnap = await db.collection('groups').doc(manageGroupId).get();
+    const cur   = gSnap.data()?.addMembersAdminOnly === true;
+    await db.collection('groups').doc(manageGroupId).update({ addMembersAdminOnly: !cur });
+    document.getElementById('addPermDesc').textContent = !cur ? 'Admins only can add' : 'Everyone can add';
+    document.getElementById('addPermBtn').textContent  = !cur ? 'Allow Everyone' : 'Admin Only';
+    showToast(!cur ? 'Now admin-only adding.' : 'Everyone can now add members.');
+}
 async function openPeopleModal() {
     document.getElementById('peopleModal').classList.remove('hidden');
     const el = document.getElementById('peopleList');
@@ -2877,18 +3135,10 @@ function buildPersonCard(u, via) {
             <div class="people-card-tag">@${esc(u.username||'')}</div>
             ${via ? `<div class="people-via">${esc(via)}</div>` : ''}
         </div>
-        <button class="btn-add-person" ${alreadyFriend?'disabled':''} onclick="addPersonFromDiscover('${esc(u.username||'')}',this)">
+        <button class="btn-add-person" ${alreadyFriend?'disabled':''} onclick="sendFriendReqTo('${esc(u.username||'')}',this)">
             ${alreadyFriend ? '✓ Friends' : '+ Add'}
         </button>`;
     return card;
-}
-
-async function addPersonFromDiscover(username, btn) {
-    if (!username) return;
-    btn.disabled = true; btn.textContent = '…';
-    document.getElementById('addIn').value = username;
-    await sendFriendReq();
-    btn.textContent = '✓ Sent';
 }
 </script>
 </body>
