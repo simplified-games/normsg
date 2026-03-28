@@ -854,6 +854,30 @@
         .btn-add-person:hover { background: rgba(124,92,252,0.28); }
         .btn-add-person:disabled { opacity: 0.4; cursor: default; }
 
+        /* ── : EMOJI SEARCH ──────────────────────────────── */
+        #emojiSearchBox {
+            position: absolute; bottom: calc(100% + 6px); left: 0;
+            background: var(--panel); border: 1px solid var(--border2);
+            border-radius: 13px; padding: 8px;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+            z-index: 51; width: 260px; display: none;
+        }
+        .esearch-in {
+            width: 100%; background: var(--card); border: 1px solid var(--border);
+            border-radius: 9px; padding: 6px 10px; font-size: 12px;
+            color: var(--text); outline: none; margin-bottom: 6px;
+            font-family: 'Figtree', sans-serif;
+        }
+        .esearch-in::placeholder { color: var(--muted); }
+        .esearch-results { display: flex; flex-wrap: wrap; gap: 2px; max-height: 140px; overflow-y: auto; }
+        .esearch-item {
+            width: 34px; height: 34px; display: flex; align-items: center;
+            justify-content: center; font-size: 20px; border-radius: 8px;
+            cursor: pointer; transition: background 0.1s; position: relative;
+        }
+        .esearch-item:hover { background: var(--card); transform: scale(1.18); }
+        .esearch-item title { display: none; }
+
         /* ── @ MENTION DROPDOWN ──────────────────────────── */
         #mentionBox {
             position: absolute; bottom: calc(100% + 6px); left: 0;
@@ -974,8 +998,16 @@
 
         <div class="m-msg" id="pfpMsg"></div>
 
-        <!-- Change tag section -->
+        <!-- Change display name section -->
         <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px;">
+            <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Display Name <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:9px;">(2× per week)</span></div>
+            <input class="m-input" id="newDisplayNameIn" placeholder="Your display name…" maxlength="40" onkeydown="if(event.key==='Enter') changeDisplayName()">
+            <div class="m-msg" id="displayNameMsg"></div>
+            <button class="btn-primary" onclick="changeDisplayName()" style="font-size:13px;padding:11px;">Save Display Name</button>
+        </div>
+
+        <!-- Change tag section -->
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:14px;">
             <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Change @username</div>
             <div style="position:relative;">
                 <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;">@</span>
@@ -997,8 +1029,8 @@
 <div id="delGroupModal" class="modal-overlay hidden">
     <div class="modal-card" style="text-align:center;">
         <div class="modal-title" style="color:var(--danger);">⚠ Delete Group?</div>
-        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 10 seconds to confirm.</div>
-        <div class="del-countdown" id="delCountdown">0:10</div>
+        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 15 seconds to confirm.</div>
+        <div class="del-countdown" id="delCountdown">15</div>
         <div class="del-sub" id="delCountSub">Please wait before you can confirm…</div>
         <div class="m-msg" id="delGrpMsg"></div>
         <div class="modal-row">
@@ -1251,6 +1283,10 @@
                 </div>
                 <div class="in-row" style="position:relative;">
                     <div id="mentionBox"></div>
+                    <div id="emojiSearchBox">
+                        <input class="esearch-in" id="esearchIn" placeholder="Search emoji…" oninput="searchEmoji(this.value)" onkeydown="onEsearchKey(event)">
+                        <div class="esearch-results" id="esearchResults"></div>
+                    </div>
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
                         oninput="autoGrow(this);onMsgInputChange()"
@@ -1695,10 +1731,8 @@ function openGroup(group) {
     document.getElementById('chatName').textContent = group.name;
     document.getElementById('chatSub').textContent  = (group.members?.length||0) + ' members';
 
-    // Show manage button only if admin or owner
-    const isAdmin = (group.admins||[]).includes(me.uid) || group.createdBy === me.uid;
-    const btn = document.getElementById('renameChatBtn');
-    if (isAdmin) btn.classList.remove('hidden'); else btn.classList.add('hidden');
+    // Show manage button to all group members
+    document.getElementById('renameChatBtn').classList.remove('hidden');
     document.getElementById('leaveBtn').title = 'Leave group';
 
     activateChat();
@@ -1761,7 +1795,11 @@ function renderMsgs(msgs) {
             `</div>`;
 
         let bubble = '';
-        if (msg.type === 'image') {
+        if (msg.type === 'deleted') {
+            bubble = `<div class="bubble ${mine?'sent':'recv'}" style="opacity:0.45;font-style:italic;font-size:12px;">
+                🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
+            </div>`;
+        } else if (msg.type === 'image') {
             const exp = expLabel(ts, 72);
             bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
                 ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
@@ -1781,9 +1819,17 @@ function renderMsgs(msgs) {
         const pid  = (msg._path||'').replace(/'/g,"\\'");
         const mid  = msg.id;
 
-        const actionBtn = mine
-            ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}')">Delete</button>`
-            : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`;
+        // Check if current user is group admin
+        const isGroupAdmin = chatType === 'group' && (() => {
+            const grp = myGroups.find(g => g.id === chatId);
+            return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
+        })();
+
+        const actionBtn = msg.type === 'deleted' ? '' : (mine
+            ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
+            : isGroupAdmin
+                ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
+                : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
 
         const replySnip = msg.type === 'image' ? '[Image]' : (msg.text||'').slice(0,60);
         const replyBtn  = `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
@@ -1972,11 +2018,21 @@ async function pushMsg(extra) {
 }
 
 // ── DELETE ─────────────────────────────────────────────────
-async function delMsg(msgId, msgPath, _storagePath) {
-    if (!confirm('Delete this message?')) return;
+async function delMsg(msgId, msgPath, _storagePath, isAdminDel = false) {
+    if (!confirm(isAdminDel ? 'Delete this message as admin?' : 'Delete this message?')) return;
     try {
-        await db.collection(msgPath).doc(msgId).delete();
-        // Note: Cloudinary images expire automatically per the 72h deleteAt rule
+        if (isAdminDel) {
+            // Replace with deleted placeholder instead of removing entirely
+            await db.collection(msgPath).doc(msgId).update({
+                text:        '',
+                type:        'deleted',
+                deletedBy:   me.uid,
+                deletedByUsername: myUsername || me.displayName,
+                deletedAt:   SV()
+            });
+        } else {
+            await db.collection(msgPath).doc(msgId).delete();
+        }
     } catch(e) {
         showToast('Could not delete message.');
     }
@@ -2203,9 +2259,11 @@ async function openProfileModal() {
     document.getElementById('pfpMsg').className = 'm-msg';
     document.getElementById('pfpMsg').textContent = '';
 
-    // Pre-fill current username in tag field
+    // Pre-fill current username and display name in tag fields
     document.getElementById('newTagIn').value = myUsername || '';
+    document.getElementById('newDisplayNameIn').value = me.displayName || '';
     mmsg('tagMsg','','');
+    mmsg('displayNameMsg','','');
 
     document.getElementById('profileModal').classList.remove('hidden');
 }
@@ -2300,7 +2358,40 @@ async function changeTag() {
     showToast('Username updated! 🎉');
 }
 
-// ── DELETE GROUP (10-sec countdown) ────────────────────────
+// ── CHANGE DISPLAY NAME (2x per week) ──────────────────────
+async function changeDisplayName() {
+    const newName = document.getElementById('newDisplayNameIn').value.trim();
+    if (!newName) return mmsg('displayNameMsg', 'Enter a display name.', 'err');
+    if (newName.length < 2) return mmsg('displayNameMsg', 'Minimum 2 characters.', 'err');
+    if (newName === me.displayName) return mmsg('displayNameMsg', 'That\'s already your name!', 'err');
+
+    // Check 2x per week limit
+    const snap  = await db.collection('users').doc(me.uid).get();
+    const dat   = snap.data() || {};
+    const nameLog = (dat.nameChanges || []).filter(ts => {
+        const d = ts.toDate ? ts.toDate() : new Date(ts);
+        return (Date.now() - d) < 7 * 86400000;
+    });
+    if (nameLog.length >= 2) {
+        return mmsg('displayNameMsg', '⚠ You\'ve used both name changes this week. Try again next week.', 'err');
+    }
+
+    mmsg('displayNameMsg', 'Saving…', 'inf');
+    try {
+        await me.updateProfile({ displayName: newName });
+        await db.collection('users').doc(me.uid).update({
+            displayName: newName,
+            nameChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
+        });
+        document.getElementById('myName').textContent = newName;
+        mmsg('displayNameMsg', `✓ Name changed to "${newName}"! (${nameLog.length+1}/2 this week)`, 'ok');
+        showToast('Display name updated! ✓');
+    } catch(e) {
+        mmsg('displayNameMsg', 'Failed: ' + e.message, 'err');
+    }
+}
+
+// ── DELETE GROUP (15s countdown) ──────────────────────────
 let delGroupTarget = null;   // { id, name }
 let delGroupTimer  = null;
 
@@ -2312,19 +2403,17 @@ function startDeleteGroup(groupId, groupName) {
     btn.style.pointerEvents = 'none';
     document.getElementById('delGroupModal').classList.remove('hidden');
 
-    let secsLeft = 10; // 10 seconds
+    let secsLeft = 15; // 15 seconds
     function tick() {
         if (secsLeft <= 0) {
             clearInterval(delGroupTimer);
-            document.getElementById('delCountdown').textContent = '0:00';
+            document.getElementById('delCountdown').textContent = '0';
             document.getElementById('delCountSub').textContent  = 'You can now confirm the deletion.';
             btn.style.opacity = '1';
             btn.style.pointerEvents = 'auto';
             return;
         }
-        const m = Math.floor(secsLeft / 60);
-        const s = secsLeft % 60;
-        document.getElementById('delCountdown').textContent = `${m}:${String(s).padStart(2,'0')}`;
+        document.getElementById('delCountdown').textContent = secsLeft;
         document.getElementById('delCountSub').textContent  = 'Please wait before you can confirm…';
         secsLeft--;
     }
@@ -2759,36 +2848,41 @@ async function openManageGroup() {
 
     const snap  = await db.collection('groups').doc(chatId).get();
     const gdata = snap.data() || {};
-    const isOwner = gdata.createdBy === me.uid;
-    const isAdmin = (gdata.admins || []).includes(me.uid) || isOwner;
+    const isOwner   = gdata.createdBy === me.uid;
+    const isAdmin   = (gdata.admins || []).includes(me.uid) || isOwner;
+    const adminOnly = gdata.addMembersAdminOnly === true;
+    const canAdd    = !adminOnly || isAdmin;
 
-    if (!isAdmin) { showToast('Only admins can manage this group.'); return; }
-
+    // Rename section: admins only
     document.getElementById('grpRenameIn').value = gdata.name || '';
-    document.getElementById('addMemberIn').value = '';
+    document.getElementById('grpRenameIn').disabled = !isAdmin;
+    document.querySelector('#manageGroupModal .btn-add').style.display = isAdmin ? '' : 'none';
     mmsg('renameMsg','','');
+
+    // Add member section: based on permission setting
+    document.getElementById('addMemberIn').value = '';
+    document.getElementById('addMemberIn').disabled = !canAdd;
+    document.getElementById('addMemberIn').placeholder = canAdd ? 'username' : 'Admins only can add members';
     mmsg('addMemberMsg','','');
 
     // Show add-perm toggle for owners only
     const permRow = document.getElementById('addPermRow');
     if (isOwner) {
         permRow.style.display = 'flex';
-        const adminOnly = gdata.addMembersAdminOnly === true;
         document.getElementById('addPermDesc').textContent = adminOnly ? 'Admins only can add' : 'Everyone can add';
         document.getElementById('addPermBtn').textContent  = adminOnly ? 'Allow Everyone' : 'Admin Only';
     } else {
         permRow.style.display = 'none';
     }
 
-    // Build member list
+    // Build member list — batch fetch
     const el = document.getElementById('manageAdminList');
-    el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:6px 0;">Loading members…</div>';
+    el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:6px 0;">Loading…</div>';
 
     const memberUids = gdata.members || [];
     const admins     = gdata.admins  || [];
     const owner      = gdata.createdBy;
 
-    // Batch fetch member profiles
     const profiles = {};
     for (let i = 0; i < memberUids.length; i += 10) {
         const chunk = memberUids.slice(i, i+10);
@@ -2853,6 +2947,113 @@ async function toggleAdmin(uid, currentlyAdmin) {
     openManageGroup(); // refresh list
 }
 
+// ── EMOJI SEARCH (: trigger) ───────────────────────────────
+const ALL_EMOJI = [
+    ['😀','grinning face'],['😁','grin beaming'],['😂','joy tears laugh'],['🤣','rofl rolling'],
+    ['😊','smile blushing'],['😍','heart eyes love'],['🥰','hearts smiling'],['😎','cool sunglasses'],
+    ['🤔','thinking'],['😅','sweat smile'],['😆','laughing'],['😭','crying sob'],['😢','cry sad'],
+    ['😡','angry rage'],['🤯','mind blown exploding'],['😴','sleeping tired'],['🥲','smile tear'],
+    ['🥳','party face celebrating'],['🤝','handshake'],['👋','wave hello'],['👍','thumbs up like'],
+    ['👎','thumbs down dislike'],['❤️','heart love red'],['🧡','orange heart'],['💛','yellow heart'],
+    ['💚','green heart'],['💙','blue heart'],['💜','purple heart'],['🖤','black heart'],
+    ['💔','broken heart'],['🔥','fire hot'],['✨','sparkles stars'],['🎉','party celebration tada'],
+    ['🎊','confetti celebration'],['🎶','music notes'],['🎵','musical note'],['🚀','rocket launch'],
+    ['⭐','star'],['🌟','glowing star'],['💫','dizzy star'],['💯','100 percent perfect'],
+    ['✅','check green yes'],['❌','cross no wrong'],['⚡','lightning bolt fast'],['💥','explosion boom'],
+    ['💧','droplet water'],['🌊','wave ocean'],['🌈','rainbow'],['🌙','moon night'],['☀️','sun sunny'],
+    ['⛅','partly cloudy'],['❄️','snowflake cold'],['🌸','cherry blossom'],['🍀','four leaf clover'],
+    ['👀','eyes watching'],['👁️','eye'],['💀','skull dead'],['💪','muscle strong flex'],
+    ['🙏','pray hands please thank'],['🫡','salute'],['🤞','fingers crossed luck'],
+    ['👏','clapping hands applause'],['🤦','facepalm'],['🤷','shrug whatever'],['😤','triumph snort'],
+    ['😏','smirk'],['🙄','eye roll'],['😬','grimacing'],['🤗','hugging'],['😇','angel halo'],
+    ['🤩','star struck'],['🥺','pleading eyes'],['😳','flushed embarrassed'],['😱','scream shocked'],
+    ['🍕','pizza'],['🍔','burger'],['🍣','sushi'],['🧁','cupcake'],['🎂','birthday cake'],
+    ['☕','coffee'],['🧋','bubble tea boba'],['🍵','tea'],['🍺','beer'],['🥤','drink cup'],
+    ['🐶','dog puppy'],['🐱','cat kitten'],['🐸','frog'],['🦆','duck'],['🐧','penguin'],
+    ['🦊','fox'],['🐻','bear'],['🦁','lion'],['🐼','panda'],['🐨','koala']
+];
+
+let colonStart = -1;
+let esearchActive = false;
+
+function checkColonTrigger(inp) {
+    const val    = inp.value;
+    const pos    = inp.selectionStart;
+    const before = val.slice(0, pos);
+    const cIdx   = before.lastIndexOf(':');
+    const box    = document.getElementById('emojiSearchBox');
+
+    if (cIdx !== -1) {
+        const afterColon = before.slice(cIdx + 1);
+        // Only activate if no space after the colon
+        if (!afterColon.includes(' ') && afterColon.length > 0) {
+            colonStart    = cIdx;
+            esearchActive = true;
+            const q = afterColon.toLowerCase();
+            document.getElementById('esearchIn').value = q;
+            searchEmoji(q);
+            box.style.display = 'block';
+            return;
+        }
+    }
+    // Close if not active
+    colonStart    = -1;
+    esearchActive = false;
+    box.style.display = 'none';
+}
+
+function searchEmoji(q) {
+    const res     = document.getElementById('esearchResults');
+    const matches = q
+        ? ALL_EMOJI.filter(([, name]) => name.includes(q.toLowerCase())).slice(0, 36)
+        : ALL_EMOJI.slice(0, 36);
+
+    res.innerHTML = '';
+    if (!matches.length) {
+        res.innerHTML = `<span style="font-size:11px;color:var(--muted);padding:4px;">No match</span>`;
+        return;
+    }
+    matches.forEach(([em]) => {
+        const sp = ce('span');
+        sp.className   = 'esearch-item';
+        sp.textContent = em;
+        sp.title       = em;
+        sp.onmousedown = (e) => { e.preventDefault(); insertEmoji(em); };
+        res.appendChild(sp);
+    });
+}
+
+function insertEmoji(em) {
+    const inp = document.getElementById('msgInput');
+    const val = inp.value;
+    const pos = inp.selectionStart;
+    // Replace from colonStart to cursor with the emoji
+    inp.value = val.slice(0, colonStart) + em + val.slice(pos);
+    const np  = colonStart + [...em].length + 1;
+    inp.setSelectionRange(np, np);
+    document.getElementById('emojiSearchBox').style.display = 'none';
+    colonStart = -1; esearchActive = false;
+    inp.focus();
+    autoGrow(inp);
+}
+
+function onEsearchKey(e) {
+    // Let Enter/Tab select first result; Escape closes
+    if (e.key === 'Escape') {
+        document.getElementById('emojiSearchBox').style.display = 'none';
+        esearchActive = false;
+        document.getElementById('msgInput').focus();
+    }
+}
+
+// Close emoji box on outside click
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#emojiSearchBox') && !e.target.closest('#msgInput')) {
+        const box = document.getElementById('emojiSearchBox');
+        if (box) { box.style.display = 'none'; esearchActive = false; colonStart = -1; }
+    }
+});
+
 function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
@@ -2878,12 +3079,15 @@ function onMsgInputChange() {
         db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
     }, 3000);
 
+    const inp = document.getElementById('msgInput');
+
+    // : emoji search
+    checkColonTrigger(inp);
+
     // @ mention detection (groups only)
     if (chatType !== 'group') return;
-    const inp = document.getElementById('msgInput');
     const val = inp.value;
     const pos = inp.selectionStart;
-    // Find the last @ before cursor
     const before = val.slice(0, pos);
     const atIdx  = before.lastIndexOf('@');
     if (atIdx !== -1 && !before.slice(atIdx+1).includes(' ')) {
@@ -3039,89 +3243,104 @@ async function toggleAddPerm() {
 async function openPeopleModal() {
     document.getElementById('peopleModal').classList.remove('hidden');
     const el = document.getElementById('peopleList');
-    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">Loading…</div>`;
+    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">🔍 Loading suggestions…</div>`;
 
-    const myFriendUids = new Set(friends.map(f => f.uid));
-    myFriendUids.add(me.uid);
+    try {
+        const myFriendUids = new Set(friends.map(f => f.uid));
+        myFriendUids.add(me.uid);
 
-    // Collect friend-of-friend UIDs and who introduced them
-    const fofMap = {}; // uid -> [mutual friend name]
-    const fofUids = new Set();
+        // discovered[uid] = { degree, via[] }
+        const discovered = {};
 
-    for (const f of friends) {
-        const [q1, q2] = await Promise.all([
-            db.collection('friendRequests').where('fromUid','==',f.uid).where('status','==','accepted').get(),
-            db.collection('friendRequests').where('toUid','==',f.uid).where('status','==','accepted').get()
-        ]);
-        const fFriends = new Set();
-        q1.docs.forEach(d => fFriends.add(d.data().toUid));
-        q2.docs.forEach(d => fFriends.add(d.data().fromUid));
-        fFriends.forEach(uid => {
-            if (!myFriendUids.has(uid)) {
-                fofUids.add(uid);
-                if (!fofMap[uid]) fofMap[uid] = [];
-                fofMap[uid].push(f.displayName || f.username);
-            }
-        });
-    }
+        // Degree-2: friends of my friends
+        for (const f of friends.slice(0, 12)) {
+            const [q1, q2] = await Promise.all([
+                db.collection('friendRequests')
+                    .where('fromUid','==',f.uid).where('status','==','accepted').limit(20).get(),
+                db.collection('friendRequests')
+                    .where('toUid','==',f.uid).where('status','==','accepted').limit(20).get()
+            ]);
+            const fof = new Set();
+            q1.docs.forEach(d => fof.add(d.data().toUid));
+            q2.docs.forEach(d => fof.add(d.data().fromUid));
+            fof.forEach(uid => {
+                if (myFriendUids.has(uid)) return;
+                if (!discovered[uid]) discovered[uid] = { degree: 2, via: [] };
+                const name = f.displayName || f.username || '?';
+                if (!discovered[uid].via.includes(name)) discovered[uid].via.push(name);
+            });
+        }
 
-    // 3rd-degree (capped to avoid too many reads)
-    const fof3Map = {};
-    const fof3Uids = new Set();
-    for (const fofUid of [...fofUids].slice(0, 8)) {
-        const [q1, q2] = await Promise.all([
-            db.collection('friendRequests').where('fromUid','==',fofUid).where('status','==','accepted').get(),
-            db.collection('friendRequests').where('toUid','==',fofUid).where('status','==','accepted').get()
-        ]);
-        const f2 = new Set();
-        q1.docs.forEach(d => f2.add(d.data().toUid));
-        q2.docs.forEach(d => f2.add(d.data().fromUid));
-        f2.forEach(uid => {
-            if (!myFriendUids.has(uid) && !fofUids.has(uid)) {
-                fof3Uids.add(uid);
-                if (!fof3Map[uid]) fof3Map[uid] = [];
-                fof3Map[uid].push(fofMap[fofUid]?.[0] || 'a mutual');
-            }
-        });
-    }
+        // Degree-3: friends of degree-2 (capped at 5 to avoid too many reads)
+        const fofKeys = Object.keys(discovered).slice(0, 5);
+        for (const fofUid of fofKeys) {
+            const [q1, q2] = await Promise.all([
+                db.collection('friendRequests')
+                    .where('fromUid','==',fofUid).where('status','==','accepted').limit(10).get(),
+                db.collection('friendRequests')
+                    .where('toUid','==',fofUid).where('status','==','accepted').limit(10).get()
+            ]);
+            const fof2 = new Set();
+            q1.docs.forEach(d => fof2.add(d.data().toUid));
+            q2.docs.forEach(d => fof2.add(d.data().fromUid));
+            fof2.forEach(uid => {
+                if (myFriendUids.has(uid) || discovered[uid]) return;
+                const viaName = discovered[fofUid]?.via?.[0] || '?';
+                discovered[uid] = { degree: 3, via: [viaName] };
+            });
+        }
 
-    // Batch-fetch profiles using 'in' queries (max 10 per query)
-    const allUids = [...new Set([...fofUids, ...[...fof3Uids].slice(0,8)])];
-    const profiles = {};
-    for (let i = 0; i < allUids.length; i += 10) {
-        const chunk = allUids.slice(i, i+10);
-        if (!chunk.length) continue;
-        const snap = await db.collection('users')
-            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
-        snap.docs.forEach(d => { profiles[d.id] = { uid: d.id, ...d.data() }; });
-    }
+        const allUids = Object.keys(discovered);
+        if (!allUids.length) {
+            el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+            return;
+        }
 
-    el.innerHTML = '';
+        // Batch-fetch user profiles (10 per query)
+        const profiles = {};
+        for (let i = 0; i < allUids.length; i += 10) {
+            const chunk = allUids.slice(i, i + 10);
+            if (!chunk.length) continue;
+            const snap = await db.collection('users')
+                .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
+            snap.docs.forEach(d => {
+                const data = d.data();
+                if (data.username) profiles[d.id] = { uid: d.id, ...data };
+            });
+        }
 
-    const fofList = [...fofUids].filter(uid => profiles[uid]);
-    if (fofList.length) {
-        const sec = ce('div'); sec.className = 'people-section';
-        sec.innerHTML = `<span class="people-sec-label">👥 Friends of Friends</span>`;
-        fofList.slice(0,15).forEach(uid => {
-            const via = (fofMap[uid]||[]).slice(0,2).join(' & ');
-            sec.appendChild(buildPersonCard(profiles[uid], `via ${via}`));
-        });
-        el.appendChild(sec);
-    }
+        el.innerHTML = '';
 
-    const fof3List = [...fof3Uids].filter(uid => profiles[uid]);
-    if (fof3List.length) {
-        const sec = ce('div'); sec.className = 'people-section';
-        sec.innerHTML = `<span class="people-sec-label">🌐 Extended Network</span>`;
-        fof3List.slice(0,8).forEach(uid => {
-            const via = (fof3Map[uid]||[]).slice(0,1).join('');
-            sec.appendChild(buildPersonCard(profiles[uid], `3° via ${via}`));
-        });
-        el.appendChild(sec);
-    }
+        const deg2 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 2);
+        const deg3 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 3);
 
-    if (!fofList.length && !fof3List.length) {
-        el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+        if (deg2.length) {
+            const sec = ce('div'); sec.className = 'people-section';
+            sec.innerHTML = `<span class="people-sec-label">👥 Friends of Friends</span>`;
+            deg2.slice(0, 15).forEach(uid => {
+                const via = discovered[uid].via.slice(0, 2).join(' & ');
+                sec.appendChild(buildPersonCard(profiles[uid], via ? `via ${via}` : ''));
+            });
+            el.appendChild(sec);
+        }
+
+        if (deg3.length) {
+            const sec = ce('div'); sec.className = 'people-section';
+            sec.innerHTML = `<span class="people-sec-label">🌐 Extended Network</span>`;
+            deg3.slice(0, 8).forEach(uid => {
+                const via = discovered[uid].via[0] || '';
+                sec.appendChild(buildPersonCard(profiles[uid], via ? `3° via ${via}` : '3°'));
+            });
+            el.appendChild(sec);
+        }
+
+        if (!deg2.length && !deg3.length) {
+            el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+        }
+
+    } catch(e) {
+        el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--danger);font-size:13px;">Could not load suggestions: ${esc(e.message)}</div>`;
+        console.error('openPeopleModal:', e);
     }
 }
 
