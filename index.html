@@ -397,6 +397,12 @@
         }
         .conv-item:hover { background: var(--card); }
         .conv-item.on { background: rgba(124,92,252,0.12); }
+        .conv-item.unread {
+            border-left: 3px solid rgba(255,255,255,0.85);
+            padding-left: 5px; /* compensate for border */
+        }
+        .conv-item.unread .cv-name { font-weight: 800; color: var(--text); }
+        .conv-item.on.unread { border-left-color: var(--a2); }
         .cv-info { flex: 1; min-width: 0; }
         .cv-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .cv-last { font-size: 11px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1343,6 +1349,14 @@ let localTOUntil = null;   // Date — local spam timeout
 // Unsubscribe handles
 let unsubF = null, unsubR = null, unsubG = null;
 
+// ── UNREAD / LAST-AT TRACKING ──────────────────────────────
+let dmLastAt = {};   // convId/groupId -> Date
+let dmUnsubLastAt = {};  // convId -> unsub fn
+
+function getLastRead(id)       { try { return parseInt(localStorage.getItem('normsg_read_'+id)||'0',10); } catch { return 0; } }
+function markRead(id)          { try { localStorage.setItem('normsg_read_'+id, Date.now()); } catch {} }
+function isUnread(id, lastAt)  { if (!lastAt) return false; return lastAt.getTime() > getLastRead(id); }
+
 // ── AUTH ───────────────────────────────────────────────────
 function login()  { auth.signInWithPopup(gProv).catch(e => showToast('Sign-in failed: ' + e.message)); }
 function logout() {
@@ -1350,7 +1364,10 @@ function logout() {
     clearInterval(presenceTimer);
     [msgUnsub, unsubF, unsubR, unsubG].forEach(u => u && u());
     Object.values(presenceUnsubs).forEach(u => u && u());
+    Object.values(dmUnsubLastAt).forEach(u => u && u());
     presenceUnsubs = {};
+    dmUnsubLastAt  = {};
+    dmLastAt       = {};
     if (typingUnsub) { typingUnsub(); typingUnsub = null; }
     auth.signOut();
 }
@@ -1444,6 +1461,7 @@ function subFriends() {
             });
             friends = dedup([...fromF, ...toF]);
             subscribePresence();
+            subDmLastAts();
             renderFriends();
         });
 
@@ -1456,10 +1474,34 @@ function subFriends() {
             });
             friends = dedup([...fromF, ...toF]);
             subscribePresence();
+            subDmLastAts();
             renderFriends();
         });
 
     unsubF = () => { u1(); u2(); };
+}
+
+// Subscribe to lastAt on every DM conversation so sidebar stays live-sorted
+function subDmLastAts() {
+    friends.forEach(f => {
+        const cid = dmId(me.uid, f.uid);
+        if (dmUnsubLastAt[cid]) return; // already watching
+        dmUnsubLastAt[cid] = db.collection('conversations').doc(cid)
+            .onSnapshot(snap => {
+                const d = snap.data();
+                dmLastAt[cid] = d?.lastAt?.toDate?.() || null;
+                renderFriends();
+            });
+    });
+    // Unsub from removed friends
+    Object.keys(dmUnsubLastAt).forEach(cid => {
+        const stillFriend = friends.some(f => dmId(me.uid, f.uid) === cid);
+        if (!stillFriend) {
+            dmUnsubLastAt[cid]();
+            delete dmUnsubLastAt[cid];
+            delete dmLastAt[cid];
+        }
+    });
 }
 
 function subRequests() {
@@ -1491,6 +1533,7 @@ function renderFriends() {
     const q       = document.getElementById('dmSearch').value.toLowerCase();
     const hidden  = getHiddenDMs();
     const nicks   = getNicknames();
+
     const vis = friends.filter(f => {
         const cid  = dmId(me.uid, f.uid);
         const nick = nicks[f.uid] || '';
@@ -1499,6 +1542,13 @@ function renderFriends() {
             (f.username||'').toLowerCase().includes(q) ||
             nick.toLowerCase().includes(q)
         );
+    });
+
+    // Sort by most recently chatted (lastAt descending), fallback to name
+    vis.sort((a, b) => {
+        const la = dmLastAt[dmId(me.uid, a.uid)]?.getTime() || 0;
+        const lb = dmLastAt[dmId(me.uid, b.uid)]?.getTime() || 0;
+        return lb - la;
     });
 
     if (!vis.length) {
@@ -1511,6 +1561,7 @@ function renderFriends() {
         const nick     = nicks[f.uid];
         const pres     = friendPresence[f.uid];
         const isOnline = pres?.online === true;
+        const unread   = isUnread(cid, dmLastAt[cid]) && chatId !== cid;
         const displayLabel = nick
             ? `${esc(nick)} <span class="nick-badge">@${esc(f.username||'')}</span>`
             : esc(f.displayName);
@@ -1519,7 +1570,7 @@ function renderFriends() {
             : (() => { const ago = timeAgo(pres?.lastSeen); return ago ? `<span style="font-size:10px;color:var(--muted);">${ago}</span>` : `<span style="font-size:10px;color:var(--muted);">@${esc(f.username||'')}</span>`; })();
 
         const d = ce('div');
-        d.className = 'conv-item' + (chatId === cid ? ' on' : '');
+        d.className = 'conv-item' + (chatId === cid ? ' on' : '') + (unread ? ' unread' : '');
         d.innerHTML = `
             <div style="position:relative;flex-shrink:0;">
                 ${mkAv(f.displayName, f.photoURL, 34)}
@@ -1570,11 +1621,21 @@ function renderGroups() {
         el.innerHTML = `<div class="no-items"><div class="no-ico">💬</div><div class="no-txt">No groups yet.<br>Create one below!</div></div>`;
         return;
     }
+
+    // Sort by most recently chatted (lastAt descending)
+    const sorted = [...myGroups].sort((a, b) => {
+        const la = a.lastAt?.toDate?.()?.getTime() || 0;
+        const lb = b.lastAt?.toDate?.()?.getTime() || 0;
+        return lb - la;
+    });
+
     el.innerHTML = '';
-    myGroups.forEach(g => {
-        const d = ce('div');
-        d.className = 'conv-item' + (chatId === g.id ? ' on' : '');
+    sorted.forEach(g => {
+        const lastAt   = g.lastAt?.toDate?.() || null;
+        const unread   = isUnread(g.id, lastAt) && chatId !== g.id;
         const isCreator = g.createdBy === me.uid;
+        const d = ce('div');
+        d.className = 'conv-item' + (chatId === g.id ? ' on' : '') + (unread ? ' unread' : '');
         d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name[0]||'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
         d.onclick = () => openGroup(g);
         el.appendChild(d);
@@ -1709,7 +1770,7 @@ function openDM(friend) {
     // Hide manage group button for DMs
     document.getElementById('renameChatBtn').classList.add('hidden');
     document.getElementById('leaveBtn').title = 'Hide conversation';
-
+    markRead(chatId);
     activateChat();
     renderFriends();
     document.getElementById('sidebar').classList.remove('open');
@@ -1734,7 +1795,7 @@ function openGroup(group) {
     // Show manage button to all group members
     document.getElementById('renameChatBtn').classList.remove('hidden');
     document.getElementById('leaveBtn').title = 'Leave group';
-
+    markRead(chatId);
     activateChat();
     renderGroups();
     document.getElementById('sidebar').classList.remove('open');
@@ -1762,6 +1823,8 @@ function subMessages(path) {
     msgUnsub = db.collection(path).orderBy('timestamp','asc')
         .onSnapshot(snap => {
             renderMsgs(snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() })));
+            // If this chat is open, keep it marked as read
+            if (chatId) markRead(chatId);
         });
 }
 
