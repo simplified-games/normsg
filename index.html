@@ -1607,6 +1607,7 @@ function subFriends() {
 }
 
 // Subscribe to lastAt on every DM conversation so sidebar stays live-sorted
+// AND fires notifications for new messages in any DM (not just the open one)
 function subDmLastAts() {
     friends.forEach(f => {
         const cid = dmId(me.uid, f.uid);
@@ -1614,8 +1615,24 @@ function subDmLastAts() {
         dmUnsubLastAt[cid] = db.collection('conversations').doc(cid)
             .onSnapshot(snap => {
                 const d = snap.data();
-                dmLastAt[cid] = d?.lastAt?.toDate?.() || null;
+                const newLastAt = d?.lastAt?.toDate?.() || null;
+                const prevLastAt = dmLastAt[cid];
+                dmLastAt[cid] = newLastAt;
                 renderFriends();
+
+                // Fire notification if this is a new message from someone else
+                if (!newLastAt) return;
+                if (!prevLastAt) return; // skip on initial subscription
+                if (newLastAt <= prevLastAt) return; // not newer
+                if (d.lastSenderUid === me.uid) return; // my own message
+                if (cid === chatId) return; // already in this chat, skip
+
+                fireNotification({
+                    senderUid:      d.lastSenderUid,
+                    senderUsername: d.lastSenderUsername || '',
+                    text:           d.lastText || '',
+                    type:           d.lastType || 'text'
+                }, f.displayName || f.username || 'DM', 'dm');
             });
     });
     // Unsub from removed friends
@@ -1644,9 +1661,30 @@ function subRequests() {
 
 function subGroups() {
     if (unsubG) unsubG();
+    // Track previous lastAt per group to detect new messages
+    const prevGroupLastAt = {};
     unsubG = db.collection('groups')
         .where('members','array-contains',me.uid)
         .onSnapshot(snap => {
+            snap.docChanges().forEach(change => {
+                const g    = { id: change.doc.id, ...change.doc.data() };
+                const newLastAt = g.lastAt?.toDate?.() || null;
+                const prev      = prevGroupLastAt[g.id];
+
+                // Fire notification for new group messages
+                if (newLastAt && prev && newLastAt > prev
+                    && g.lastSenderUid !== me.uid
+                    && g.id !== chatId) {
+                    fireNotification({
+                        senderUid:      g.lastSenderUid,
+                        senderUsername: g.lastSenderUsername || '',
+                        text:           g.lastText || '',
+                        type:           g.lastType || 'text'
+                    }, g.name || 'Group', 'group');
+                }
+                prevGroupLastAt[g.id] = newLastAt;
+            });
+
             myGroups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             renderGroups();
         });
@@ -1944,25 +1982,11 @@ function activateChat() {
 function subMessages(path) {
     if (msgUnsub) { msgUnsub(); msgUnsub = null; }
     document.getElementById('messagesArea').innerHTML = '';
-    let initialLoad = true;
 
     msgUnsub = db.collection(path).orderBy('timestamp','asc')
         .onSnapshot(snap => {
-            const msgs = snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() }));
-            renderMsgs(msgs);
+            renderMsgs(snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() })));
             if (chatId) markRead(chatId);
-
-            // Don't notify on the initial load — only on new arrivals
-            if (initialLoad) { initialLoad = false; return; }
-
-            // Find the latest message that isn't mine
-            const changes = snap.docChanges().filter(c => c.type === 'added');
-            changes.forEach(c => {
-                const msg = c.doc.data();
-                if (msg.senderUid === me.uid) return; // don't notify for own messages
-                if (msg.type === 'deleted') return;
-                fireNotification(msg);
-            });
         });
 }
 
@@ -2202,11 +2226,21 @@ async function pushMsg(extra) {
     const msgPath    = chatType==='dm' ? `conversations/${chatId}/messages` : `groups/${chatId}/messages`;
     const parentPath = chatType==='dm' ? `conversations/${chatId}`          : `groups/${chatId}`;
 
-    const now     = new Date();
-    const delHrs  = extra.type==='image' ? 72 : 24*7;
+    const now      = new Date();
+    const delHrs   = extra.type==='image' ? 72 : 24*7;
     const deleteAt = new Date(now.getTime() + delHrs * 3600000);
 
-    await db.doc(parentPath).set({ lastAt: SV() }, { merge: true });
+    // Summary stored on the parent doc so notification watchers can read it without
+    // needing to open the messages subcollection
+    const summary = {
+        lastAt:          SV(),
+        lastSenderUid:   me.uid,
+        lastSenderUsername: myUsername || me.displayName || '',
+        lastText:        extra.type === 'image' ? '' : (extra.text || ''),
+        lastType:        extra.type || 'text'
+    };
+
+    await db.doc(parentPath).set(summary, { merge: true });
     await db.collection(msgPath).add({
         senderUid:      me.uid,
         senderName:     me.displayName || me.email,
@@ -3326,9 +3360,21 @@ const NOTIF_ICON  = 'faviconnormsg.ico';
 
 // Lazily create the ping sound via Web Audio API (no file needed)
 let audioCtx = null;
+
+// Initialise AudioContext on first user interaction so sound is never blocked
+function ensureAudio() {
+    if (!audioCtx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+    }
+    if (audioCtx?.state === 'suspended') audioCtx.resume().catch(()=>{});
+}
+document.addEventListener('click', ensureAudio, { once: true });
+document.addEventListener('keydown', ensureAudio, { once: true });
+
 function playPing(freq = 880) {
     try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        ensureAudio();
+        if (!audioCtx || audioCtx.state !== 'running') return;
         const osc  = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         osc.connect(gain);
@@ -3339,60 +3385,54 @@ function playPing(freq = 880) {
         gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
         osc.start(audioCtx.currentTime);
         osc.stop(audioCtx.currentTime + 0.35);
-    } catch(e) { /* Audio context not available */ }
+    } catch(e) {}
 }
 
-function fireNotification(msg) {
+function fireNotification(msg, convName = '', convType = null) {
     const s          = getNotifSettings();
     const tabVisible = !document.hidden;
     const senderName = msg.senderUsername ? '@' + msg.senderUsername : (msg.senderName || 'Someone');
     const body       = msg.type === 'image' ? '📷 Sent an image' : (msg.text || '').slice(0, 100);
-    const convName   = document.getElementById('chatName')?.textContent || 'NorMSG';
+    const displayName = convName || document.getElementById('chatName')?.textContent || 'NorMSG';
+    const isGroup    = (convType || chatType) === 'group';
 
     // Is this message a @mention of me?
     const isMention = !!(msg.text && myUsername &&
         new RegExp('@' + myUsername + '\\b', 'i').test(msg.text));
 
-    // Is this a group chat message?
-    const isGroup = chatType === 'group';
-
-    // Decide whether to notify at all based on settings
-    // DMs always notify. Groups: notify if groupAll is on, OR if it's a mention and mentions is on.
+    // DMs always notify. Groups: notify if groupAll is on, OR if it's a @mention and mentions is on.
     const shouldNotify = !isGroup || s.groupAll || (isMention && s.mentions);
     if (!shouldNotify) return;
 
-    // Sound — higher pitch for mentions
-    if (s.sound && tabVisible) {
-        if (isMention) playPing(1200); // higher pitch for @mention
-        else           playPing(880);
+    // Sound — higher pitch for mentions. AudioCtx created lazily on first user gesture.
+    if (s.sound) {
+        if (isMention) playPing(1200);
+        else if (tabVisible) playPing(880);
     }
 
     // Tab badge
     if (s.tabBadge) {
         unreadCount++;
-        const prefix = isMention ? '🔔 ' : '';
-        document.title = `${prefix}(${unreadCount}) NorMSG`;
+        document.title = `${isMention ? '🔔 ' : ''}(${unreadCount}) NorMSG`;
     }
 
-    // In-app banner — tab open
+    // In-app banner — tab is visible
     if (s.inApp && tabVisible) {
-        const mentionPrefix = isMention ? '🔔 ' : '';
-        showInAppNotif(mentionPrefix + senderName, body, convName, isMention);
+        showInAppNotif(senderName, body, displayName, isMention);
         return;
     }
 
     // Push notification — tab hidden/closed
     if (s.push && !tabVisible && Notification.permission === 'granted') {
         const title = isMention
-            ? `🔔 ${senderName} mentioned you in ${convName}`
-            : `${senderName} in ${convName}`;
+            ? `🔔 ${senderName} mentioned you in ${displayName}`
+            : `${senderName} in ${displayName}`;
         const n = new Notification(title, {
             body:     body || '(image)',
             icon:     NOTIF_ICON,
             badge:    NOTIF_ICON,
-            tag:      isMention ? `mention-${chatId}` : (chatId || 'normsg'),
-            renotify: true,
-            vibrate:  isMention ? [200, 100, 200] : [100]
+            tag:      isMention ? `mention-${displayName}` : displayName,
+            renotify: true
         });
         n.onclick = () => { window.focus(); n.close(); };
     }
