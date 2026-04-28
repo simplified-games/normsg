@@ -1064,6 +1064,12 @@
             margin-left: auto; background: none; border: none;
             color: white; font-size: 22px; cursor: pointer; padding: 4px;
         }
+        .sv-delete {
+            background: none; border: none;
+            color: rgba(255,255,255,0.6); font-size: 18px; cursor: pointer; padding: 4px;
+            transition: color 0.15s;
+        }
+        .sv-delete:hover { color: var(--danger); }
         .sv-content {
             flex: 1; display: flex; align-items: center; justify-content: center;
             position: relative; overflow: hidden;
@@ -1399,6 +1405,7 @@
             <div class="sv-name" id="svName">—</div>
             <span class="sv-time" id="svTime">—</span>
         </div>
+        <button class="sv-delete hidden" id="svDeleteBtn" onclick="deleteCurrentStatus()">🗑</button>
         <button class="sv-close" onclick="closeStatusViewer()">✕</button>
     </div>
     <div class="sv-content" id="svContent">
@@ -3770,8 +3777,21 @@ async function loadStatuses() {
                 const active = snap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
                     .filter(s => {
-                        const del = s.deleteAt?.toDate?.();
-                        return del && del > now;
+                        // Handle both Timestamp and Date formats
+                        let del = s.deleteAt;
+                        if (del && typeof del.toDate === 'function') {
+                            del = del.toDate();
+                        } else if (del && del instanceof Date === false) {
+                            // If it's a Firestore Timestamp object without toDate, try to convert
+                            try {
+                                del = new Date(del.seconds * 1000 + (del.nanoseconds || 0) / 1000000);
+                            } catch(e) {
+                                return false;
+                            }
+                        }
+                        // If no deleteAt, treat as expired (shouldn't happen but safe fallback)
+                        if (!del) return false;
+                        return del > now;
                     });
                 if (active.length) allStatuses[uid] = active;
             } catch(e) {
@@ -3895,6 +3915,14 @@ function renderStatusViewerItem() {
         viewsEl.innerHTML = `👁 ${count} view${count !== 1 ? 's' : ''}`;
     } else { viewsEl.innerHTML = ''; }
 
+    // Delete button (mine only)
+    const deleteBtn = document.getElementById('svDeleteBtn');
+    if (statusCurrentUser.uid === me.uid) {
+        deleteBtn.classList.remove('hidden');
+    } else {
+        deleteBtn.classList.add('hidden');
+    }
+
     // Mark viewed
     markStatusViewed(s.id);
     if (statusCurrentUser.uid !== me.uid) {
@@ -3936,6 +3964,24 @@ function closeStatusViewer() {
     document.getElementById('svContent').style.background = '#000';
     statusCurrentUser = null;
     renderStatusBar(); // refresh seen state
+}
+
+async function deleteCurrentStatus() {
+    if (!statusCurrentUser || statusCurrentUser.uid !== me.uid) return;
+    const s = statusCurrentUser.statuses[statusCurrentIndex];
+    if (!s) return;
+
+    if (!confirm('Delete this status?')) return;
+
+    try {
+        await db.collection('statuses').doc(s.id).delete();
+        showToast('Status deleted');
+        closeStatusViewer();
+        await loadStatuses();
+    } catch(e) {
+        console.error('deleteCurrentStatus:', e);
+        showToast('Failed to delete status');
+    }
 }
 
 // Viewed tracking in localStorage
