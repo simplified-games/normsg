@@ -3751,23 +3751,35 @@ let stType = 'text';
 
 async function loadStatuses() {
     if (!me) return;
-    const now  = new Date();
-    const uids = [me.uid, ...friends.map(f => f.uid)];
-    allStatuses = {};
+    // Always render the bar first so "My Status" shows immediately
+    renderStatusBar();
 
-    // Fetch statuses for me + all friends in batches
-    for (let i = 0; i < uids.length; i += 10) {
-        const chunk = uids.slice(i, i+10);
-        if (!chunk.length) continue;
-        const snap = await db.collection('statuses')
-            .where('uid', 'in', chunk)
-            .where('deleteAt', '>', TS.fromDate(now))
-            .orderBy('deleteAt').get();
-        snap.docs.forEach(d => {
-            const data = { id: d.id, ...d.data() };
-            if (!allStatuses[data.uid]) allStatuses[data.uid] = [];
-            allStatuses[data.uid].push(data);
-        });
+    try {
+        const now  = new Date();
+        const uids = [me.uid, ...friends.map(f => f.uid)];
+        allStatuses = {};
+
+        // Simpler query per UID to avoid composite index requirement
+        await Promise.all(uids.map(async uid => {
+            try {
+                const snap = await db.collection('statuses')
+                    .where('uid', '==', uid)
+                    .orderBy('createdAt', 'desc')
+                    .limit(10)
+                    .get();
+                const active = snap.docs
+                    .map(d => ({ id: d.id, ...d.data() }))
+                    .filter(s => {
+                        const del = s.deleteAt?.toDate?.();
+                        return del && del > now;
+                    });
+                if (active.length) allStatuses[uid] = active;
+            } catch(e) {
+                // Silently skip if this uid has no statuses yet
+            }
+        }));
+    } catch(e) {
+        console.warn('loadStatuses error:', e.message);
     }
     renderStatusBar();
 }
