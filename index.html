@@ -1064,12 +1064,6 @@
             margin-left: auto; background: none; border: none;
             color: white; font-size: 22px; cursor: pointer; padding: 4px;
         }
-        .sv-delete {
-            background: none; border: none;
-            color: rgba(255,255,255,0.6); font-size: 18px; cursor: pointer; padding: 4px;
-            transition: color 0.15s;
-        }
-        .sv-delete:hover { color: var(--danger); }
         .sv-content {
             flex: 1; display: flex; align-items: center; justify-content: center;
             position: relative; overflow: hidden;
@@ -1399,14 +1393,13 @@
 <!-- ═══════════════ STATUS VIEWER ════════════════ -->
 <div id="statusViewer" class="hidden">
     <div class="sv-progress" id="svProgress"></div>
-    <div class="sv-header">
+    <div class="sv-header" id="svHeader">
         <div class="av" id="svAv" style="width:34px;height:34px;font-size:12px;flex-shrink:0;">?</div>
         <div>
             <div class="sv-name" id="svName">—</div>
             <span class="sv-time" id="svTime">—</span>
         </div>
-        <button class="sv-delete hidden" id="svDeleteBtn" onclick="deleteCurrentStatus()">🗑</button>
-        <button class="sv-close" onclick="closeStatusViewer()">✕</button>
+        <button class="sv-close" onclick="closeStatusViewer()" style="margin-left:auto;">✕</button>
     </div>
     <div class="sv-content" id="svContent">
         <div class="sv-tap-prev" onclick="svPrev()"></div>
@@ -1857,6 +1850,7 @@ function subFriends() {
             subscribePresence();
             subDmLastAts();
             renderFriends();
+            loadStatuses();
         });
 
     const u2 = db.collection('friendRequests')
@@ -1870,6 +1864,7 @@ function subFriends() {
             subscribePresence();
             subDmLastAts();
             renderFriends();
+            loadStatuses();
         });
 
     unsubF = () => { u1(); u2(); };
@@ -3766,36 +3761,27 @@ async function loadStatuses() {
         const uids = [me.uid, ...friends.map(f => f.uid)];
         allStatuses = {};
 
-        // Simpler query per UID to avoid composite index requirement
+        // Simple per-uid query — no orderBy so no composite index needed
         await Promise.all(uids.map(async uid => {
             try {
                 const snap = await db.collection('statuses')
                     .where('uid', '==', uid)
-                    .orderBy('createdAt', 'desc')
-                    .limit(10)
+                    .limit(20)
                     .get();
                 const active = snap.docs
                     .map(d => ({ id: d.id, ...d.data() }))
                     .filter(s => {
-                        // Handle both Timestamp and Date formats
-                        let del = s.deleteAt;
-                        if (del && typeof del.toDate === 'function') {
-                            del = del.toDate();
-                        } else if (del && del instanceof Date === false) {
-                            // If it's a Firestore Timestamp object without toDate, try to convert
-                            try {
-                                del = new Date(del.seconds * 1000 + (del.nanoseconds || 0) / 1000000);
-                            } catch(e) {
-                                return false;
-                            }
-                        }
-                        // If no deleteAt, treat as expired (shouldn't happen but safe fallback)
-                        if (!del) return false;
-                        return del > now;
+                        const del = s.deleteAt?.toDate?.();
+                        return del && del > now;
+                    })
+                    .sort((a, b) => {
+                        const ta = a.createdAt?.toDate?.()?.getTime() || 0;
+                        const tb = b.createdAt?.toDate?.()?.getTime() || 0;
+                        return ta - tb;
                     });
                 if (active.length) allStatuses[uid] = active;
             } catch(e) {
-                // Silently skip if this uid has no statuses yet
+                console.warn('Status fetch failed for', uid, e.message);
             }
         }));
     } catch(e) {
@@ -3805,22 +3791,21 @@ async function loadStatuses() {
 }
 
 function renderStatusBar() {
-    const row  = document.getElementById('statusBarRow');
+    const row = document.getElementById('statusBarRow');
     if (!row) return;
     row.innerHTML = '';
 
-    // My status bubble — always first
-    const myStatuses   = allStatuses[me.uid] || [];
-    const myViewed     = getViewedStatuses();
-    const myAllSeen    = myStatuses.length > 0 && myStatuses.every(s => myViewed.has(s.id));
-    const myBubble     = buildStatusBubble(me.uid, me.displayName || 'You', me.photoURL, myStatuses.length > 0, myAllSeen, true);
-    row.appendChild(myBubble);
+    const myStatuses = allStatuses[me.uid] || [];
+    const myViewed   = getViewedStatuses();
+    const myAllSeen  = myStatuses.length > 0 && myStatuses.every(s => myViewed.has(s.id));
+    row.appendChild(buildStatusBubble(me.uid, me.displayName || 'You', me.photoURL, myStatuses.length > 0, myAllSeen, true));
 
-    // Friends' statuses
+    // Show ALL friends — even those without statuses yet (greyed out)
     friends.forEach(f => {
-        const sts = allStatuses[f.uid] || [];
+        const sts    = allStatuses[f.uid] || [];
+        const allSeen = sts.length > 0 && sts.every(s => myViewed.has(s.id));
+        // Only show bubble if they have statuses; skip empty friends to keep bar clean
         if (!sts.length) return;
-        const allSeen = sts.every(s => myViewed.has(s.id));
         row.appendChild(buildStatusBubble(f.uid, f.displayName || f.username, f.photoURL, true, allSeen, false));
     });
 }
@@ -3878,6 +3863,30 @@ function renderStatusViewerItem() {
     document.getElementById('svName').textContent = name;
     document.getElementById('svTime').textContent = timeAgo(s.createdAt?.toDate?.() || new Date());
 
+    // Show/hide delete + add buttons based on ownership
+    const isOwner = statusCurrentUser.uid === me.uid;
+    let delBtn = document.getElementById('svDeleteBtn');
+    let addBtn = document.getElementById('svAddBtn');
+    if (!delBtn) {
+        delBtn = ce('button');
+        delBtn.id = 'svDeleteBtn';
+        delBtn.style.cssText = 'background:rgba(244,63,94,0.2);border:1px solid rgba(244,63,94,0.4);color:#f43f5e;border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:auto;';
+        delBtn.textContent = '🗑 Delete';
+        document.getElementById('svHeader').appendChild(delBtn);
+    }
+    if (!addBtn) {
+        addBtn = ce('button');
+        addBtn.id = 'svAddBtn';
+        addBtn.style.cssText = 'background:rgba(124,92,252,0.2);border:1px solid rgba(124,92,252,0.4);color:var(--a2);border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:4px;';
+        addBtn.textContent = '+ Add';
+        document.getElementById('svHeader').appendChild(addBtn);
+    }
+    delBtn.style.display = isOwner ? 'inline-block' : 'none';
+    addBtn.style.display = isOwner ? 'inline-block' : 'none';
+    // Reset onclick each render to capture current s.id
+    delBtn.onclick = () => deleteStatus(s.id);
+    addBtn.onclick = () => { closeStatusViewer(); openAddStatus(); };
+
     // Progress bars
     const prog = document.getElementById('svProgress');
     prog.innerHTML = '';
@@ -3915,14 +3924,6 @@ function renderStatusViewerItem() {
         viewsEl.innerHTML = `👁 ${count} view${count !== 1 ? 's' : ''}`;
     } else { viewsEl.innerHTML = ''; }
 
-    // Delete button (mine only)
-    const deleteBtn = document.getElementById('svDeleteBtn');
-    if (statusCurrentUser.uid === me.uid) {
-        deleteBtn.classList.remove('hidden');
-    } else {
-        deleteBtn.classList.add('hidden');
-    }
-
     // Mark viewed
     markStatusViewed(s.id);
     if (statusCurrentUser.uid !== me.uid) {
@@ -3958,30 +3959,39 @@ function svPrev() {
     }
 }
 
+async function deleteStatus(statusId) {
+    if (!confirm('Delete this status?')) return;
+    try {
+        await db.collection('statuses').doc(statusId).delete();
+        showToast('Status deleted.');
+        // Remove from local cache
+        if (allStatuses[me.uid]) {
+            allStatuses[me.uid] = allStatuses[me.uid].filter(s => s.id !== statusId);
+        }
+        // If there are more statuses, advance; otherwise close
+        if (statusCurrentUser?.statuses) {
+            statusCurrentUser.statuses = statusCurrentUser.statuses.filter(s => s.id !== statusId);
+            if (statusCurrentUser.statuses.length > 0) {
+                statusCurrentIndex = Math.min(statusCurrentIndex, statusCurrentUser.statuses.length - 1);
+                renderStatusViewerItem();
+            } else {
+                closeStatusViewer();
+            }
+        }
+    } catch(e) {
+        showToast('Could not delete: ' + e.message);
+    }
+}
+
 function closeStatusViewer() {
     if (statusProgressTimer) clearTimeout(statusProgressTimer);
     document.getElementById('statusViewer').classList.add('hidden');
     document.getElementById('svContent').style.background = '#000';
+    // Clean up dynamic buttons so they don't duplicate next open
+    document.getElementById('svDeleteBtn')?.remove();
+    document.getElementById('svAddBtn')?.remove();
     statusCurrentUser = null;
-    renderStatusBar(); // refresh seen state
-}
-
-async function deleteCurrentStatus() {
-    if (!statusCurrentUser || statusCurrentUser.uid !== me.uid) return;
-    const s = statusCurrentUser.statuses[statusCurrentIndex];
-    if (!s) return;
-
-    if (!confirm('Delete this status?')) return;
-
-    try {
-        await db.collection('statuses').doc(s.id).delete();
-        showToast('Status deleted');
-        closeStatusViewer();
-        await loadStatuses();
-    } catch(e) {
-        console.error('deleteCurrentStatus:', e);
-        showToast('Failed to delete status');
-    }
+    renderStatusBar();
 }
 
 // Viewed tracking in localStorage
