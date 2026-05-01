@@ -983,6 +983,72 @@
             border-radius: 4px;
         }
 
+        /* ── AI MESSAGE BUBBLE ───────────────────────────── */
+        .bubble.ai {
+            background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(124,92,252,0.12));
+            border: 1px solid rgba(45,212,191,0.3);
+            border-bottom-left-radius: 4px;
+            color: var(--text);
+            max-width: 100%;
+        }
+        .ai-header {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+            text-transform: uppercase; color: var(--teal);
+            margin-bottom: 8px;
+        }
+        .ai-avatar {
+            width: 18px; height: 18px; border-radius: 5px;
+            background: linear-gradient(135deg, var(--teal), var(--accent));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px;
+        }
+
+        /* Code block inside AI response */
+        .ai-code-wrap {
+            background: rgba(0,0,0,0.35);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px; margin: 8px 0; overflow: hidden;
+        }
+        .ai-code-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 6px 12px;
+            background: rgba(0,0,0,0.25);
+            font-size: 10px; font-weight: 700; color: var(--muted);
+            letter-spacing: 0.06em; text-transform: uppercase;
+        }
+        .ai-copy-btn {
+            background: var(--card); border: 1px solid var(--border2);
+            color: var(--text); border-radius: 6px;
+            padding: 2px 9px; font-size: 10px; font-weight: 700;
+            cursor: pointer; transition: all 0.13s; font-family: 'Figtree', sans-serif;
+        }
+        .ai-copy-btn:hover { background: rgba(255,255,255,0.1); }
+        .ai-copy-btn.copied { color: var(--teal); border-color: var(--teal); }
+        .ai-code-wrap pre {
+            margin: 0; padding: 12px 14px;
+            font-size: 12px; line-height: 1.6;
+            overflow-x: auto; color: #e2e8f0;
+            font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            white-space: pre;
+        }
+
+        /* Inline code */
+        .ai-inline-code {
+            background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 4px; padding: 1px 5px; font-size: 12px;
+            font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            color: var(--teal);
+        }
+
+        /* AI typing indicator */
+        .ai-thinking {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 12px; color: var(--teal); font-style: italic;
+            padding: 8px 0;
+        }
+        .ai-thinking .typing-dots span { background: var(--teal); }
+
         /* ── STATUS BAR ──────────────────────────────────── */
         #statusBar {
             padding: 10px 12px 6px;
@@ -2299,6 +2365,16 @@ function renderMsgs(msgs) {
             bubble = `<div class="bubble ${mine?'sent':'recv'}" style="opacity:0.45;font-style:italic;font-size:12px;">
                 🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
             </div>`;
+        } else if (msg.type === 'ai') {
+            bubble = `<div class="bubble ai">
+                <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant</div>
+                ${renderAIText(msg.text)}
+            </div>`;
+        } else if (msg.type === 'ai-thinking') {
+            bubble = `<div class="bubble ai">
+                <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant</div>
+                <div class="ai-thinking"><div class="typing-dots"><span></span><span></span><span></span></div> Thinking…</div>
+            </div>`;
         } else if (msg.type === 'image') {
             const exp = expLabel(ts, 72);
             bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
@@ -2325,31 +2401,33 @@ function renderMsgs(msgs) {
             return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
         })();
 
-        const actionBtn = msg.type === 'deleted' ? '' : (mine
+        const isAIMsg = msg.type === 'ai' || msg.type === 'ai-thinking';
+
+        const actionBtn = (msg.type === 'deleted' || isAIMsg) ? '' : (mine
             ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
             : isGroupAdmin
                 ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
                 : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
 
         const replySnip = msg.type === 'image' ? '[Image]' : (msg.text||'').slice(0,60);
-        const replyBtn  = `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
+        const replyBtn  = isAIMsg ? '' : `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
+        const emojiTrigger = isAIMsg ? '' : `<button class="emoji-trigger" onclick="openEmojiPicker(event,'${mid}','${pid}')">😊</button>`;
 
         // Reactions
         const reactions = msg.reactions || {};
         let reactHTML = '';
-        const grouped = {};
-        Object.entries(reactions).forEach(([uid, emoji]) => {
-            if (!grouped[emoji]) grouped[emoji] = [];
-            grouped[emoji].push(uid);
-        });
-        const chips = Object.entries(grouped).map(([emoji, uids]) => {
-            const iMine = uids.includes(me.uid);
-            return `<span class="reaction-chip${iMine?' mine':''}" onclick="toggleReaction('${mid}','${pid}','${emoji}')">${emoji} <span class="reaction-count">${uids.length}</span></span>`;
-        }).join('');
-        if (chips) reactHTML = `<div class="reactions-row">${chips}</div>`;
-
-        // Emoji trigger position: left of bubble for sent, right for received
-        const emojiTrigger = `<button class="emoji-trigger" onclick="openEmojiPicker(event,'${mid}','${pid}')">😊</button>`;
+        if (!isAIMsg) {
+            const grouped = {};
+            Object.entries(reactions).forEach(([uid, emoji]) => {
+                if (!grouped[emoji]) grouped[emoji] = [];
+                grouped[emoji].push(uid);
+            });
+            const chips = Object.entries(grouped).map(([emoji, uids]) => {
+                const iMine = uids.includes(me.uid);
+                return `<span class="reaction-chip${iMine?' mine':''}" onclick="toggleReaction('${mid}','${pid}','${emoji}')">${emoji} <span class="reaction-count">${uids.length}</span></span>`;
+            }).join('');
+            if (chips) reactHTML = `<div class="reactions-row">${chips}</div>`;
+        }
 
         row.innerHTML = `${avPart}
             <div class="bwrap">
@@ -2407,6 +2485,11 @@ async function sendMsg() {
     const rt = replyTo ? { ...replyTo } : null;
     clearReply();
     await pushMsg({ type:'text', text, ...(rt ? { replyTo: rt } : {}) });
+
+    // Trigger AI if @AI is mentioned in a group chat
+    if (chatType === 'group' && /@AI\b/i.test(text)) {
+        triggerAIResponse(text);
+    }
 }
 
 // ── IMAGE/VIDEO UPLOAD — CLOUDINARY (no compression) ──────
@@ -4106,6 +4189,147 @@ async function postStatus() {
     }
 }
 
+// ── GROQ AI INTEGRATION ────────────────────────────────────
+const GROQ_KEY   = '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';
+const GROQ_MODEL = 'llama-3.1-8b-instant';
+
+async function triggerAIResponse(userText) {
+    if (!chatId || chatType !== 'group') return;
+
+    const msgPath = `groups/${chatId}/messages`;
+
+    // Strip @AI from the prompt
+    const prompt = userText.replace(/@AI\b/gi, '').trim();
+    if (!prompt) return;
+
+    // Post a "thinking" placeholder so everyone sees AI is working
+    const thinkRef = await db.collection(msgPath).add({
+        type:          'ai-thinking',
+        text:          '',
+        senderUid:     'AI',
+        senderName:    'AI Assistant',
+        senderUsername:'AI',
+        senderPhoto:   null,
+        timestamp:     SV(),
+        deleteAt:      TS.fromDate(new Date(Date.now() + 7*24*3600000))
+    });
+
+    // Fetch last 10 messages for context
+    const ctxSnap = await db.collection(msgPath)
+        .orderBy('timestamp','desc').limit(10).get();
+    const history = ctxSnap.docs
+        .reverse()
+        .filter(d => d.id !== thinkRef.id && d.data().type === 'text')
+        .map(d => ({
+            role:    d.data().senderUid === 'AI' ? 'assistant' : 'user',
+            content: `${d.data().senderUsername || d.data().senderName || 'User'}: ${d.data().text}`
+        }));
+
+    try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type':  'application/json',
+                'Authorization': `Bearer ${GROQ_KEY}`
+            },
+            body: JSON.stringify({
+                model:       GROQ_MODEL,
+                max_tokens:  1024,
+                messages: [
+                    {
+                        role:    'system',
+                        content: `You are a helpful AI assistant inside NorMSG, a group messaging app. 
+You are friendly, concise, and smart. When asked to write code, always wrap it in markdown code blocks with the language specified (e.g. \`\`\`python). 
+Keep responses focused and not too long. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.`
+                    },
+                    ...history,
+                    { role: 'user', content: prompt }
+                ]
+            })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err?.error?.message || `HTTP ${res.status}`);
+        }
+
+        const data   = await res.json();
+        const answer = data.choices?.[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
+
+        // Replace thinking placeholder with real answer
+        await thinkRef.update({
+            type:      'ai',
+            text:      answer,
+            timestamp: SV()
+        });
+
+    } catch(e) {
+        await thinkRef.update({
+            type: 'ai',
+            text: `⚠ AI error: ${e.message}`,
+            timestamp: SV()
+        });
+        console.error('Groq error:', e);
+    }
+}
+
+// Render AI response text — parses markdown code blocks and inline code
+function renderAIText(raw) {
+    if (!raw) return '';
+    let html    = '';
+    let codeId  = 0;
+    // Split on ``` code fences
+    const parts = raw.split(/```(\w*)\n?([\s\S]*?)```/g);
+    // parts: [text, lang, code, text, lang, code, ...]
+    for (let i = 0; i < parts.length; i++) {
+        if (i % 3 === 0) {
+            // Plain text segment — escape and render inline code + line breaks
+            let seg = esc(parts[i]);
+            // Bold **text**
+            seg = seg.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Italic *text*
+            seg = seg.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            // Inline code `code`
+            seg = seg.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
+            // Line breaks
+            seg = seg.replace(/\n/g, '<br>');
+            html += seg;
+        } else if (i % 3 === 1) {
+            // Language label — captured by the next iteration
+        } else {
+            // Code block
+            const lang    = parts[i-1] || 'code';
+            const code    = parts[i];
+            const id      = `aicopy_${codeId++}`;
+            html += `<div class="ai-code-wrap">
+                <div class="ai-code-bar">
+                    <span>${esc(lang)}</span>
+                    <button class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
+                </div>
+                <pre>${esc(code)}</pre>
+            </div>`;
+        }
+    }
+    return html;
+}
+
+function copyAICode(btn, code) {
+    navigator.clipboard.writeText(code).then(() => {
+        btn.textContent = '✓ Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    }).catch(() => {
+        // Fallback for browsers without clipboard API
+        const ta = document.createElement('textarea');
+        ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        btn.textContent = '✓ Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    });
+}
+
 function showToast(msg) {
     const t = document.getElementById('toast');
     t.textContent = msg; t.classList.add('show');
@@ -4166,10 +4390,17 @@ async function showMentionBox() {
         }
     }
 
-    const filtered = mentionMembers.filter(u =>
-        (u.username||'').toLowerCase().startsWith(mentionSearch) ||
-        (u.displayName||'').toLowerCase().startsWith(mentionSearch)
-    ).slice(0, 6);
+    const filtered = [
+        // Always include @AI as first option in groups
+        { uid: 'AI', username: 'AI', displayName: '✦ AI Assistant', photoURL: null, isAI: true },
+        ...mentionMembers.filter(u =>
+            (u.username||'').toLowerCase().startsWith(mentionSearch) ||
+            (u.displayName||'').toLowerCase().startsWith(mentionSearch)
+        )
+    ].filter(u => u.isAI
+        ? 'ai'.startsWith(mentionSearch)
+        : true
+    ).slice(0, 7);
 
     const box = document.getElementById('mentionBox');
     if (!filtered.length) { box.style.display='none'; return; }
