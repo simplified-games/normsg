@@ -65,6 +65,12 @@
           allow update: if request.auth != null;
           allow delete: if request.auth.uid == resource.data.uid;
         }
+        match /platformAdmins/{uid} {
+          allow read:  if request.auth != null;
+          allow write: if request.auth != null &&
+            (request.auth.token.email == 'simplifiedlearning10@gmail.com' ||
+             exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)));
+        }
       }
     }
 
@@ -983,6 +989,37 @@
             border-radius: 4px;
         }
 
+        /* ── NORMSG SUPER ────────────────────────────────── */
+        .super-name {
+            background: linear-gradient(90deg, #f59e0b, #a78bfa, #2dd4bf, #f59e0b);
+            background-size: 200% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: superShimmer 3s linear infinite;
+            font-weight: 800;
+        }
+        @keyframes superShimmer {
+            0%   { background-position: 0% center; }
+            100% { background-position: 200% center; }
+        }
+        .super-badge {
+            display: inline-flex; align-items: center;
+            font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+            background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(167,139,250,0.2));
+            border: 1px solid rgba(245,158,11,0.4);
+            color: #f59e0b; border-radius: 20px;
+            padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+            white-space: nowrap;
+        }
+        .ai-super-badge {
+            font-size: 9px; color: #f59e0b; font-weight: 800;
+            letter-spacing: 0.05em; margin-left: 6px;
+            background: rgba(245,158,11,0.12);
+            border: 1px solid rgba(245,158,11,0.3);
+            border-radius: 20px; padding: 1px 6px;
+        }
+
         /* ── AI MESSAGE BUBBLE ───────────────────────────── */
         .bubble.ai {
             background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(124,92,252,0.12));
@@ -1364,6 +1401,49 @@
     </div>
 </div>
 
+<!-- ═══════════════ ADMIN PANEL MODAL ════════════════ -->
+<div id="adminModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:85vh;overflow-y:auto;">
+        <div class="modal-title">👑 Admin Panel</div>
+        <div class="modal-sub">Manage NorMSG Super subscriptions and platform admins.</div>
+
+        <!-- Gift Super -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Gift NorMSG Super</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="giftSuperIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') giftSuper()">
+            </div>
+            <select class="m-input" id="giftDuration" style="margin:0;flex:none;width:auto;padding:0 10px;">
+                <option value="7">1 week</option>
+                <option value="30">1 month</option>
+                <option value="365">1 year</option>
+            </select>
+            <button class="btn-add" onclick="giftSuper()">Gift ✦</button>
+        </div>
+        <div class="m-msg" id="giftMsg"></div>
+
+        <!-- Make Platform Admin -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Make Platform Admin</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="giftAdminIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') giftAdmin()">
+            </div>
+            <button class="btn-add" onclick="giftAdmin()">Make Admin</button>
+        </div>
+        <div class="m-msg" id="giftAdminMsg"></div>
+
+        <!-- Weekly leaderboard -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Weekly Top Chatter</div>
+        <div id="adminLeaderboard" style="font-size:12px;color:var(--muted);">Loading…</div>
+
+        <div class="modal-row" style="margin-top:16px;">
+            <button class="btn-sec" onclick="closeModal('adminModal')">Close</button>
+        </div>
+    </div>
+</div>
+
 <!-- ═══════════════ SETTINGS MODAL ════════════════ -->
 <div id="settingsModal" class="modal-overlay hidden">
     <div class="modal-card">
@@ -1597,6 +1677,7 @@
             <div style="display:flex;align-items:center;justify-content:space-between;">
                 <div class="app-logo">NorMSG</div>
                 <div style="display:flex;gap:3px;">
+                    <button class="ic-btn hidden" id="adminBtn" onclick="openAdminPanel()" title="Admin Panel" style="font-size:16px;">👑</button>
                     <button class="ic-btn" onclick="openPeopleModal()" title="Discover people" style="font-size:16px;">🌐</button>
                     <button class="ic-btn" onclick="openSettingsModal()" title="Settings" style="font-size:16px;">⚙️</button>
                     <button class="ic-btn" onclick="logout()" title="Sign out" style="font-size:17px;">⏻</button>
@@ -1858,6 +1939,7 @@ function finishLogin() {
     setProfile();
     subscribeAll();
     loadStatuses();
+    initAdminSystem();
 }
 
 // ── USERNAME SETUP ─────────────────────────────────────────
@@ -2066,9 +2148,12 @@ function renderFriends() {
         const pres     = friendPresence[f.uid];
         const isOnline = pres?.online === true;
         const unread   = isUnread(cid, dmLastAt[cid]) && chatId !== cid;
+        const fIsSuper = superCache[f.uid] === true;
         const displayLabel = nick
             ? `${esc(nick)} <span class="nick-badge">@${esc(f.username||'')}</span>`
-            : esc(f.displayName);
+            : fIsSuper
+                ? `<span class="super-name">${esc(f.displayName)}</span> <span class="super-badge">✦</span>`
+                : esc(f.displayName);
         const statusTxt = isOnline
             ? '<span style="font-size:10px;color:var(--green);font-weight:600;">● Online</span>'
             : (() => { const ago = timeAgo(pres?.lastSeen); return ago ? `<span style="font-size:10px;color:var(--muted);">${ago}</span>` : `<span style="font-size:10px;color:var(--muted);">@${esc(f.username||'')}</span>`; })();
@@ -2366,8 +2451,9 @@ function renderMsgs(msgs) {
                 🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
             </div>`;
         } else if (msg.type === 'ai') {
+            const superBadge = msg.usedSuper ? `<span class="ai-super-badge">✦ SUPER</span>` : '';
             bubble = `<div class="bubble ai">
-                <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant</div>
+                <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant${superBadge}</div>
                 ${renderAIText(msg.text)}
             </div>`;
         } else if (msg.type === 'ai-thinking') {
@@ -2391,6 +2477,10 @@ function renderMsgs(msgs) {
         }
 
         const showName = chatType==='group' && !mine && !same;
+        const senderIsSuper = msg.senderSuper === true;
+        const senderNameHTML = senderIsSuper
+            ? `<span class="msg-sender-name super-name">@${esc(msg.senderUsername||msg.senderName||'')} <span class="super-badge">✦ SUPER</span></span>`
+            : `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>`;
         const sp   = (msg.storagePath||'').replace(/'/g,"\\'");
         const pid  = (msg._path||'').replace(/'/g,"\\'");
         const mid  = msg.id;
@@ -2437,7 +2527,7 @@ function renderMsgs(msgs) {
                 </div>
                 ${reactHTML}
                 <div class="msg-meta">
-                    ${showName ? `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>` : ''}
+                    ${showName ? senderNameHTML : ''}
                     ${!same ? `<span class="msg-time">${fmtTime(ts)}</span>` : ''}
                     ${replyBtn}
                     ${actionBtn}
@@ -2567,14 +2657,14 @@ async function pushMsg(extra) {
     const delHrs   = extra.type==='image' ? 72 : 24*7;
     const deleteAt = new Date(now.getTime() + delHrs * 3600000);
 
-    // Summary stored on the parent doc so notification watchers can read it without
-    // needing to open the messages subcollection
+    const isSuper = await hasSuper(me.uid);
+
     const summary = {
-        lastAt:          SV(),
-        lastSenderUid:   me.uid,
+        lastAt:             SV(),
+        lastSenderUid:      me.uid,
         lastSenderUsername: myUsername || me.displayName || '',
-        lastText:        extra.type === 'image' ? '' : (extra.text || ''),
-        lastType:        extra.type || 'text'
+        lastText:           extra.type === 'image' ? '' : (extra.text || ''),
+        lastType:           extra.type || 'text'
     };
 
     await db.doc(parentPath).set(summary, { merge: true });
@@ -2583,10 +2673,14 @@ async function pushMsg(extra) {
         senderName:     me.displayName || me.email,
         senderUsername: myUsername,
         senderPhoto:    me.photoURL || null,
+        senderSuper:    isSuper,
         timestamp:      SV(),
         deleteAt:       TS.fromDate(deleteAt),
         ...extra
     });
+
+    // Increment weekly message count for leaderboard
+    incrementWeeklyCount();
 }
 
 // ── DELETE ─────────────────────────────────────────────────
@@ -4190,8 +4284,10 @@ async function postStatus() {
 }
 
 // ── GROQ AI INTEGRATION ────────────────────────────────────
-const GROQ_KEY   = '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';
-const GROQ_MODEL = 'llama-3.1-8b-instant';
+// Key is stored securely in the Cloudflare Worker — never exposed here
+const GROQ_WORKER    = 'https://normai.simplifiedtest10.workers.dev/';
+const GROQ_MODEL     = 'llama-3.1-8b-instant';        // standard
+const GROQ_MODEL_SUPER = 'llama-3.3-70b-versatile';  // NorMSG Super
 
 async function triggerAIResponse(userText) {
     if (!chatId || chatType !== 'group') return;
@@ -4201,6 +4297,10 @@ async function triggerAIResponse(userText) {
     // Strip @AI from the prompt
     const prompt = userText.replace(/@AI\b/gi, '').trim();
     if (!prompt) return;
+
+    // Check if the sender has NorMSG Super (smarter model)
+    const isSuper = await hasSuper(me.uid);
+    const model   = isSuper ? GROQ_MODEL_SUPER : GROQ_MODEL;
 
     // Post a "thinking" placeholder so everyone sees AI is working
     const thinkRef = await db.collection(msgPath).add({
@@ -4226,21 +4326,18 @@ async function triggerAIResponse(userText) {
         }));
 
     try {
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const res = await fetch(GROQ_WORKER, {
             method: 'POST',
-            headers: {
-                'Content-Type':  'application/json',
-                'Authorization': `Bearer ${GROQ_KEY}`
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model:       GROQ_MODEL,
-                max_tokens:  1024,
+                model:       model,
+                max_tokens:  isSuper ? 2048 : 1024,
                 messages: [
                     {
                         role:    'system',
                         content: `You are a helpful AI assistant inside NorMSG, a group messaging app. 
 You are friendly, concise, and smart. When asked to write code, always wrap it in markdown code blocks with the language specified (e.g. \`\`\`python). 
-Keep responses focused and not too long. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.`
+Keep responses focused and not too long. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' You are running in NorMSG Super mode — give more detailed, thorough answers.' : ''}`
                     },
                     ...history,
                     { role: 'user', content: prompt }
@@ -4256,19 +4353,10 @@ Keep responses focused and not too long. The user who mentioned you is ${me.disp
         const data   = await res.json();
         const answer = data.choices?.[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
 
-        // Replace thinking placeholder with real answer
-        await thinkRef.update({
-            type:      'ai',
-            text:      answer,
-            timestamp: SV()
-        });
+        await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper, timestamp: SV() });
 
     } catch(e) {
-        await thinkRef.update({
-            type: 'ai',
-            text: `⚠ AI error: ${e.message}`,
-            timestamp: SV()
-        });
+        await thinkRef.update({ type:'ai', text:`⚠ AI error: ${e.message}`, timestamp: SV() });
         console.error('Groq error:', e);
     }
 }
@@ -4328,6 +4416,163 @@ function copyAICode(btn, code) {
         btn.textContent = '✓ Copied!';
         setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
     });
+}
+
+// ── NORMSG SUPER & ADMIN SYSTEM ────────────────────────────
+// Platform owner email — hardcoded, can never be changed by others
+const OWNER_EMAIL = 'simplifiedlearning10@gmail.com';
+let isPlatformAdmin = false;
+let superCache = {}; // uid -> bool, cached for rendering
+
+async function initAdminSystem() {
+    // Check if current user is platform admin (owner or granted admin)
+    const isOwner = me.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
+    if (isOwner) {
+        isPlatformAdmin = true;
+    } else {
+        const adminDoc = await db.collection('platformAdmins').doc(me.uid).get();
+        isPlatformAdmin = adminDoc.exists;
+    }
+    if (isPlatformAdmin) {
+        document.getElementById('adminBtn').classList.remove('hidden');
+    }
+
+    // Cache Super status for all friends for rendering
+    await refreshSuperCache();
+
+    // Check weekly leaderboard and auto-grant Super to top chatter
+    checkWeeklyLeaderboard();
+}
+
+async function hasSuper(uid) {
+    try {
+        const snap = await db.collection('users').doc(uid).get();
+        const until = snap.data()?.normsgSuper?.until?.toDate?.();
+        return until && until > new Date();
+    } catch { return false; }
+}
+
+async function refreshSuperCache() {
+    const uids = [me.uid, ...friends.map(f => f.uid)];
+    await Promise.all(uids.map(async uid => {
+        superCache[uid] = await hasSuper(uid);
+    }));
+    // Show Super shimmer on my own handle if I have Super
+    if (superCache[me.uid]) {
+        document.getElementById('myHandle').innerHTML =
+            `<span class="super-name">@${myUsername} ✎</span> <span class="super-badge">✦ SUPER</span>`;
+    }
+}
+
+// ── WEEKLY MESSAGE COUNT ────────────────────────────────────
+function incrementWeeklyCount() {
+    if (!me) return;
+    const weekKey = getWeekKey();
+    db.collection('users').doc(me.uid).set({
+        weeklyCount:  firebase.firestore.FieldValue.increment(1),
+        weeklyKey:    weekKey
+    }, { merge: true }).catch(()=>{});
+}
+
+function getWeekKey() {
+    const d = new Date();
+    const jan1 = new Date(d.getFullYear(), 0, 1);
+    const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+    return `${d.getFullYear()}-W${week}`;
+}
+
+async function checkWeeklyLeaderboard() {
+    try {
+        const weekKey = getWeekKey();
+        const snap = await db.collection('users')
+            .where('weeklyKey','==', weekKey)
+            .orderBy('weeklyCount','desc')
+            .limit(1).get();
+        if (snap.empty) return;
+        const top = snap.docs[0];
+        if (top.id === me.uid) {
+            // I'm the top chatter — auto-grant 1 month Super if not already
+            const current = await hasSuper(me.uid);
+            if (!current) {
+                await grantSuperToUid(me.uid, 30);
+                showToast('🏆 You\'re the top chatter this week! Enjoy 1 month of NorMSG Super! ✦');
+                await refreshSuperCache();
+            }
+        }
+    } catch(e) { /* needs weeklyCount index — will work after first message */ }
+}
+
+async function grantSuperToUid(uid, days) {
+    const until = new Date(Date.now() + days * 86400000);
+    await db.collection('users').doc(uid).set({
+        normsgSuper: { until: TS.fromDate(until), days, grantedAt: SV() }
+    }, { merge: true });
+}
+
+// ── ADMIN PANEL ─────────────────────────────────────────────
+async function openAdminPanel() {
+    if (!isPlatformAdmin) return;
+    mmsg('giftMsg','','');
+    mmsg('giftAdminMsg','','');
+    document.getElementById('giftSuperIn').value  = '';
+    document.getElementById('giftAdminIn').value  = '';
+    document.getElementById('adminModal').classList.remove('hidden');
+    loadLeaderboard();
+}
+
+async function loadLeaderboard() {
+    const el = document.getElementById('adminLeaderboard');
+    try {
+        const weekKey = getWeekKey();
+        const snap = await db.collection('users')
+            .where('weeklyKey','==',weekKey)
+            .orderBy('weeklyCount','desc')
+            .limit(5).get();
+        if (snap.empty) { el.textContent = 'No messages this week yet.'; return; }
+        el.innerHTML = snap.docs.map((d,i) => {
+            const data = d.data();
+            const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+            return `<div style="padding:5px 0;display:flex;gap:8px;align-items:center;">
+                <span style="font-size:16px;">${medals[i]}</span>
+                <span style="font-size:12px;font-weight:600;">${esc(data.displayName||data.username||'?')}</span>
+                <span style="font-size:11px;color:var(--muted);">@${esc(data.username||'')}</span>
+                <span style="font-size:11px;color:var(--a2);margin-left:auto;">${data.weeklyCount||0} msgs</span>
+            </div>`;
+        }).join('');
+    } catch(e) {
+        el.textContent = 'Could not load (may need Firestore index on weeklyCount).';
+    }
+}
+
+async function giftSuper() {
+    const uname = document.getElementById('giftSuperIn').value.trim().toLowerCase().replace('@','');
+    const days  = parseInt(document.getElementById('giftDuration').value);
+    if (!uname) return;
+    mmsg('giftMsg','Looking up user…','inf');
+    try {
+        const udoc = await db.collection('usernames').doc(uname).get();
+        if (!udoc.exists) return mmsg('giftMsg',`@${uname} not found.`,'err');
+        const uid  = udoc.data().uid;
+        await grantSuperToUid(uid, days);
+        mmsg('giftMsg', `✓ NorMSG Super gifted to @${uname} for ${days} day${days!==1?'s':''}! ✦`, 'ok');
+        document.getElementById('giftSuperIn').value = '';
+        superCache[uid] = true;
+        renderFriends();
+    } catch(e) { mmsg('giftMsg','Error: '+e.message,'err'); }
+}
+
+async function giftAdmin() {
+    const uname = document.getElementById('giftAdminIn').value.trim().toLowerCase().replace('@','');
+    if (!uname) return;
+    mmsg('giftAdminMsg','Looking up user…','inf');
+    try {
+        const udoc = await db.collection('usernames').doc(uname).get();
+        if (!udoc.exists) return mmsg('giftAdminMsg',`@${uname} not found.`,'err');
+        const uid  = udoc.data().uid;
+        await db.collection('platformAdmins').doc(uid).set({ grantedBy: me.uid, grantedAt: SV() });
+        mmsg('giftAdminMsg',`✓ @${uname} is now a platform admin!`,'ok');
+        document.getElementById('giftAdminIn').value = '';
+    } catch(e) { mmsg('giftAdminMsg','Error: '+e.message,'err'); }
 }
 
 function showToast(msg) {
