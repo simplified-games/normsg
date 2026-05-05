@@ -329,7 +329,51 @@
             overflow: hidden;
         }
 
-        .sb-header { padding: 18px 16px 12px; border-bottom: 1px solid var(--border); }
+        .sb-header {
+            padding: 16px 14px 12px;
+            border-bottom: 1px solid var(--border);
+            background:
+                radial-gradient(circle at 8% -20%, rgba(124,92,252,0.18), transparent 58%),
+                radial-gradient(circle at 95% -30%, rgba(14,165,233,0.16), transparent 50%);
+        }
+
+        .sb-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            gap: 10px;
+        }
+
+        .sb-brand {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+
+        .sb-brand-badge {
+            width: 28px;
+            height: 28px;
+            border-radius: 9px;
+            background: linear-gradient(135deg, var(--accent), var(--teal));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+            box-shadow: 0 7px 18px rgba(0,0,0,0.32);
+        }
+
+        .sb-actions {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            padding: 2px;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border);
+        }
 
         .app-logo {
             font-family: 'Syne', sans-serif;
@@ -356,11 +400,52 @@
 
         .ic-btn {
             background: none; border: none; color: var(--muted);
-            cursor: pointer; padding: 5px; border-radius: 7px;
+            cursor: pointer; padding: 6px; border-radius: 8px;
             font-size: 15px; transition: all 0.15s;
             display: flex; align-items: center; justify-content: center;
         }
         .ic-btn:hover { color: var(--text); background: var(--card); }
+
+        .admin-cta {
+            font-size: 14px;
+            border: 1px solid rgba(245,158,11,0.3);
+            background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(167,139,250,0.15));
+            color: #f59e0b;
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.03);
+        }
+        .admin-cta:hover {
+            border-color: rgba(245,158,11,0.5);
+            background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(167,139,250,0.2));
+            color: #fcd34d;
+        }
+        .admin-cta.non-admin {
+            color: var(--muted);
+            border-color: var(--border2);
+            background: rgba(255,255,255,0.01);
+            box-shadow: none;
+        }
+        .admin-cta.non-admin:hover {
+            color: var(--text);
+            border-color: var(--border);
+            background: rgba(255,255,255,0.05);
+        }
+
+        .profile-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 11px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01));
+            border: 1px solid var(--border);
+            border-radius: 13px;
+            cursor: pointer;
+            transition: border-color 0.2s ease, transform 0.16s ease, background 0.2s ease;
+        }
+        .profile-card:hover {
+            border-color: var(--border2);
+            background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+            transform: translateY(-1px);
+        }
 
         /* Tabs */
         .tabs { display: flex; padding: 9px 12px 0; gap: 3px; }
@@ -1675,21 +1760,20 @@
     <div id="sidebar">
         <div class="sb-header">
             <!-- Top row: logo + icon actions -->
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--teal));display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💬</div>
+            <div class="sb-top">
+                <div class="sb-brand">
+                    <div class="sb-brand-badge">💬</div>
                     <span class="app-logo" style="font-size:17px;letter-spacing:-0.5px;">NorMSG</span>
                 </div>
-                <div style="display:flex;gap:2px;align-items:center;">
-                    <button class="ic-btn hidden" id="adminBtn" onclick="openAdminPanel()" title="Admin Panel"
-                        style="font-size:14px;background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(167,139,250,0.15));border:1px solid rgba(245,158,11,0.3);border-radius:8px;color:#f59e0b;padding:5px 8px;">👑</button>
+                <div class="sb-actions">
+                    <button class="ic-btn admin-cta non-admin" id="adminBtn" onclick="handleAdminBtnClick()" title="Admin panel access">👑</button>
                     <button class="ic-btn" onclick="openPeopleModal()" title="Discover people" style="font-size:15px;">🌐</button>
                     <button class="ic-btn" onclick="openSettingsModal()" title="Settings" style="font-size:15px;">⚙️</button>
                     <button class="ic-btn" onclick="logout()" title="Sign out" style="font-size:15px;color:var(--muted);">⏻</button>
                 </div>
             </div>
             <!-- Profile row -->
-            <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:13px;cursor:pointer;" onclick="openProfileModal()" title="Edit profile">
+            <div class="profile-card" onclick="openProfileModal()" title="Edit profile">
                 <div class="av-wrap" style="width:34px;height:34px;flex-shrink:0;">
                     <div class="av" id="myAv" style="width:34px;height:34px;font-size:12px;">?</div>
                     <div class="av-edit-badge">✎</div>
@@ -4443,8 +4527,10 @@ async function initAdminSystem() {
         const adminDoc = await db.collection('platformAdmins').doc(me.uid).get();
         isPlatformAdmin = adminDoc.exists;
     }
-    if (isPlatformAdmin) {
-        document.getElementById('adminBtn').classList.remove('hidden');
+    const adminBtn = document.getElementById('adminBtn');
+    if (adminBtn) {
+        adminBtn.classList.toggle('non-admin', !isPlatformAdmin);
+        adminBtn.title = isPlatformAdmin ? 'Admin Panel' : 'Admin tools info';
     }
 
     // Cache Super status for all friends for rendering
@@ -4452,6 +4538,14 @@ async function initAdminSystem() {
 
     // Check weekly leaderboard and auto-grant Super to top chatter
     checkWeeklyLeaderboard();
+}
+
+function handleAdminBtnClick() {
+    if (isPlatformAdmin) {
+        openAdminPanel();
+        return;
+    }
+    showToast('Admin panel is for platform admins only. Ask an admin for access.');
 }
 
 async function hasSuper(uid) {
