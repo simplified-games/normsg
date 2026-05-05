@@ -4711,6 +4711,12 @@ async function initAdminSystem() {
         const adminDoc = await db.collection('platformAdmins').doc(me.uid).get();
         isPlatformAdmin = adminDoc.exists;
     }
+    // Platform admins always get Pro
+    if (isPlatformAdmin) {
+        userPlan = 'pro';
+        updateNormAIBadge();
+    }
+
     const adminBtn = document.getElementById('adminBtn');
     if (adminBtn) {
         adminBtn.classList.toggle('non-admin', !isPlatformAdmin);
