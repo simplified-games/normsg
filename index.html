@@ -30,7 +30,9 @@
       match /databases/{database}/documents {
         match /users/{uid} {
           allow read:  if request.auth != null;
-          allow write: if request.auth.uid == uid;
+          allow write: if request.auth.uid == uid ||
+            request.auth.token.email == 'simplifiedlearning10@gmail.com' ||
+            exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
         }
         match /usernames/{uname} {
           allow read:  if request.auth != null;
@@ -4601,23 +4603,20 @@ async function triggerAIResponse(userText) {
         }));
 
     try {
-        const res = await fetch(GROQ_WORKER, {
-            method: 'POST',
+        // Build context string from history for the worker
+        const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content.split(':')[0]}: ${m.content.split(':').slice(1).join(':').trim()}`).join('\n');
+        const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown code blocks with the language specified. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
+        const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
+
+        const url = isSuper ? NORMAI_PRO_API : NORMAI_FREE_API;
+        const res = await fetch(url, {
+            method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model:       model,
-                max_tokens:  isSuper ? 2048 : 1024,
-                messages: [
-                    {
-                        role:    'system',
-                        content: `You are a helpful AI assistant inside NorMSG, a group messaging app. 
-You are friendly, concise, and smart. When asked to write code, always wrap it in markdown code blocks with the language specified (e.g. \`\`\`python). 
-Keep responses focused and not too long. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' You are running in NorMSG Super mode — give more detailed, thorough answers.' : ''}`
-                    },
-                    ...history,
-                    { role: 'user', content: prompt }
-                ]
-            })
+            body: JSON.stringify(
+                isSuper
+                    ? { prompt: fullPrompt, context: prompt, mode: 'pro' }
+                    : { prompt: fullPrompt + `\n\nUser: ${prompt}` }
+            )
         });
 
         if (!res.ok) {
@@ -4626,7 +4625,7 @@ Keep responses focused and not too long. The user who mentioned you is ${me.disp
         }
 
         const data   = await res.json();
-        const answer = data.choices?.[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
+        const answer = data.reply ?? data.result ?? data.text ?? data.choices?.[0]?.message?.content ?? 'Sorry, I couldn\'t generate a response.';
 
         await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper === true, timestamp: SV() });
 
