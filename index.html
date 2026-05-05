@@ -1784,6 +1784,7 @@
                 <div style="min-width:0;flex:1;">
                     <div class="me-name" id="myName" style="font-size:13px;">—</div>
                     <div class="me-handle" id="myHandle" style="font-size:11px;color:var(--muted);">@—</div>
+                    <span id="normAIBadge" style="font-size:9px;font-weight:700;letter-spacing:0.06em;padding:2px 6px;border-radius:20px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2);color:var(--muted);cursor:default;transition:color 0.2s;" title="NorMAI plan">Free</span>
                 </div>
                 <div id="mySuperBadge" style="display:none;flex-shrink:0;">
                     <span class="super-badge">✦ SUPER</span>
@@ -1919,6 +1920,7 @@
                         <div class="esearch-results" id="esearchResults"></div>
                     </div>
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
+                    <button class="img-btn" id="normAIBtn" onclick="openSmartReply()" title="NorMAI — smart reply suggestions" style="font-size:15px;color:var(--a2);">✦</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
                         oninput="autoGrow(this);onMsgInputChange();updateFmtToolbar(this)"
                         onfocus="document.getElementById('fmtToolbar').classList.add('visible')"
@@ -1961,6 +1963,115 @@ const SV      = firebase.firestore.FieldValue.serverTimestamp;
 const TS      = firebase.firestore.Timestamp;
 
 // ── STATE ──────────────────────────────────────────────────
+// ── NORMAI API ─────────────────────────────────────────────
+const NORMAI_PRO_API  = 'https://normai-pro.simplifiedtest10.workers.dev/';
+const NORMAI_FREE_API = 'https://normai.simplifiedtest10.workers.dev/';
+
+let userPlan = 'free';   // 'free' | 'pro'
+
+function getNormAIUrl() {
+    return userPlan === 'pro' ? NORMAI_PRO_API : NORMAI_FREE_API;
+}
+
+async function loadUserPlan() {
+    if (!me) return;
+    try {
+        const snap = await db.collection('users').doc(me.uid).get();
+        userPlan   = snap.data()?.plan === 'pro' ? 'pro' : 'free';
+    } catch { userPlan = 'free'; }
+    updateNormAIBadge();
+}
+
+function updateNormAIBadge() {
+    const badge = document.getElementById('normAIBadge');
+    if (!badge) return;
+    if (userPlan === 'pro') {
+        badge.textContent = '✦ Pro';
+        badge.style.color = 'var(--a2)';
+        badge.title       = 'NorMAI Pro — enhanced AI with smarter replies and summarisation';
+    } else {
+        badge.textContent = 'Free';
+        badge.style.color = 'var(--muted)';
+        badge.title       = 'NorMAI Free — upgrade to Pro for smarter AI';
+    }
+}
+
+async function callNormAI(prompt, context = '') {
+    const url   = getNormAIUrl();
+    const isPro = userPlan === 'pro';
+    const body  = isPro ? { prompt, context, mode: 'pro' } : { prompt };
+    const res   = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error(`NorMAI ${res.status}`);
+    const data = await res.json();
+    return data.reply ?? data.result ?? data.text ?? '';
+}
+
+async function openSmartReply() {
+    if (!chatId) return;
+    const btn = document.getElementById('normAIBtn');
+    btn.disabled    = true;
+    btn.textContent = '…';
+    try {
+        const msgs    = [...document.querySelectorAll('#messagesArea .bubble')]
+            .slice(-8).map(b => b.textContent.trim()).join('\n');
+        const isPro   = userPlan === 'pro';
+        const context = isPro ? msgs : '';
+        const prompt  = isPro
+            ? 'Suggest 3 short, natural reply options for the last message in this chat. Output only the replies as a numbered list, no explanation.'
+            : 'Suggest a short reply for this chat.';
+        const reply = await callNormAI(prompt, context);
+        showNormAIPanel(reply, isPro);
+    } catch (e) {
+        showToast('NorMAI error: ' + e.message);
+    } finally {
+        btn.disabled    = false;
+        btn.textContent = '✦';
+    }
+}
+
+function showNormAIPanel(text, isPro) {
+    document.getElementById('normAIPanel')?.remove();
+    const panel = document.createElement('div');
+    panel.id = 'normAIPanel';
+    panel.style.cssText = `position:absolute;bottom:calc(100% + 8px);left:0;right:0;
+        background:var(--panel);border:1px solid var(--border2);border-radius:16px;
+        padding:12px 14px;z-index:50;box-shadow:0 8px 32px rgba(0,0,0,0.55);animation:fadeIn 0.18s ease;`;
+    const lines = text.split('\n').map(l => l.replace(/^\d+[\.\)]\s*/,'').trim()).filter(Boolean);
+    panel.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+            <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:800;letter-spacing:0.05em;
+                background:linear-gradient(135deg,var(--a2),var(--teal));
+                -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+                ✦ NorMAI${isPro ? ' Pro' : ''}
+            </span>
+            <button onclick="document.getElementById('normAIPanel').remove()"
+                style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;">✕</button>
+        </div>
+        ${lines.map(l=>`<div onclick="useNormAISuggestion(this)"
+            style="padding:7px 10px;border-radius:10px;font-size:13px;cursor:pointer;
+                border:1px solid var(--border);margin-bottom:5px;transition:background 0.12s;line-height:1.45;"
+            onmouseenter="this.style.background='var(--card)'"
+            onmouseleave="this.style.background=''">
+            ${esc(l)}</div>`).join('')}
+        ${!isPro?`<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">
+            Upgrade to <strong style="color:var(--a2);">Pro</strong> for context-aware multi-suggestions
+        </div>`:''}`;
+    document.querySelector('.in-row').style.position = 'relative';
+    document.querySelector('.in-row').appendChild(panel);
+}
+
+function useNormAISuggestion(el) {
+    const inp = document.getElementById('msgInput');
+    inp.value = el.textContent.trim();
+    inp.focus(); autoGrow(inp);
+    document.getElementById('normAIPanel')?.remove();
+}
+
+// ── STATE ──────────────────────────────────────────────────
 let me           = null;   // auth user
 let myUsername   = null;
 let friends      = [];     // accepted friends
@@ -1997,8 +2108,7 @@ function login()  { auth.signInWithPopup(gProv).catch(e => showToast('Sign-in fa
 function logout() {
     setPresence(false);
     clearInterval(presenceTimer);
-    [msgUnsub, unsubF, unsubR, unsubG].forEach(u => u && u());
-    Object.values(presenceUnsubs).forEach(u => u && u());
+    [msgUnsub, unsubF, unsubR, unsubG].forEach(u => u && u());    Object.values(presenceUnsubs).forEach(u => u && u());
     Object.values(dmUnsubLastAt).forEach(u => u && u());
     presenceUnsubs = {};
     dmUnsubLastAt  = {};
@@ -2019,6 +2129,7 @@ auth.onAuthStateChanged(async user => {
 
         const snap  = await db.collection('users').doc(user.uid).get();
         myUsername  = snap.data()?.username || null;
+        await loadUserPlan();
 
         if (!myUsername) {
             document.getElementById('landingScreen').classList.add('hidden');
