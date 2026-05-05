@@ -4363,7 +4363,7 @@ Keep responses focused and not too long. The user who mentioned you is ${me.disp
         const data   = await res.json();
         const answer = data.choices?.[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
 
-        await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper, timestamp: SV() });
+        await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper === true, timestamp: SV() });
 
     } catch(e) {
         await thinkRef.update({ type:'ai', text:`⚠ AI error: ${e.message}`, timestamp: SV() });
