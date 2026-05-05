@@ -1674,23 +1674,32 @@
     <!-- ── SIDEBAR ── -->
     <div id="sidebar">
         <div class="sb-header">
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-                <div class="app-logo">NorMSG</div>
-                <div style="display:flex;gap:3px;">
-                    <button class="ic-btn hidden" id="adminBtn" onclick="openAdminPanel()" title="Admin Panel" style="font-size:16px;">👑</button>
-                    <button class="ic-btn" onclick="openPeopleModal()" title="Discover people" style="font-size:16px;">🌐</button>
-                    <button class="ic-btn" onclick="openSettingsModal()" title="Settings" style="font-size:16px;">⚙️</button>
-                    <button class="ic-btn" onclick="logout()" title="Sign out" style="font-size:17px;">⏻</button>
+            <!-- Top row: logo + icon actions -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--teal));display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">💬</div>
+                    <span class="app-logo" style="font-size:17px;letter-spacing:-0.5px;">NorMSG</span>
+                </div>
+                <div style="display:flex;gap:2px;align-items:center;">
+                    <button class="ic-btn hidden" id="adminBtn" onclick="openAdminPanel()" title="Admin Panel"
+                        style="font-size:14px;background:linear-gradient(135deg,rgba(245,158,11,0.15),rgba(167,139,250,0.15));border:1px solid rgba(245,158,11,0.3);border-radius:8px;color:#f59e0b;padding:5px 8px;">👑</button>
+                    <button class="ic-btn" onclick="openPeopleModal()" title="Discover people" style="font-size:15px;">🌐</button>
+                    <button class="ic-btn" onclick="openSettingsModal()" title="Settings" style="font-size:15px;">⚙️</button>
+                    <button class="ic-btn" onclick="logout()" title="Sign out" style="font-size:15px;color:var(--muted);">⏻</button>
                 </div>
             </div>
-            <div class="me-row">
-                <div class="av-wrap" onclick="openProfileModal()" title="Edit profile" style="width:30px;height:30px;">
-                    <div class="av" id="myAv" style="width:30px;height:30px;font-size:11px;">?</div>
+            <!-- Profile row -->
+            <div style="display:flex;align-items:center;gap:10px;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:13px;cursor:pointer;" onclick="openProfileModal()" title="Edit profile">
+                <div class="av-wrap" style="width:34px;height:34px;flex-shrink:0;">
+                    <div class="av" id="myAv" style="width:34px;height:34px;font-size:12px;">?</div>
                     <div class="av-edit-badge">✎</div>
                 </div>
-                <div class="me-info">
-                    <div class="me-name" id="myName">—</div>
-                    <div class="me-handle" id="myHandle" style="cursor:pointer;" onclick="openProfileModal()">@— ✎</div>
+                <div style="min-width:0;flex:1;">
+                    <div class="me-name" id="myName" style="font-size:13px;">—</div>
+                    <div class="me-handle" id="myHandle" style="font-size:11px;color:var(--muted);">@—</div>
+                </div>
+                <div id="mySuperBadge" style="display:none;flex-shrink:0;">
+                    <span class="super-badge">✦ SUPER</span>
                 </div>
             </div>
         </div>
@@ -2657,7 +2666,8 @@ async function pushMsg(extra) {
     const delHrs   = extra.type==='image' ? 72 : 24*7;
     const deleteAt = new Date(now.getTime() + delHrs * 3600000);
 
-    const isSuper = await hasSuper(me.uid);
+    // Use cached Super status — never await a Firestore read on the critical send path
+    const isSuper = superCache[me.uid] === true;
 
     const summary = {
         lastAt:             SV(),
@@ -2679,7 +2689,7 @@ async function pushMsg(extra) {
         ...extra
     });
 
-    // Increment weekly message count for leaderboard
+    // Fire-and-forget — never block message send on this
     incrementWeeklyCount();
 }
 
@@ -4457,11 +4467,17 @@ async function refreshSuperCache() {
     await Promise.all(uids.map(async uid => {
         superCache[uid] = await hasSuper(uid);
     }));
-    // Show Super shimmer on my own handle if I have Super
+    // Show Super badge and shimmer on my own profile row
+    const myBadge = document.getElementById('mySuperBadge');
+    const myHandle = document.getElementById('myHandle');
     if (superCache[me.uid]) {
-        document.getElementById('myHandle').innerHTML =
-            `<span class="super-name">@${myUsername} ✎</span> <span class="super-badge">✦ SUPER</span>`;
+        if (myBadge) myBadge.style.display = 'block';
+        if (myHandle) myHandle.innerHTML = `<span class="super-name">@${myUsername}</span>`;
+    } else {
+        if (myBadge) myBadge.style.display = 'none';
+        if (myHandle) myHandle.textContent = `@${myUsername}`;
     }
+    renderFriends();
 }
 
 // ── WEEKLY MESSAGE COUNT ────────────────────────────────────
