@@ -330,51 +330,41 @@
         }
 
         .sb-header {
-            padding: 16px 14px 12px;
+            padding: 14px 12px 12px;
             border-bottom: 1px solid var(--border);
             background:
-                radial-gradient(circle at 8% -20%, rgba(124,92,252,0.18), transparent 58%),
-                radial-gradient(circle at 95% -30%, rgba(14,165,233,0.16), transparent 50%);
+                radial-gradient(circle at 8% -20%, rgba(124,92,252,0.22), transparent 58%),
+                radial-gradient(circle at 95% -30%, rgba(14,165,233,0.14), transparent 50%);
         }
 
         .sb-top {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             gap: 10px;
             min-width: 0;
+            padding: 7px 8px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
         }
 
         .sb-brand {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 0;
             min-width: 0;
             flex: 1;
         }
 
-        .sb-brand-badge {
-            width: 28px;
-            height: 28px;
-            border-radius: 9px;
-            background: linear-gradient(135deg, var(--accent), var(--teal));
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            flex-shrink: 0;
-            box-shadow: 0 7px 18px rgba(0,0,0,0.32);
-        }
-
         .sb-actions {
             display: flex;
-            gap: 4px;
+            gap: 3px;
             align-items: center;
-            padding: 2px;
-            border-radius: 10px;
-            background: rgba(255,255,255,0.02);
-            border: 1px solid var(--border);
+            padding: 1px;
+            border-radius: 9px;
+            background: rgba(255,255,255,0.03);
         }
 
         .app-logo {
@@ -386,6 +376,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
+            padding-left: 3px;
         }
 
         .me-row { display: flex; align-items: center; gap: 9px; margin-top: 11px; }
@@ -404,14 +395,14 @@
         .av-grp { border-radius: 14px !important; }
 
         .ic-btn {
-            background: none; border: none; color: var(--muted);
+            background: none; border: 1px solid transparent; color: var(--muted);
             cursor: pointer; padding: 0; border-radius: 8px;
             font-size: 15px; transition: all 0.15s;
             display: flex; align-items: center; justify-content: center;
             width: 30px; height: 30px; line-height: 1;
             flex-shrink: 0;
         }
-        .ic-btn:hover { color: var(--text); background: var(--card); }
+        .ic-btn:hover { color: var(--text); background: var(--card); border-color: var(--border2); }
 
         .admin-cta {
             font-size: 13px;
@@ -447,6 +438,7 @@
             border-radius: 13px;
             cursor: pointer;
             transition: border-color 0.2s ease, transform 0.16s ease, background 0.2s ease;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
         }
         .profile-card:hover {
             border-color: var(--border2);
@@ -1774,8 +1766,7 @@
             <!-- Top row: logo + icon actions -->
             <div class="sb-top">
                 <div class="sb-brand">
-                    <div class="sb-brand-badge">💬</div>
-                    <span class="app-logo" style="font-size:17px;letter-spacing:-0.5px;max-width:130px;">NorMSG</span>
+                    <span class="app-logo" style="font-size:17px;letter-spacing:-0.5px;max-width:142px;">NorMSG</span>
                 </div>
                 <div class="sb-actions">
                     <button class="ic-btn admin-cta non-admin" id="adminBtn" onclick="handleAdminBtnClick()" title="Admin panel access">👑</button>
@@ -1988,6 +1979,10 @@ let localTOUntil = null;   // Date — local spam timeout
 let unsubF = null, unsubR = null, unsubG = null;
 let statusRefreshTimer = null;
 let statusRefreshQueued = false;
+let statusLastLoadedAt = 0;
+let statusLastFriendKey = '';
+let statusLoadInFlight = null;
+let currentSidebarTab = 'dms';
 
 // ── UNREAD / LAST-AT TRACKING ──────────────────────────────
 let dmLastAt = {};   // convId/groupId -> Date
@@ -2060,7 +2055,7 @@ function scheduleStatusesRefresh({ force = false } = {}) {
     statusRefreshTimer = setTimeout(async () => {
         statusRefreshTimer = null;
         try {
-            await loadStatuses();
+            await loadStatuses({ force });
         } finally {
             statusRefreshQueued = false;
         }
@@ -2369,10 +2364,12 @@ function renderGroups() {
 // ── TABS ───────────────────────────────────────────────────
 function switchTab(t) {
     const dms = t==='dms';
+    currentSidebarTab = dms ? 'dms' : 'groups';
     document.getElementById('tabDMs').classList.toggle('on', dms);
     document.getElementById('tabGroups').classList.toggle('on', !dms);
     document.getElementById('dmsPanel').style.display    = dms ? 'flex' : 'none';
     document.getElementById('groupsPanel').style.display = dms ? 'none' : 'flex';
+    if (dms) scheduleStatusesRefresh();
 }
 
 // ── FRIEND REQUESTS ────────────────────────────────────────
@@ -3519,6 +3516,7 @@ function setPresence(online) {
 }
 
 function subscribePresence() {
+    if (document.hidden) return;
     // Watch all friends' presence
     friends.forEach(f => {
         if (presenceUnsubs[f.uid]) return;
@@ -3543,6 +3541,11 @@ function subscribePresence() {
             delete friendPresence[uid];
         }
     });
+}
+
+function pausePresenceSubscriptions() {
+    Object.values(presenceUnsubs).forEach(u => u && u());
+    presenceUnsubs = {};
 }
 
 function updateChatSubStatus(isOnline, lastSeen) {
@@ -4053,6 +4056,15 @@ document.addEventListener('visibilitychange', () => {
         unreadCount = 0;
         document.title = 'NorMSG';
     }
+    if (document.hidden) {
+        pausePresenceSubscriptions();
+    } else if (me) {
+        subscribePresence();
+        renderFriends();
+    }
+    if (!document.hidden && currentSidebarTab === 'dms') {
+        scheduleStatusesRefresh();
+    }
 });
 
 // ── STATUSES ───────────────────────────────────────────────
@@ -4064,12 +4076,22 @@ let allStatuses = {}; // uid -> [{...}]
 let stSelectedColor = STATUS_COLORS[0];
 let stType = 'text';
 
-async function loadStatuses() {
+async function loadStatuses({ force = false } = {}) {
     if (!me) return;
     // Always render the bar first so "My Status" shows immediately
     renderStatusBar();
 
-    try {
+    const nowMs = Date.now();
+    const friendKey = getFriendUidsKey();
+    const shouldSkipForTab = currentSidebarTab !== 'dms' && !force;
+    const isFreshCache = (nowMs - statusLastLoadedAt) < 45000 && friendKey === statusLastFriendKey;
+    if (shouldSkipForTab || (!force && isFreshCache)) {
+        return;
+    }
+    if (statusLoadInFlight) return statusLoadInFlight;
+
+    statusLoadInFlight = (async () => {
+        try {
         const now  = new Date();
         const uids = [me.uid, ...friends.map(f => f.uid)];
         allStatuses = {};
@@ -4097,9 +4119,15 @@ async function loadStatuses() {
                 console.warn('Status fetch failed for', uid, e.message);
             }
         }));
+        statusLastLoadedAt = Date.now();
+        statusLastFriendKey = friendKey;
     } catch(e) {
         console.warn('loadStatuses error:', e.message);
+    } finally {
+        statusLoadInFlight = null;
     }
+    })();
+    await statusLoadInFlight;
     renderStatusBar();
 }
 
@@ -4412,7 +4440,7 @@ async function postStatus() {
         await db.collection('statuses').add(statusData);
         closeModal('addStatusModal');
         showToast('Status posted! ✨');
-        await loadStatuses();
+        await loadStatuses({ force: true });
     } catch(e) {
         mmsg('stMsg', 'Failed: ' + e.message, 'err');
         console.error('postStatus:', e);
@@ -4559,6 +4587,9 @@ function copyAICode(btn, code) {
 const OWNER_EMAIL = 'simplifiedlearning10@gmail.com';
 let isPlatformAdmin = false;
 let superCache = {}; // uid -> bool, cached for rendering
+let superLastLoadedAt = 0;
+let superLastFriendKey = '';
+let superLoadInFlight = null;
 
 async function initAdminSystem() {
     // Check if current user is platform admin (owner or granted admin)
@@ -4591,29 +4622,54 @@ function handleAdminBtnClick() {
 }
 
 async function hasSuper(uid) {
+    const cacheFresh = (Date.now() - superLastLoadedAt) < 45000;
+    if (cacheFresh && Object.prototype.hasOwnProperty.call(superCache, uid)) {
+        return superCache[uid] === true;
+    }
     try {
         const snap = await db.collection('users').doc(uid).get();
         const until = snap.data()?.normsgSuper?.until?.toDate?.();
-        return until && until > new Date();
+        const isActive = !!(until && until > new Date());
+        superCache[uid] = isActive;
+        return isActive;
     } catch { return false; }
 }
 
-async function refreshSuperCache() {
+async function refreshSuperCache({ force = false } = {}) {
     const uids = [me.uid, ...friends.map(f => f.uid)];
     const uniqueUids = [...new Set(uids)];
-    const nextCache = {};
-    for (let i = 0; i < uniqueUids.length; i += 10) {
-        const chunk = uniqueUids.slice(i, i + 10);
-        if (!chunk.length) continue;
-        const snap = await db.collection('users')
-            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
-            .get();
-        snap.docs.forEach(d => {
-            const until = d.data()?.normsgSuper?.until?.toDate?.();
-            nextCache[d.id] = !!(until && until > new Date());
-        });
+    const friendKey = uniqueUids.slice().sort().join('|');
+    const cacheFresh = (Date.now() - superLastLoadedAt) < 45000 && friendKey === superLastFriendKey;
+    if (!force && cacheFresh) {
+        renderFriends();
+        return;
     }
-    uniqueUids.forEach(uid => { superCache[uid] = nextCache[uid] || false; });
+    if (superLoadInFlight) return superLoadInFlight;
+
+    const nextCache = {};
+    superLoadInFlight = (async () => {
+        for (let i = 0; i < uniqueUids.length; i += 10) {
+            const chunk = uniqueUids.slice(i, i + 10);
+            if (!chunk.length) continue;
+            const snap = await db.collection('users')
+                .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
+                .get();
+            snap.docs.forEach(d => {
+                const until = d.data()?.normsgSuper?.until?.toDate?.();
+                nextCache[d.id] = !!(until && until > new Date());
+            });
+        }
+        uniqueUids.forEach(uid => { superCache[uid] = nextCache[uid] || false; });
+        superLastLoadedAt = Date.now();
+        superLastFriendKey = friendKey;
+    })();
+
+    try {
+        await superLoadInFlight;
+    } finally {
+        superLoadInFlight = null;
+    }
+
     // Show Super badge and shimmer on my own profile row
     const myBadge = document.getElementById('mySuperBadge');
     const myHandle = document.getElementById('myHandle');
