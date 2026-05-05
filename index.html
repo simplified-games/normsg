@@ -1978,7 +1978,7 @@ function getNormAIUrl() {
 async function loadUserPlan() {
     if (!me) return;
     try {
-        const snap = await db.collection('users').doc(me.uid).get();
+        const snap = await getCachedUserDoc(me.uid);
         userPlan   = snap.data()?.plan === 'pro' ? 'pro' : 'free';
     } catch { userPlan = 'free'; }
     updateNormAIBadge();
@@ -2071,6 +2071,50 @@ function useNormAISuggestion(el) {
     inp.value = el.textContent.trim();
     inp.focus(); autoGrow(inp);
     document.getElementById('normAIPanel')?.remove();
+}
+
+// ── FIRESTORE READ CACHE ───────────────────────────────────
+// Reduces redundant reads without restructuring any functions.
+// userDocCache  : uid  → { data, ts }   (5-min TTL, invalidated on own writes)
+// usernameCache : name → uid            (permanent — usernames don't change)
+// userProfileCache: uid → data          (2-min TTL for other users' profiles)
+
+const USER_DOC_TTL     = 5 * 60 * 1000;   // 5 min
+const USER_PROFILE_TTL = 2 * 60 * 1000;   // 2 min
+const userDocCache     = {};               // uid → {data, ts}
+const usernameCache    = {};               // username → uid
+const userProfileCache = {};               // uid → {data, ts}
+
+// Cached fetch of any users/{uid} doc
+async function getCachedUserDoc(uid) {
+    const cached = userDocCache[uid];
+    if (cached && (Date.now() - cached.ts < USER_DOC_TTL)) return cached.snap;
+    const snap = await db.collection('users').doc(uid).get();
+    userDocCache[uid] = { snap, ts: Date.now() };
+    return snap;
+}
+
+// Invalidate own cache entry after a write so next read is fresh
+function invalidateUserCache(uid) {
+    delete userDocCache[uid];
+}
+
+// Cached username → uid lookup (permanent cache — usernames are immutable)
+async function getCachedUid(uname) {
+    if (usernameCache[uname]) return usernameCache[uname];
+    const doc = await db.collection('usernames').doc(uname).get();
+    if (doc.exists) usernameCache[uname] = doc.data().uid;
+    return usernameCache[uname] || null;
+}
+
+// Cached fetch of another user's profile (lighter TTL)
+async function getCachedProfile(uid) {
+    const cached = userProfileCache[uid];
+    if (cached && (Date.now() - cached.ts < USER_PROFILE_TTL)) return cached.data;
+    const snap = await db.collection('users').doc(uid).get();
+    const data = snap.data() || null;
+    userProfileCache[uid] = { data, ts: Date.now() };
+    return data;
 }
 
 // ── STATE ──────────────────────────────────────────────────
@@ -2495,12 +2539,12 @@ async function sendFriendReq() {
     const alreadyFriend = friends.find(f => f.username === uname);
     if (alreadyFriend) return showAddMsg('Already friends!', 'err');
 
-    const udoc = await db.collection('usernames').doc(uname).get();
-    if (!udoc.exists) return showAddMsg('No user @' + uname, 'err');
-    const targetUid = udoc.data().uid;
+    const udoc_uid = await getCachedUid(uname);
+    if (!udoc_uid) return showAddMsg('No user @' + uname, 'err');
+    const targetUid = udoc_uid;
 
-    const upro = await db.collection('users').doc(targetUid).get();
-    const updata = upro.data();
+    const upro = await getCachedProfile(targetUid);
+    const updata = upro || {};
 
     const dup = await db.collection('friendRequests')
         .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending')
@@ -2978,7 +3022,7 @@ const SWEAR = /\b(fuck|shit|bitch|cunt|dick|piss|asshole|bastard|cock)\b/i;
 
 async function checkSend(type, text) {
     // 1. Firestore timeout (swear)
-    const snap = await db.collection('users').doc(me.uid).get();
+    const snap = await getCachedUserDoc(me.uid);
     const dat  = snap.data() || {};
     const dbTO = dat.timeoutUntil?.toDate?.();
     if (dbTO && dbTO > new Date()) {
@@ -3008,7 +3052,7 @@ async function checkSend(type, text) {
     // 4. Swear filter
     if (type==='text' && SWEAR.test(text)) {
         const until = new Date(Date.now() + 5*60000);
-        await db.collection('users').doc(me.uid).update({
+        invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
             timeoutUntil:  TS.fromDate(until),
             timeoutReason: 'swearing'
         });
@@ -3161,7 +3205,7 @@ async function openProfileModal() {
     }
 
     // Show pfp usage count
-    const snap = await db.collection('users').doc(me.uid).get();
+    const snap = await getCachedUserDoc(me.uid);
     const dat  = snap.data() || {};
     const pfpLog = (dat.pfpChanges || []).filter(ts => {
         const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -3186,7 +3230,7 @@ async function uploadPfp(event) {
     if (!file) return;
 
     // Check weekly limit
-    const snap   = await db.collection('users').doc(me.uid).get();
+    const snap   = await getCachedUserDoc(me.uid);
     const dat    = snap.data() || {};
     const pfpLog = (dat.pfpChanges || []).filter(ts => {
         const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -3206,7 +3250,7 @@ async function uploadPfp(event) {
         await me.updateProfile({ photoURL: url });
 
         // Update Firestore
-        await db.collection('users').doc(me.uid).update({
+        invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
             photoURL:   url,
             pfpChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
         });
@@ -3229,7 +3273,7 @@ async function uploadPfp(event) {
 async function resetPfp() {
     // Reset is always free — unlimited
     await me.updateProfile({ photoURL: null });
-    await db.collection('users').doc(me.uid).update({ photoURL: null });
+    invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({ photoURL: null });
 
     const name   = me.displayName || me.email;
     const avMain = document.getElementById('myAv');
@@ -3277,7 +3321,7 @@ async function changeDisplayName() {
     if (newName === me.displayName) return mmsg('displayNameMsg', 'That\'s already your name!', 'err');
 
     // Check 2x per week limit
-    const snap  = await db.collection('users').doc(me.uid).get();
+    const snap  = await getCachedUserDoc(me.uid);
     const dat   = snap.data() || {};
     const nameLog = (dat.nameChanges || []).filter(ts => {
         const d = ts.toDate ? ts.toDate() : new Date(ts);
@@ -3290,7 +3334,7 @@ async function changeDisplayName() {
     mmsg('displayNameMsg', 'Saving…', 'inf');
     try {
         await me.updateProfile({ displayName: newName });
-        await db.collection('users').doc(me.uid).update({
+        invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
             displayName: newName,
             nameChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
         });
@@ -4885,9 +4929,8 @@ async function giftSuper() {
     if (!uname) return;
     mmsg('giftMsg','Looking up user…','inf');
     try {
-        const udoc = await db.collection('usernames').doc(uname).get();
-        if (!udoc.exists) return mmsg('giftMsg',`@${uname} not found.`,'err');
-        const uid  = udoc.data().uid;
+        const uid = await getCachedUid(uname);
+        if (!uid) return mmsg('giftMsg',`@${uname} not found.`,'err');
         await grantSuperToUid(uid, days);
         mmsg('giftMsg', `✓ NorMSG Super gifted to @${uname} for ${days} day${days!==1?'s':''}! ✦`, 'ok');
         document.getElementById('giftSuperIn').value = '';
@@ -4901,9 +4944,8 @@ async function giftAdmin() {
     if (!uname) return;
     mmsg('giftAdminMsg','Looking up user…','inf');
     try {
-        const udoc = await db.collection('usernames').doc(uname).get();
-        if (!udoc.exists) return mmsg('giftAdminMsg',`@${uname} not found.`,'err');
-        const uid  = udoc.data().uid;
+        const uid = await getCachedUid(uname);
+        if (!uid) return mmsg('giftAdminMsg',`@${uname} not found.`,'err');
         await db.collection('platformAdmins').doc(uid).set({ grantedBy: me.uid, grantedAt: SV() });
         mmsg('giftAdminMsg',`✓ @${uname} is now a platform admin!`,'ok');
         document.getElementById('giftAdminIn').value = '';
@@ -5115,16 +5157,14 @@ async function sendFriendReqTo(username, btn) {
     if (!username) return;
     btn.disabled = true; btn.textContent = '…';
     try {
-        const udoc = await db.collection('usernames').doc(username).get();
-        if (!udoc.exists) { btn.textContent = '✗ Not found'; return; }
-        const targetUid = udoc.data().uid;
+        const targetUid = await getCachedUid(username);
+        if (!targetUid) { btn.textContent = '✗ Not found'; return; }
         const alreadyFriend = friends.some(f => f.uid === targetUid);
         if (alreadyFriend) { btn.textContent = '✓ Friends'; btn.disabled = true; return; }
         const dup = await db.collection('friendRequests')
             .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending').limit(1).get();
         if (!dup.empty) { btn.textContent = '✓ Sent'; return; }
-        const upro = await db.collection('users').doc(targetUid).get();
-        const updata = upro.data() || {};
+        const updata = await getCachedProfile(targetUid) || {};
         await db.collection('friendRequests').add({
             fromUid: me.uid, fromName: me.displayName||me.email, fromUsername: myUsername, fromPhoto: me.photoURL||null,
             toUid: targetUid, toName: updata.displayName||updata.email, toUsername: updata.username||'', toPhoto: updata.photoURL||null,
@@ -5149,9 +5189,8 @@ async function addMemberToGroup() {
     const adminOnly = gdata.addMembersAdminOnly === true;
     if (adminOnly && !isAdmin) return mmsg('addMemberMsg','Only admins can add members.','err');
 
-    const udoc = await db.collection('usernames').doc(uname).get();
-    if (!udoc.exists) return mmsg('addMemberMsg',`@${uname} not found.`,'err');
-    const targetUid = udoc.data().uid;
+    const targetUid = await getCachedUid(uname);
+    if (!targetUid) return mmsg('addMemberMsg',`@${uname} not found.`,'err');
 
     if ((gdata.members||[]).includes(targetUid)) return mmsg('addMemberMsg','Already a member!','err');
 
