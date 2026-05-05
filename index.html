@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src 'none'; object-src 'none';">
     <title>NorMSG</title>
     <link rel="icon" href="faviconnormsg.ico" type="image/x-icon">
 
@@ -2117,6 +2118,56 @@ async function getCachedProfile(uid) {
     return data;
 }
 
+// ── SECURITY ───────────────────────────────────────────────
+
+// 1. Message limits
+const MAX_MSG_LENGTH = 2000;   // chars — prevents oversized Firestore docs
+const MAX_MSG_LINES  = 50;     // line limit
+
+// 2. AI rate limiting — max 10 @AI calls per minute per user
+const AI_RATE_WINDOW = 60000;
+const AI_RATE_MAX    = 10;
+let aiCallTs = [];
+function checkAIRateLimit() {
+    const now = Date.now();
+    aiCallTs   = aiCallTs.filter(t => now - t < AI_RATE_WINDOW);
+    if (aiCallTs.length >= AI_RATE_MAX) return false;
+    aiCallTs.push(now);
+    return true;
+}
+
+// 3. Session inactivity timeout — auto-logout after 60 min of no interaction
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+let sessionTimer = null;
+function resetSessionTimer() {
+    clearTimeout(sessionTimer);
+    sessionTimer = setTimeout(() => {
+        showToast('Session expired — logging you out for security.');
+        setTimeout(() => logout(), 2000);
+    }, SESSION_TIMEOUT_MS);
+}
+['click','keydown','mousemove','touchstart'].forEach(ev =>
+    document.addEventListener(ev, resetSessionTimer, { passive: true })
+);
+
+// 4. URL sanitizer — only allow safe protocols in user-generated links
+function sanitizeUrl(url) {
+    try {
+        const u = new URL(url);
+        return ['https:','http:','mailto:'].includes(u.protocol) ? url : '#';
+    } catch { return '#'; }
+}
+
+// 5. Message content validation — called before any send
+function validateMsg(text) {
+    if (!text || !text.trim()) return 'Message is empty.';
+    if (text.length > MAX_MSG_LENGTH)
+        return `Message too long (${text.length}/${MAX_MSG_LENGTH} chars).`;
+    if ((text.match(/\n/g)||[]).length > MAX_MSG_LINES)
+        return `Too many lines (max ${MAX_MSG_LINES}).`;
+    return null;  // null = valid
+}
+
 // ── STATE ──────────────────────────────────────────────────
 let me           = null;   // auth user
 let myUsername   = null;
@@ -2176,6 +2227,7 @@ auth.onAuthStateChanged(async user => {
         const snap  = await db.collection('users').doc(user.uid).get();
         myUsername  = snap.data()?.username || null;
         await loadUserPlan();
+        resetSessionTimer();
 
         if (!myUsername) {
             document.getElementById('landingScreen').classList.add('hidden');
@@ -2306,41 +2358,59 @@ function subFriends() {
 }
 
 // Subscribe to lastAt on every DM conversation — fires notifications for background DMs
+// Uses a single listener on the conversations collection instead of one per friend
+let dmBatchUnsub = null;
+
 function subDmLastAts() {
-    friends.forEach(f => {
-        const cid = dmId(me.uid, f.uid);
-        if (dmUnsubLastAt[cid]) return;
-        let initialized = false;
-        dmUnsubLastAt[cid] = db.collection('conversations').doc(cid)
+    // Unsub old listener
+    if (dmBatchUnsub) { dmBatchUnsub(); dmBatchUnsub = null; }
+    if (!friends.length) return;
+
+    // Collect all DM conversation IDs for this user's friends
+    const myDmIds = friends.map(f => dmId(me.uid, f.uid));
+
+    // Firestore 'in' queries support max 30 items — chunk if needed
+    const chunks = [];
+    for (let i = 0; i < myDmIds.length; i += 30) chunks.push(myDmIds.slice(i, i + 30));
+
+    let initialized = false;
+    const unsubs = chunks.map(chunk =>
+        db.collection('conversations')
+            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
             .onSnapshot(snap => {
-                const d         = snap.data();
-                const newLastAt = d?.lastAt?.toDate?.() || null;
-                const prevLastAt = dmLastAt[cid];
-                dmLastAt[cid] = newLastAt;
-                renderFriends();
+                snap.docChanges().forEach(change => {
+                    const cid  = change.doc.id;
+                    const d    = change.doc.data();
+                    const newLastAt  = d?.lastAt?.toDate?.() || null;
+                    const prevLastAt = dmLastAt[cid];
+                    dmLastAt[cid] = newLastAt;
 
-                if (!initialized) { initialized = true; return; } // skip first load
-                if (!newLastAt || !prevLastAt) return;
-                if (newLastAt.getTime() <= prevLastAt.getTime()) return; // not newer
-                if (d.lastSenderUid === me.uid) return;
-                if (cid === chatId) return; // open chat — already seen
+                    renderFriends();
 
-                fireNotification({
-                    senderUid:      d.lastSenderUid,
-                    senderUsername: d.lastSenderUsername || '',
-                    text:           d.lastText || '',
-                    type:           d.lastType || 'text'
-                }, f.displayName || f.username || 'DM', 'dm');
-            });
-    });
-    // Unsub from removed friends
-    Object.keys(dmUnsubLastAt).forEach(cid => {
-        const stillFriend = friends.some(f => dmId(me.uid, f.uid) === cid);
-        if (!stillFriend) {
-            dmUnsubLastAt[cid]();
-            delete dmUnsubLastAt[cid];
-            delete dmLastAt[cid];
-        }
+                    if (!initialized) return;
+                    if (change.type === 'added' && !prevLastAt) return;
+                    if (!newLastAt || !prevLastAt) return;
+                    if (newLastAt.getTime() <= prevLastAt.getTime()) return;
+                    if (d.lastSenderUid === me.uid) return;
+                    if (cid === chatId) return;
+
+                    const f = friends.find(fr => dmId(me.uid, fr.uid) === cid);
+                    fireNotification({
+                        senderUid:      d.lastSenderUid,
+                        senderUsername: d.lastSenderUsername || '',
+                        text:           d.lastText || '',
+                        type:           d.lastType || 'text'
+                    }, f?.displayName || f?.username || 'DM', 'dm');
+                });
+                initialized = true;
+            })
+    );
+
+    dmBatchUnsub = () => unsubs.forEach(u => u());
+
+    // Clean up stale dmLastAt keys for removed friends
+    Object.keys(dmLastAt).forEach(cid => {
+        if (!myDmIds.includes(cid)) delete dmLastAt[cid];
     });
 }
 
@@ -2694,11 +2764,15 @@ function activateChat() {
 }
 
 // ── MESSAGES ───────────────────────────────────────────────
+const MSG_PAGE = 50;   // reads per page — change to load more
+
 function subMessages(path) {
     if (msgUnsub) { msgUnsub(); msgUnsub = null; }
     document.getElementById('messagesArea').innerHTML = '';
 
-    msgUnsub = db.collection(path).orderBy('timestamp','asc')
+    msgUnsub = db.collection(path)
+        .orderBy('timestamp','asc')
+        .limitToLast(MSG_PAGE)
         .onSnapshot(snap => {
             renderMsgs(snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() })));
             if (chatId) markRead(chatId);
@@ -2857,6 +2931,9 @@ async function sendMsg() {
     const inp  = document.getElementById('msgInput');
     const text = inp.value.trim();
     if (!text || !chatId) return;
+
+    const validErr = validateMsg(text);
+    if (validErr) { showToast(validErr); return; }
 
     if (!await checkSend('text', text)) return;
     inp.value = ''; inp.style.height = '';
@@ -4619,6 +4696,12 @@ async function triggerAIResponse(userText) {
     const prompt = userText.replace(/@AI\b/gi, '').trim();
     if (!prompt) return;
 
+    // Rate limit AI calls
+    if (!checkAIRateLimit()) {
+        showToast('⚠ AI rate limit reached — please wait a moment.');
+        return;
+    }
+
     // Check if the sender has NorMSG Super (smarter model)
     const isSuper = await hasSuper(me.uid);
     const model   = isSuper ? GROQ_MODEL_SUPER : GROQ_MODEL;
@@ -5093,6 +5176,12 @@ function renderMsgText(text) {
 
     // Newlines → <br>
     out = out.replace(/\n/g, '<br>');
+
+    // Clickable links — sanitized
+    out = out.replace(/(https?:\/\/[^\s&lt;&gt;"]+)/g, (url) => {
+        const safe = sanitizeUrl(url);
+        return `<a href="${safe}" target="_blank" rel="noopener noreferrer" style="color:var(--a2);text-decoration:underline;">${url}</a>`;
+    });
 
     // @mentions
     out = out.replace(/@([a-z0-9_.]+)/gi, (match, uname) => {
