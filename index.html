@@ -343,6 +343,7 @@
             justify-content: space-between;
             margin-bottom: 12px;
             gap: 10px;
+            min-width: 0;
         }
 
         .sb-brand {
@@ -350,6 +351,7 @@
             align-items: center;
             gap: 8px;
             min-width: 0;
+            flex: 1;
         }
 
         .sb-brand-badge {
@@ -381,6 +383,9 @@
             background: linear-gradient(135deg, var(--a2), var(--teal));
             -webkit-background-clip: text; -webkit-text-fill-color: transparent;
             background-clip: text;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .me-row { display: flex; align-items: center; gap: 9px; margin-top: 11px; }
@@ -400,14 +405,16 @@
 
         .ic-btn {
             background: none; border: none; color: var(--muted);
-            cursor: pointer; padding: 6px; border-radius: 8px;
+            cursor: pointer; padding: 0; border-radius: 8px;
             font-size: 15px; transition: all 0.15s;
             display: flex; align-items: center; justify-content: center;
+            width: 30px; height: 30px; line-height: 1;
+            flex-shrink: 0;
         }
         .ic-btn:hover { color: var(--text); background: var(--card); }
 
         .admin-cta {
-            font-size: 14px;
+            font-size: 13px;
             border: 1px solid rgba(245,158,11,0.3);
             background: linear-gradient(135deg, rgba(245,158,11,0.15), rgba(167,139,250,0.15));
             color: #f59e0b;
@@ -445,6 +452,11 @@
             border-color: var(--border2);
             background: linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
             transform: translateY(-1px);
+        }
+
+        @media (max-width: 520px) {
+            .sb-actions { gap: 2px; padding: 2px; }
+            .ic-btn { width: 28px; height: 28px; font-size: 14px; }
         }
 
         /* Tabs */
@@ -1763,13 +1775,13 @@
             <div class="sb-top">
                 <div class="sb-brand">
                     <div class="sb-brand-badge">💬</div>
-                    <span class="app-logo" style="font-size:17px;letter-spacing:-0.5px;">NorMSG</span>
+                    <span class="app-logo" style="font-size:17px;letter-spacing:-0.5px;max-width:130px;">NorMSG</span>
                 </div>
                 <div class="sb-actions">
                     <button class="ic-btn admin-cta non-admin" id="adminBtn" onclick="handleAdminBtnClick()" title="Admin panel access">👑</button>
-                    <button class="ic-btn" onclick="openPeopleModal()" title="Discover people" style="font-size:15px;">🌐</button>
-                    <button class="ic-btn" onclick="openSettingsModal()" title="Settings" style="font-size:15px;">⚙️</button>
-                    <button class="ic-btn" onclick="logout()" title="Sign out" style="font-size:15px;color:var(--muted);">⏻</button>
+                    <button class="ic-btn" onclick="openPeopleModal()" title="Discover people">🌐</button>
+                    <button class="ic-btn" onclick="openSettingsModal()" title="Settings">⚙️</button>
+                    <button class="ic-btn" onclick="logout()" title="Sign out">⏻</button>
                 </div>
             </div>
             <!-- Profile row -->
