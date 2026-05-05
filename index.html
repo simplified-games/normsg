@@ -1974,6 +1974,8 @@ let localTOUntil = null;   // Date — local spam timeout
 
 // Unsubscribe handles
 let unsubF = null, unsubR = null, unsubG = null;
+let statusRefreshTimer = null;
+let statusRefreshQueued = false;
 
 // ── UNREAD / LAST-AT TRACKING ──────────────────────────────
 let dmLastAt = {};   // convId/groupId -> Date
@@ -2031,8 +2033,26 @@ function finishLogin() {
     document.getElementById('mainApp').classList.remove('hidden');
     setProfile();
     subscribeAll();
-    loadStatuses();
+    scheduleStatusesRefresh({ force: true });
     initAdminSystem();
+}
+
+function getFriendUidsKey() {
+    return friends.map(f => f.uid).sort().join('|');
+}
+
+function scheduleStatusesRefresh({ force = false } = {}) {
+    if (force) statusRefreshQueued = true;
+    if (statusRefreshTimer) clearTimeout(statusRefreshTimer);
+    // Coalesce rapid snapshot bursts into a single status read pass.
+    statusRefreshTimer = setTimeout(async () => {
+        statusRefreshTimer = null;
+        try {
+            await loadStatuses();
+        } finally {
+            statusRefreshQueued = false;
+        }
+    }, force ? 50 : 300);
 }
 
 // ── USERNAME SETUP ─────────────────────────────────────────
@@ -2087,11 +2107,16 @@ function subFriends() {
                 const x = d.data();
                 return { uid: x.toUid, displayName: x.toName, username: x.toUsername, photoURL: x.toPhoto };
             });
+            const prevKey = getFriendUidsKey();
             friends = dedup([...fromF, ...toF]);
+            const nextKey = getFriendUidsKey();
             subscribePresence();
             subDmLastAts();
             renderFriends();
-            loadStatuses();
+            if (nextKey !== prevKey || statusRefreshQueued) {
+                scheduleStatusesRefresh();
+                refreshSuperCache().catch(()=>{});
+            }
         });
 
     const u2 = db.collection('friendRequests')
@@ -2101,11 +2126,16 @@ function subFriends() {
                 const x = d.data();
                 return { uid: x.fromUid, displayName: x.fromName, username: x.fromUsername, photoURL: x.fromPhoto };
             });
+            const prevKey = getFriendUidsKey();
             friends = dedup([...fromF, ...toF]);
+            const nextKey = getFriendUidsKey();
             subscribePresence();
             subDmLastAts();
             renderFriends();
-            loadStatuses();
+            if (nextKey !== prevKey || statusRefreshQueued) {
+                scheduleStatusesRefresh();
+                refreshSuperCache().catch(()=>{});
+            }
         });
 
     unsubF = () => { u1(); u2(); };
@@ -4558,9 +4588,20 @@ async function hasSuper(uid) {
 
 async function refreshSuperCache() {
     const uids = [me.uid, ...friends.map(f => f.uid)];
-    await Promise.all(uids.map(async uid => {
-        superCache[uid] = await hasSuper(uid);
-    }));
+    const uniqueUids = [...new Set(uids)];
+    const nextCache = {};
+    for (let i = 0; i < uniqueUids.length; i += 10) {
+        const chunk = uniqueUids.slice(i, i + 10);
+        if (!chunk.length) continue;
+        const snap = await db.collection('users')
+            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
+            .get();
+        snap.docs.forEach(d => {
+            const until = d.data()?.normsgSuper?.until?.toDate?.();
+            nextCache[d.id] = !!(until && until > new Date());
+        });
+    }
+    uniqueUids.forEach(uid => { superCache[uid] = nextCache[uid] || false; });
     // Show Super badge and shimmer on my own profile row
     const myBadge = document.getElementById('mySuperBadge');
     const myHandle = document.getElementById('myHandle');
