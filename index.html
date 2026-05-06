@@ -89,11 +89,12 @@ exports.handler = async (event) => {
             exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
         }
         match /usernames/{uname} {
-          allow read:  if request.auth != null;
+          allow read:   if request.auth != null;
           allow create: if request.auth != null;
         }
         match /friendRequests/{id} {
-          allow read:   if request.auth != null &&
+          allow read: if request.auth != null && resource.data.status == 'accepted';
+          allow read: if request.auth != null &&
             (request.auth.uid == resource.data.fromUid ||
              request.auth.uid == resource.data.toUid);
           allow create: if request.auth != null;
@@ -151,36 +152,6 @@ exports.handler = async (event) => {
     ═══════════════════════════════════════════════════════
     -->
 
-    <!-- GitHub Pages → Netlify redirect banner -->
-    <script>
-        if (location.hostname === 'simplified-games.github.io') {
-            document.addEventListener('DOMContentLoaded', function () {
-                const banner = document.createElement('div');
-                banner.id = 'gh-redirect-banner';
-                banner.innerHTML = `
-                    <div style="
-                        position:fixed;top:0;left:0;right:0;z-index:99999;
-                        background:linear-gradient(90deg,#4338ca,#7c5cfc);
-                        color:#fff;font-family:Figtree,sans-serif;
-                        display:flex;align-items:center;justify-content:center;gap:12px;
-                        padding:13px 20px;box-shadow:0 2px 16px rgba(0,0,0,0.4);
-                        font-size:14px;text-align:center;flex-wrap:wrap;
-                    ">
-                        <span>⚠️ NorMSG has moved! This page does not have AI functionality yet.</span>
-                        <a href="https://normsg.netlify.app" style="
-                            background:#fff;color:#4338ca;font-weight:700;
-                            padding:6px 16px;border-radius:20px;text-decoration:none;
-                            font-size:13px;white-space:nowrap;flex-shrink:0;
-                        ">Go to normsg.netlify.app →</a>
-                        <button onclick="document.getElementById('gh-redirect-banner').remove()" style="
-                            background:rgba(255,255,255,0.15);border:none;color:#fff;
-                            cursor:pointer;padding:5px 10px;border-radius:20px;font-size:12px;
-                        ">✕ Dismiss</button>
-                    </div>`;
-                document.body.prepend(banner);
-            });
-        }
-    </script>
 
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -1439,6 +1410,18 @@ exports.handler = async (event) => {
 <div class="glow-a"></div>
 <div class="glow-b"></div>
 <div id="toast"></div>
+<div id="annBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99998;
+    display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;
+    padding:12px 20px;font-family:'Figtree',sans-serif;font-size:13px;
+    box-shadow:0 2px 16px rgba(0,0,0,0.4);text-align:center;">
+    <span id="annBannerText"></span>
+    <button onclick="dismissAnnouncement()" style="
+        background:rgba(255,255,255,0.18);border:none;color:inherit;
+        cursor:pointer;padding:4px 12px;border-radius:20px;font-size:12px;
+        font-family:'Figtree',sans-serif;font-weight:600;white-space:nowrap;flex-shrink:0;">
+        ✕ Dismiss
+    </button>
+</div>
 
 <!-- ═══════════════ LANDING ════════════════ -->
 <div id="landingScreen">
@@ -1456,7 +1439,30 @@ exports.handler = async (event) => {
             <span class="rule-pill red">🤐 Swearing · 5 min timeout</span>
         </div>
         <button class="btn-primary" onclick="login()">🔒 &nbsp; Continue with Google</button>
+        <button class="btn-primary" onclick="openLoginModal()" style="margin-top:10px;background:linear-gradient(135deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03));border:1px solid var(--border2);box-shadow:none;color:var(--text);font-size:14px;">🔑 &nbsp; Sign in with login</button>
         <div style="margin-top:14px;font-size:11px;color:var(--muted);opacity:0.55;">Made by Alex ✦</div>
+    </div>
+</div>
+
+<!-- ═══════════════ LOGIN WITH CREDENTIALS MODAL ════════════════ -->
+<div id="loginModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-title">Sign in</div>
+        <div class="modal-sub">Enter the username and password given to you by an admin.</div>
+        <div style="position:relative;">
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;margin-top:-5px;">@</span>
+            <input class="m-input" id="loginUsernameIn" placeholder="username" maxlength="30"
+                style="padding-left:27px;"
+                oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.]/g,'')"
+                onkeydown="if(event.key==='Enter') doLoginWithCredentials()">
+        </div>
+        <input class="m-input" id="loginPasswordIn" type="password" placeholder="Password"
+            onkeydown="if(event.key==='Enter') doLoginWithCredentials()">
+        <div class="m-msg" id="loginMsg"></div>
+        <div class="modal-row">
+            <button class="btn-sec" onclick="closeModal('loginModal')">Cancel</button>
+            <button class="btn-primary" onclick="doLoginWithCredentials()" style="flex:1;">Sign in →</button>
+        </div>
     </div>
 </div>
 
@@ -1609,6 +1615,46 @@ exports.handler = async (event) => {
             <button class="btn-add" onclick="giftAdmin()">Make Admin</button>
         </div>
         <div class="m-msg" id="giftAdminMsg"></div>
+
+        <!-- Create Account (no-email login) -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Create Login Account</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Create an account for someone without a Google account. They'll sign in using the username and password you set here.</div>
+        <div style="position:relative;margin-bottom:0;">
+            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+            <input class="m-input" id="createAccUsernameIn" placeholder="username (no spaces)" maxlength="30"
+                style="padding-left:26px;"
+                oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.]/g,'')">
+        </div>
+        <input class="m-input" id="createAccDisplayIn" placeholder="Display name" maxlength="40">
+        <input class="m-input" id="createAccPasswordIn" type="password" placeholder="Password (share this with them)">
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <button class="btn-add" onclick="adminCreateAccount()" style="flex:1;">Create Account</button>
+        </div>
+        <div class="m-msg" id="createAccMsg"></div>
+
+        <!-- Announcements -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">📢 Announcements</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Post a banner shown to all users at the top of the page. They can dismiss it, but it'll reappear until it expires.</div>
+        <textarea class="m-input" id="annTextIn" placeholder="Announcement message…" maxlength="200" rows="2"
+            style="resize:none;font-size:13px;"></textarea>
+        <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+            <select class="m-input" id="annDuration" style="margin:0;flex:none;width:auto;padding:0 10px;font-size:12px;">
+                <option value="1">1 hour</option>
+                <option value="6">6 hours</option>
+                <option value="24">24 hours</option>
+                <option value="72">3 days</option>
+                <option value="168">1 week</option>
+            </select>
+            <select class="m-input" id="annStyle" style="margin:0;flex:none;width:auto;padding:0 10px;font-size:12px;">
+                <option value="info">🔵 Info</option>
+                <option value="warn">🟡 Warning</option>
+                <option value="danger">🔴 Alert</option>
+                <option value="success">🟢 Success</option>
+            </select>
+            <button class="btn-add" onclick="postAnnouncement()" style="white-space:nowrap;">Post 📢</button>
+        </div>
+        <div class="m-msg" id="annMsg"></div>
+        <div id="activeAnnPreview" style="margin-bottom:6px;"></div>
 
         <!-- Weekly leaderboard -->
         <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Weekly Top Chatter</div>
@@ -2051,8 +2097,8 @@ const TS      = firebase.firestore.Timestamp;
 
 // ── STATE ──────────────────────────────────────────────────
 // ── NORMAI API ─────────────────────────────────────────────
-const NORMAI_PRO_API  = '/.netlify/functions/normai-pro';
-const NORMAI_FREE_API = '/.netlify/functions/normai';
+const NORMAI_PRO_API  = 'https://normsg-pro.simplifiedtest10.deno.net';
+const NORMAI_FREE_API = 'https://normsg-free.simplifiedtest10.deno.net';
 
 let userPlan = 'free';   // 'free' | 'pro'
 
@@ -2286,6 +2332,69 @@ function isUnread(id, lastAt)  { if (!lastAt) return false; return lastAt.getTim
 
 // ── AUTH ───────────────────────────────────────────────────
 function login()  { auth.signInWithPopup(gProv).catch(e => showToast('Sign-in failed: ' + e.message)); }
+
+function openLoginModal() {
+    document.getElementById('loginUsernameIn').value = '';
+    document.getElementById('loginPasswordIn').value = '';
+    mmsg('loginMsg', '', '');
+    document.getElementById('loginModal').classList.remove('hidden');
+}
+
+async function doLoginWithCredentials() {
+    const username = document.getElementById('loginUsernameIn').value.trim().toLowerCase();
+    const password = document.getElementById('loginPasswordIn').value;
+    if (!username) return mmsg('loginMsg', 'Enter your username.', 'err');
+    if (!password) return mmsg('loginMsg', 'Enter your password.', 'err');
+    mmsg('loginMsg', 'Signing in…', 'inf');
+    try {
+        await auth.signInWithEmailAndPassword(username + '@normsg.local', password);
+        document.getElementById('loginModal').classList.add('hidden');
+    } catch(e) {
+        const msg = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code)
+            ? 'Incorrect username or password.'
+            : 'Sign-in failed: ' + e.message;
+        mmsg('loginMsg', msg, 'err');
+    }
+}
+
+async function adminCreateAccount() {
+    if (!isPlatformAdmin) return;
+    const username    = document.getElementById('createAccUsernameIn').value.trim().toLowerCase();
+    const displayName = document.getElementById('createAccDisplayIn').value.trim();
+    const password    = document.getElementById('createAccPasswordIn').value;
+    if (!username)         return mmsg('createAccMsg', 'Enter a username.', 'err');
+    if (!displayName)      return mmsg('createAccMsg', 'Enter a display name.', 'err');
+    if (password.length < 6) return mmsg('createAccMsg', 'Password must be at least 6 characters.', 'err');
+    mmsg('createAccMsg', 'Creating account…', 'inf');
+    try {
+        const ex = await db.collection('usernames').doc(username).get();
+        if (ex.exists) return mmsg('createAccMsg', `@${username} is already taken.`, 'err');
+
+        const fakeEmail = username + '@normsg.local';
+        const cred = await auth.createUserWithEmailAndPassword(fakeEmail, password);
+        const newUid = cred.user.uid;
+        await cred.user.updateProfile({ displayName });
+
+        const batch = db.batch();
+        batch.set(db.collection('users').doc(newUid), {
+            displayName, email: fakeEmail, photoURL: null, username,
+            createdByAdmin: me.uid, createdAt: SV()
+        });
+        batch.set(db.collection('usernames').doc(username), { uid: newUid });
+        await batch.commit();
+
+        mmsg('createAccMsg', `✓ Account @${username} created! Make sure to note the password before closing.`, 'ok');
+        document.getElementById('createAccUsernameIn').value = '';
+        document.getElementById('createAccDisplayIn').value  = '';
+        document.getElementById('createAccPasswordIn').value = '';
+
+        // Creating an account signs you in as that user — sign the admin back out
+        // so they can re-sign in with Google
+        showToast('⚠️ Account created! Signing you back out — please sign in again.');
+        setTimeout(() => auth.signOut(), 3000);
+    } catch(e) { mmsg('createAccMsg', 'Error: ' + e.message, 'err'); }
+}
+
 function logout() {
     setPresence(false);
     clearInterval(presenceTimer);
@@ -2301,12 +2410,15 @@ function logout() {
 auth.onAuthStateChanged(async user => {
     if (user) {
         me = user;
-        // Upsert user profile
-        await db.collection('users').doc(user.uid).set({
-            displayName: user.displayName,
-            email:       user.email,
-            photoURL:    user.photoURL || null
-        }, { merge: true });
+        const isInternalAccount = user.email?.endsWith('@normsg.local');
+        // Upsert user profile (skip for internal accounts — already set up by admin)
+        if (!isInternalAccount) {
+            await db.collection('users').doc(user.uid).set({
+                displayName: user.displayName,
+                email:       user.email,
+                photoURL:    user.photoURL || null
+            }, { merge: true });
+        }
 
         const snap  = await db.collection('users').doc(user.uid).get();
         myUsername  = snap.data()?.username || null;
@@ -2622,121 +2734,120 @@ function renderFriends() {
     });
 }
 
-function renderRequests() {
-    const el  = document.getElementById('reqList');
-    const sec = document.getElementById('reqSection');
-    if (!pendingReqs.length) { sec.style.display='none'; return; }
-    sec.style.display = 'block';
-    document.getElementById('reqCount').textContent = `(${pendingReqs.length})`;
-    el.innerHTML = '';
-    pendingReqs.forEach(r => {
-        const d = ce('div');
-        d.className = 'req-card';
-        d.innerHTML = `
-            <div style="display:flex;align-items:center;gap:9px;">
-                ${mkAv(r.fromName, r.fromPhoto, 30)}
-                <div><div style="font-size:12px;font-weight:600;">${esc(r.fromName)}</div><div style="font-size:11px;color:var(--muted);">@${esc(r.fromUsername||'')}</div></div>
-            </div>
-            <div class="req-acts">
-                <button class="btn-acc" onclick="acceptReq('${r.id}')">✓ Accept</button>
-                <button class="btn-dec" onclick="declineReq('${r.id}')">✕ Decline</button>
-            </div>`;
-        el.appendChild(d);
-    });
+function renderRequests() {const el  = document.getElementById('reqList');
+const sec = document.getElementById('reqSection');
+if (!pendingReqs.length) { sec.style.display='none'; return; }
+sec.style.display = 'block';
+document.getElementById('reqCount').textContent = `(${pendingReqs.length})`;
+el.innerHTML = '';
+pendingReqs.forEach(r => {
+    const d = ce('div');
+    d.className = 'req-card';
+    d.innerHTML = `
+        <div style="display:flex;align-items:center;gap:9px;">
+            ${mkAv(r.fromName, r.fromPhoto, 30)}
+            <div><div style="font-size:12px;font-weight:600;">${esc(r.fromName)}</div><div style="font-size:11px;color:var(--muted);">@${esc(r.fromUsername||'')}</div></div>
+        </div>
+        <div class="req-acts">
+            <button class="btn-acc" onclick="acceptReq('${r.id}')">✓ Accept</button>
+            <button class="btn-dec" onclick="declineReq('${r.id}')">✕ Decline</button>
+        </div>`;
+    el.appendChild(d);
+});
 }
 
 function renderGroups() {
-    const el = document.getElementById('groupsList');
-    if (!myGroups.length) {
-        el.innerHTML = `<div class="no-items"><div class="no-ico">💬</div><div class="no-txt">No groups yet.<br>Create one below!</div></div>`;
-        return;
-    }
+const el = document.getElementById('groupsList');
+if (!myGroups.length) {
+    el.innerHTML = `<div class="no-items"><div class="no-ico">💬</div><div class="no-txt">No groups yet.<br>Create one below!</div></div>`;
+    return;
+}
 
-    // Sort by most recently chatted (lastAt descending)
-    const sorted = [...myGroups].sort((a, b) => {
-        const la = a.lastAt?.toDate?.()?.getTime() || 0;
-        const lb = b.lastAt?.toDate?.()?.getTime() || 0;
-        return lb - la;
-    });
+// Sort by most recently chatted (lastAt descending)
+const sorted = [...myGroups].sort((a, b) => {
+    const la = a.lastAt?.toDate?.()?.getTime() || 0;
+    const lb = b.lastAt?.toDate?.()?.getTime() || 0;
+    return lb - la;
+});
 
-    el.innerHTML = '';
-    sorted.forEach(g => {
-        const lastAt   = g.lastAt?.toDate?.() || null;
-        const unread   = isUnread(g.id, lastAt) && chatId !== g.id;
-        const isCreator = g.createdBy === me.uid;
-        const d = ce('div');
-        d.className = 'conv-item' + (chatId === g.id ? ' on' : '') + (unread ? ' unread' : '');
-        d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name[0]||'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
-        d.onclick = () => openGroup(g);
-        el.appendChild(d);
-    });
+el.innerHTML = '';
+sorted.forEach(g => {
+    const lastAt   = g.lastAt?.toDate?.() || null;
+    const unread   = isUnread(g.id, lastAt) && chatId !== g.id;
+    const isCreator = g.createdBy === me.uid;
+    const d = ce('div');
+    d.className = 'conv-item' + (chatId === g.id ? ' on' : '') + (unread ? ' unread' : '');
+    d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name[0]||'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
+    d.onclick = () => openGroup(g);
+    el.appendChild(d);
+});
 }
 
 // ── TABS ───────────────────────────────────────────────────
 function switchTab(t) {
-    const dms = t==='dms';
-    currentSidebarTab = dms ? 'dms' : 'groups';
-    document.getElementById('tabDMs').classList.toggle('on', dms);
-    document.getElementById('tabGroups').classList.toggle('on', !dms);
-    document.getElementById('dmsPanel').style.display    = dms ? 'flex' : 'none';
-    document.getElementById('groupsPanel').style.display = dms ? 'none' : 'flex';
-    if (dms) scheduleStatusesRefresh();
+const dms = t==='dms';
+currentSidebarTab = dms ? 'dms' : 'groups';
+document.getElementById('tabDMs').classList.toggle('on', dms);
+document.getElementById('tabGroups').classList.toggle('on', !dms);
+document.getElementById('dmsPanel').style.display    = dms ? 'flex' : 'none';
+document.getElementById('groupsPanel').style.display = dms ? 'none' : 'flex';
+if (dms) scheduleStatusesRefresh();
 }
 
 // ── FRIEND REQUESTS ────────────────────────────────────────
 async function sendFriendReq() {
-    const input = document.getElementById('addIn');
-    const uname = input.value.trim().toLowerCase().replace('@','');
-    if (!uname) return;
-    if (uname === myUsername) return showAddMsg('You can\'t add yourself!', 'err');
+const input = document.getElementById('addIn');
+const uname = input.value.trim().toLowerCase().replace('@','');
+if (!uname) return;
+if (uname === myUsername) return showAddMsg('You can\'t add yourself!', 'err');
 
-    const alreadyFriend = friends.find(f => f.username === uname);
-    if (alreadyFriend) return showAddMsg('Already friends!', 'err');
+const alreadyFriend = friends.find(f => f.username === uname);
+if (alreadyFriend) return showAddMsg('Already friends!', 'err');
 
-    const udoc_uid = await getCachedUid(uname);
-    if (!udoc_uid) return showAddMsg('No user @' + uname, 'err');
-    const targetUid = udoc_uid;
+const udoc_uid = await getCachedUid(uname);
+if (!udoc_uid) return showAddMsg('No user @' + uname, 'err');
+const targetUid = udoc_uid;
 
-    const upro = await getCachedProfile(targetUid);
-    const updata = upro || {};
+const upro = await getCachedProfile(targetUid);
+const updata = upro || {};
 
-    const dup = await db.collection('friendRequests')
-        .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending')
-        .limit(1).get();
-    if (!dup.empty) return showAddMsg('Request already sent!', 'err');
+const dup = await db.collection('friendRequests')
+    .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending')
+    .limit(1).get();
+if (!dup.empty) return showAddMsg('Request already sent!', 'err');
 
-    // Also check reverse (they already sent us one)
-    const rev = await db.collection('friendRequests')
-        .where('fromUid','==',targetUid).where('toUid','==',me.uid).where('status','==','pending')
-        .limit(1).get();
-    if (!rev.empty) {
-        // Just accept theirs
-        await db.collection('friendRequests').doc(rev.docs[0].id).update({ status: 'accepted' });
-        input.value = '';
-        return showAddMsg(`@${uname} already sent you a request — accepted! 🎉`, 'ok');
-    }
-
-    await db.collection('friendRequests').add({
-        fromUid:      me.uid,
-        fromName:     me.displayName || me.email,
-        fromUsername: myUsername,
-        fromPhoto:    me.photoURL || null,
-        toUid:        targetUid,
-        toName:       updata.displayName || updata.email,
-        toUsername:   updata.username || '',
-        toPhoto:      updata.photoURL || null,
-        status:       'pending',
-        createdAt:    SV()
-    });
-
+// Also check reverse (they already sent us one)
+const rev = await db.collection('friendRequests')
+    .where('fromUid','==',targetUid).where('toUid','==',me.uid).where('status','==','pending')
+    .limit(1).get();
+if (!rev.empty) {
+    // Just accept theirs
+    await db.collection('friendRequests').doc(rev.docs[0].id).update({ status: 'accepted' });
     input.value = '';
-    showAddMsg(`Request sent to @${uname}! 🎉`, 'ok');
+    return showAddMsg(`@${uname} already sent you a request — accepted! 🎉`, 'ok');
+}
+
+await db.collection('friendRequests').add({
+    fromUid:      me.uid,
+    fromName:     me.displayName || me.email,
+    fromUsername: myUsername,
+    fromPhoto:    me.photoURL || null,
+    toUid:        targetUid,
+    toName:       updata.displayName || updata.email,
+    toUsername:   updata.username || '',
+    toPhoto:      updata.photoURL || null,
+    status:       'pending',
+    createdAt:    SV()
+});
+
+input.value = '';
+showAddMsg(`Request sent to @${uname}! 🎉`, 'ok');
 }
 
 function showAddMsg(txt, type) {
-    const el = document.getElementById('addMsg');
-    el.textContent = txt; el.className = 'add-msg ' + type;
-    setTimeout(() => { el.className = 'add-msg'; el.textContent = ''; }, 4500);
+const el = document.getElementById('addMsg');
+el.textContent = txt; el.className = 'add-msg ' + type;
+setTimeout(() => { el.className = 'add-msg'; el.textContent = ''; }, 4500);
 }
 
 async function acceptReq(id)  { await db.collection('friendRequests').doc(id).update({ status: 'accepted' }); showToast('Friend added! 🎉'); }
@@ -2748,14 +2859,14 @@ mmsg('grpMsg','','');
 const el = document.getElementById('grpMemberList');
 el.innerHTML = '';
 if (!friends.length) {
-    el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:12px 8px;">Add some friends first!</div>`;
+el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:12px 8px;">Add some friends first!</div>`;
 } else {
-    friends.forEach(f => {
-        const lb = ce('label');
-        lb.className = 'member-item';
-        lb.innerHTML = `<input type="checkbox" value="${f.uid}"> ${mkAv(f.displayName, f.photoURL, 26)} <div><div class="mi-name">${esc(f.displayName)}</div><div class="mi-user">@${esc(f.username||'')}</div></div>`;
-        el.appendChild(lb);
-    });
+friends.forEach(f => {
+    const lb = ce('label');
+    lb.className = 'member-item';
+    lb.innerHTML = `<input type="checkbox" value="${f.uid}"> ${mkAv(f.displayName, f.photoURL, 26)} <div><div class="mi-name">${esc(f.displayName)}</div><div class="mi-user">@${esc(f.username||'')}</div></div>`;
+    el.appendChild(lb);
+});
 }
 document.getElementById('groupModal').classList.remove('hidden');
 }
@@ -2769,10 +2880,10 @@ if (!checked.length) return mmsg('grpMsg','Select at least one friend.','err');
 
 const members = [me.uid, ...checked];
 await db.collection('groups').add({
-    name,
-    members,
-    createdBy: me.uid,
-    createdAt: SV()
+name,
+members,
+createdBy: me.uid,
+createdAt: SV()
 });
 closeModal('groupModal');
 showToast(`"${name}" created! 🎉`);
@@ -2853,12 +2964,12 @@ if (msgUnsub) { msgUnsub(); msgUnsub = null; }
 document.getElementById('messagesArea').innerHTML = '';
 
 msgUnsub = db.collection(path)
-    .orderBy('timestamp','asc')
-    .limitToLast(MSG_PAGE)
-    .onSnapshot(snap => {
-        renderMsgs(snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() })));
-        if (chatId) markRead(chatId);
-    });
+.orderBy('timestamp','asc')
+.limitToLast(MSG_PAGE)
+.onSnapshot(snap => {
+    renderMsgs(snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() })));
+    if (chatId) markRead(chatId);
+});
 }
 
 function renderMsgs(msgs) {
@@ -2868,118 +2979,118 @@ const hiddenMsgs = getHiddenMsgs();
 let lastDate  = null;
 
 msgs.filter(m => !hiddenMsgs.has(m.id)).forEach((msg, i, arr) => {
-    const ts     = msg.timestamp?.toDate?.() || new Date();
-    const ds     = dateLabel(ts);
-    const mine   = msg.senderUid === me.uid;
-    const nxt    = arr[i+1];
-    const same   = nxt && nxt.senderUid === msg.senderUid;
+const ts     = msg.timestamp?.toDate?.() || new Date();
+const ds     = dateLabel(ts);
+const mine   = msg.senderUid === me.uid;
+const nxt    = arr[i+1];
+const same   = nxt && nxt.senderUid === msg.senderUid;
 
-    if (ds !== lastDate) {
-        lastDate = ds;
-        const div = ce('div');
-        div.className = 'date-div';
-        div.innerHTML = `<span>${ds}</span>`;
-        area.appendChild(div);
-    }
+if (ds !== lastDate) {
+    lastDate = ds;
+    const div = ce('div');
+    div.className = 'date-div';
+    div.innerHTML = `<span>${ds}</span>`;
+    area.appendChild(div);
+}
 
-    const row = ce('div');
-    row.className = 'msg-row' + (mine ? ' sent' : '');
+const row = ce('div');
+row.className = 'msg-row' + (mine ? ' sent' : '');
 
-    const avPart = mine ? '' :
-        `<div class="msg-av ${same?'inv':''}">` +
-        (msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
-        `</div>`;
+const avPart = mine ? '' :
+    `<div class="msg-av ${same?'inv':''}">` +
+    (msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
+    `</div>`;
 
-    let bubble = '';
-    if (msg.type === 'deleted') {
-        bubble = `<div class="bubble ${mine?'sent':'recv'}" style="opacity:0.45;font-style:italic;font-size:12px;">
-            🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
-        </div>`;
-    } else if (msg.type === 'ai') {
-        const superBadge = msg.usedSuper ? `<span class="ai-super-badge">✦ SUPER</span>` : '';
-        bubble = `<div class="bubble ai">
-            <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant${superBadge}</div>
-            ${renderAIText(msg.text)}
-        </div>`;
-    } else if (msg.type === 'ai-thinking') {
-        bubble = `<div class="bubble ai">
-            <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant</div>
-            <div class="ai-thinking"><div class="typing-dots"><span></span><span></span><span></span></div> Thinking…</div>
-        </div>`;
-    } else if (msg.type === 'image') {
-        const exp = expLabel(ts, 72);
-        bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
-            ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
-            <img class="msg-img" src="${esc(msg.imageUrl)}" loading="lazy"
-                onclick="openLB('${esc(msg.imageUrl)}')">
-            ${exp ? `<div class="img-exp">⏱ ${exp}</div>` : ''}
-        </div>`;
-    } else {
-        bubble = `<div class="bubble ${mine?'sent':'recv'}">
-            ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
-            ${renderMsgText(msg.text)}
-        </div>`;
-    }
+let bubble = '';
+if (msg.type === 'deleted') {
+    bubble = `<div class="bubble ${mine?'sent':'recv'}" style="opacity:0.45;font-style:italic;font-size:12px;">
+        🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
+    </div>`;
+} else if (msg.type === 'ai') {
+    const superBadge = msg.usedSuper ? `<span class="ai-super-badge">✦ SUPER</span>` : '';
+    bubble = `<div class="bubble ai">
+        <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant${superBadge}</div>
+        ${renderAIText(msg.text)}
+    </div>`;
+} else if (msg.type === 'ai-thinking') {
+    bubble = `<div class="bubble ai">
+        <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant</div>
+        <div class="ai-thinking"><div class="typing-dots"><span></span><span></span><span></span></div> Thinking…</div>
+    </div>`;
+} else if (msg.type === 'image') {
+    const exp = expLabel(ts, 72);
+    bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
+        ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
+        <img class="msg-img" src="${esc(msg.imageUrl)}" loading="lazy"
+            onclick="openLB('${esc(msg.imageUrl)}')">
+        ${exp ? `<div class="img-exp">⏱ ${exp}</div>` : ''}
+    </div>`;
+} else {
+    bubble = `<div class="bubble ${mine?'sent':'recv'}">
+        ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
+        ${renderMsgText(msg.text)}
+    </div>`;
+}
 
-    const showName = chatType==='group' && !mine && !same;
-    const senderIsSuper = msg.senderSuper === true;
-    const senderNameHTML = senderIsSuper
-        ? `<span class="msg-sender-name super-name">@${esc(msg.senderUsername||msg.senderName||'')} <span class="super-badge">✦ SUPER</span></span>`
-        : `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>`;
-    const sp   = (msg.storagePath||'').replace(/'/g,"\\'");
-    const pid  = (msg._path||'').replace(/'/g,"\\'");
-    const mid  = msg.id;
+const showName = chatType==='group' && !mine && !same;
+const senderIsSuper = msg.senderSuper === true;
+const senderNameHTML = senderIsSuper
+    ? `<span class="msg-sender-name super-name">@${esc(msg.senderUsername||msg.senderName||'')} <span class="super-badge">✦ SUPER</span></span>`
+    : `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>`;
+const sp   = (msg.storagePath||'').replace(/'/g,"\\'");
+const pid  = (msg._path||'').replace(/'/g,"\\'");
+const mid  = msg.id;
 
-    // Check if current user is group admin
-    const isGroupAdmin = chatType === 'group' && (() => {
-        const grp = myGroups.find(g => g.id === chatId);
-        return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
-    })();
+// Check if current user is group admin
+const isGroupAdmin = chatType === 'group' && (() => {
+    const grp = myGroups.find(g => g.id === chatId);
+    return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
+})();
 
-    const isAIMsg = msg.type === 'ai' || msg.type === 'ai-thinking';
+const isAIMsg = msg.type === 'ai' || msg.type === 'ai-thinking';
 
-    const actionBtn = (msg.type === 'deleted' || isAIMsg) ? '' : (mine
-        ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
-        : isGroupAdmin
-            ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
-            : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
+const actionBtn = (msg.type === 'deleted' || isAIMsg) ? '' : (mine
+    ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
+    : isGroupAdmin
+        ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
+        : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
 
-    const replySnip = msg.type === 'image' ? '[Image]' : (msg.text||'').slice(0,60);
-    const replyBtn  = isAIMsg ? '' : `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
-    const emojiTrigger = isAIMsg ? '' : `<button class="emoji-trigger" onclick="openEmojiPicker(event,'${mid}','${pid}')">😊</button>`;
+const replySnip = msg.type === 'image' ? '[Image]' : (msg.text||'').slice(0,60);
+const replyBtn  = isAIMsg ? '' : `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
+const emojiTrigger = isAIMsg ? '' : `<button class="emoji-trigger" onclick="openEmojiPicker(event,'${mid}','${pid}')">😊</button>`;
 
-    // Reactions
-    const reactions = msg.reactions || {};
-    let reactHTML = '';
-    if (!isAIMsg) {
-        const grouped = {};
-        Object.entries(reactions).forEach(([uid, emoji]) => {
-            if (!grouped[emoji]) grouped[emoji] = [];
-            grouped[emoji].push(uid);
-        });
-        const chips = Object.entries(grouped).map(([emoji, uids]) => {
-            const iMine = uids.includes(me.uid);
-            return `<span class="reaction-chip${iMine?' mine':''}" onclick="toggleReaction('${mid}','${pid}','${emoji}')">${emoji} <span class="reaction-count">${uids.length}</span></span>`;
-        }).join('');
-        if (chips) reactHTML = `<div class="reactions-row">${chips}</div>`;
-    }
+// Reactions
+const reactions = msg.reactions || {};
+let reactHTML = '';
+if (!isAIMsg) {
+    const grouped = {};
+    Object.entries(reactions).forEach(([uid, emoji]) => {
+        if (!grouped[emoji]) grouped[emoji] = [];
+        grouped[emoji].push(uid);
+    });
+    const chips = Object.entries(grouped).map(([emoji, uids]) => {
+        const iMine = uids.includes(me.uid);
+        return `<span class="reaction-chip${iMine?' mine':''}" onclick="toggleReaction('${mid}','${pid}','${emoji}')">${emoji} <span class="reaction-count">${uids.length}</span></span>`;
+    }).join('');
+    if (chips) reactHTML = `<div class="reactions-row">${chips}</div>`;
+}
 
-    row.innerHTML = `${avPart}
-        <div class="bwrap">
-            <div style="display:flex;align-items:flex-start;gap:4px;${mine?'flex-direction:row-reverse;':''}">
-                ${bubble}
-                ${emojiTrigger}
-            </div>
-            ${reactHTML}
-            <div class="msg-meta">
-                ${showName ? senderNameHTML : ''}
-                ${!same ? `<span class="msg-time">${fmtTime(ts)}</span>` : ''}
-                ${replyBtn}
-                ${actionBtn}
-            </div>
-        </div>`;
+row.innerHTML = `${avPart}
+    <div class="bwrap">
+        <div style="display:flex;align-items:flex-start;gap:4px;${mine?'flex-direction:row-reverse;':''}">
+            ${bubble}
+            ${emojiTrigger}
+        </div>
+        ${reactHTML}
+        <div class="msg-meta">
+            ${showName ? senderNameHTML : ''}
+            ${!same ? `<span class="msg-time">${fmtTime(ts)}</span>` : ''}
+            ${replyBtn}
+            ${actionBtn}
+        </div>
+    </div>`;
 
-    area.appendChild(row);
+area.appendChild(row);
 });
 
 area.scrollTop = area.scrollHeight;
@@ -3003,8 +3114,8 @@ document.getElementById('replyBar').classList.remove('on');
 
 function renderQuote(rt, isSent) {
 return `<div class="reply-quote" onclick="">
-    <div class="reply-quote-who">↩ ${esc(rt.who)}</div>
-    <div class="reply-quote-txt">${esc(rt.snippet)}</div>
+<div class="reply-quote-who">↩ ${esc(rt.who)}</div>
+<div class="reply-quote-txt">${esc(rt.snippet)}</div>
 </div>`;
 }
 
@@ -3026,7 +3137,7 @@ await pushMsg({ type:'text', text, ...(rt ? { replyTo: rt } : {}) });
 
 // Trigger AI if @AI is mentioned in a group chat
 if (chatType === 'group' && /@AI\b/i.test(text)) {
-    triggerAIResponse(text);
+triggerAIResponse(text);
 }
 }
 
@@ -3043,8 +3154,8 @@ fd.append('file',          fileOrBlob);
 fd.append('upload_preset', CLOUDINARY_PRESET);
 
 const res = await fetch(
-    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${resourceType}/upload`,
-    { method: 'POST', body: fd, signal: uploadAbortController.signal }
+`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/${resourceType}/upload`,
+{ method: 'POST', body: fd, signal: uploadAbortController.signal }
 );
 uploadAbortController = null;
 if (!res.ok) throw new Error(`Cloudinary ${res.status}: ${await res.text()}`);
@@ -3085,15 +3196,15 @@ if (!await checkSend('image','')) return;
 
 document.getElementById('upInd').classList.add('on');
 try {
-    const { url, publicId } = await uploadToCloudinary(file);
-    const rt = replyTo ? { ...replyTo } : null;
-    clearReply();
-    await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
+const { url, publicId } = await uploadToCloudinary(file);
+const rt = replyTo ? { ...replyTo } : null;
+clearReply();
+await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
 } catch(e) {
-    if (e?.name === 'AbortError') showToast('Upload cancelled.');
-    else { showToast('Upload failed: ' + e.message); console.error('handleImg:', e); }
+if (e?.name === 'AbortError') showToast('Upload cancelled.');
+else { showToast('Upload failed: ' + e.message); console.error('handleImg:', e); }
 } finally {
-    document.getElementById('upInd').classList.remove('on');
+document.getElementById('upInd').classList.remove('on');
 }
 }
 
@@ -3109,23 +3220,23 @@ const deleteAt = new Date(now.getTime() + delHrs * 3600000);
 const isSuper = superCache[me.uid] === true;
 
 const summary = {
-    lastAt:             SV(),
-    lastSenderUid:      me.uid,
-    lastSenderUsername: myUsername || me.displayName || '',
-    lastText:           extra.type === 'image' ? '' : (extra.text || ''),
-    lastType:           extra.type || 'text'
+lastAt:             SV(),
+lastSenderUid:      me.uid,
+lastSenderUsername: myUsername || me.displayName || '',
+lastText:           extra.type === 'image' ? '' : (extra.text || ''),
+lastType:           extra.type || 'text'
 };
 
 await db.doc(parentPath).set(summary, { merge: true });
 await db.collection(msgPath).add({
-    senderUid:      me.uid,
-    senderName:     me.displayName || me.email,
-    senderUsername: myUsername,
-    senderPhoto:    me.photoURL || null,
-    senderSuper:    isSuper,
-    timestamp:      SV(),
-    deleteAt:       TS.fromDate(deleteAt),
-    ...extra
+senderUid:      me.uid,
+senderName:     me.displayName || me.email,
+senderUsername: myUsername,
+senderPhoto:    me.photoURL || null,
+senderSuper:    isSuper,
+timestamp:      SV(),
+deleteAt:       TS.fromDate(deleteAt),
+...extra
 });
 
 // Fire-and-forget — never block message send on this
@@ -3136,20 +3247,20 @@ incrementWeeklyCount();
 async function delMsg(msgId, msgPath, _storagePath, isAdminDel = false) {
 if (!confirm(isAdminDel ? 'Delete this message as admin?' : 'Delete this message?')) return;
 try {
-    if (isAdminDel) {
-        // Replace with deleted placeholder instead of removing entirely
-        await db.collection(msgPath).doc(msgId).update({
-            text:        '',
-            type:        'deleted',
-            deletedBy:   me.uid,
-            deletedByUsername: myUsername || me.displayName,
-            deletedAt:   SV()
-        });
-    } else {
-        await db.collection(msgPath).doc(msgId).delete();
-    }
+if (isAdminDel) {
+    // Replace with deleted placeholder instead of removing entirely
+    await db.collection(msgPath).doc(msgId).update({
+        text:        '',
+        type:        'deleted',
+        deletedBy:   me.uid,
+        deletedByUsername: myUsername || me.displayName,
+        deletedAt:   SV()
+    });
+} else {
+    await db.collection(msgPath).doc(msgId).delete();
+}
 } catch(e) {
-    showToast('Could not delete message.');
+showToast('Could not delete message.');
 }
 }
 
@@ -3158,21 +3269,21 @@ try {
 // The first time it runs, your browser console will show a link to create it.
 async function runCleanup(msgPath) {
 try {
-    const now  = TS.now();
-    const snap = await db.collection(msgPath).where('deleteAt','<',now).get();
-    if (snap.empty) return;
-    const batch = db.batch();
-    const dels  = [];
-    snap.docs.forEach(doc => {
-        batch.delete(doc.ref);
-        const sp = doc.data().storagePath;
-        if (sp) dels.push(storage.ref(sp).delete().catch(()=>{}));
-    });
-    await batch.commit();
-    await Promise.all(dels);
+const now  = TS.now();
+const snap = await db.collection(msgPath).where('deleteAt','<',now).get();
+if (snap.empty) return;
+const batch = db.batch();
+const dels  = [];
+snap.docs.forEach(doc => {
+    batch.delete(doc.ref);
+    const sp = doc.data().storagePath;
+    if (sp) dels.push(storage.ref(sp).delete().catch(()=>{}));
+});
+await batch.commit();
+await Promise.all(dels);
 } catch(e) {
-    // Usually just means the index hasn't been created yet
-    console.warn('Cleanup skipped (may need Firestore index on deleteAt):', e.message);
+// Usually just means the index hasn't been created yet
+console.warn('Cleanup skipped (may need Firestore index on deleteAt):', e.message);
 }
 }
 
@@ -3185,38 +3296,38 @@ const snap = await getCachedUserDoc(me.uid);
 const dat  = snap.data() || {};
 const dbTO = dat.timeoutUntil?.toDate?.();
 if (dbTO && dbTO > new Date()) {
-    const s = Math.ceil((dbTO - new Date()) / 1000);
-    showToBanner(`🤐 Timed out for swearing — ${s}s remaining.`, dbTO);
-    return false;
+const s = Math.ceil((dbTO - new Date()) / 1000);
+showToBanner(`🤐 Timed out for swearing — ${s}s remaining.`, dbTO);
+return false;
 }
 
 // 2. Local spam timeout
 if (localTOUntil && localTOUntil > new Date()) {
-    const s = Math.ceil((localTOUntil - new Date()) / 1000);
-    showToBanner(`⚡ Slow down! ${s}s remaining.`, localTOUntil);
-    return false;
+const s = Math.ceil((localTOUntil - new Date()) / 1000);
+showToBanner(`⚡ Slow down! ${s}s remaining.`, localTOUntil);
+return false;
 }
 
 // 3. Spam rate (>25 per 60s)
 const now = Date.now();
 spamTs = spamTs.filter(t => now-t < 60000);
 if (spamTs.length >= 25) {
-    localTOUntil = new Date(now + 60000);
-    spamTs = [];
-    showToBanner('⚡ Sending too fast! Timed out for 1 minute.', localTOUntil);
-    return false;
+localTOUntil = new Date(now + 60000);
+spamTs = [];
+showToBanner('⚡ Sending too fast! Timed out for 1 minute.', localTOUntil);
+return false;
 }
 spamTs.push(now);
 
 // 4. Swear filter
 if (type==='text' && SWEAR.test(text)) {
-    const until = new Date(Date.now() + 5*60000);
-    invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
-        timeoutUntil:  TS.fromDate(until),
-        timeoutReason: 'swearing'
-    });
-    showToBanner('🤐 Watch the language! Timed out for 5 minutes.', until);
-    return false;
+const until = new Date(Date.now() + 5*60000);
+invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
+    timeoutUntil:  TS.fromDate(until),
+    timeoutReason: 'swearing'
+});
+showToBanner('🤐 Watch the language! Timed out for 5 minutes.', until);
+return false;
 }
 
 clearToBanner();
@@ -3229,10 +3340,10 @@ b.classList.remove('hidden');
 if (toInterval) clearInterval(toInterval);
 
 function tick() {
-    const s = Math.ceil((until - new Date()) / 1000);
-    if (s <= 0) { clearToBanner(); return; }
-    const disp = msg.replace(/\d+s remaining/, s+'s remaining').replace(/\d+s left/, s+'s left');
-    document.getElementById('toMsg').textContent = disp;
+const s = Math.ceil((until - new Date()) / 1000);
+if (s <= 0) { clearToBanner(); return; }
+const disp = msg.replace(/\d+s remaining/, s+'s remaining').replace(/\d+s left/, s+'s left');
+document.getElementById('toMsg').textContent = disp;
 }
 tick();
 toInterval = setInterval(tick, 1000);
@@ -3252,12 +3363,12 @@ const title   = document.getElementById('chatName').textContent;
 
 let out = `NorMSG — Chat History\nConversation: ${title}\nExported: ${new Date().toLocaleString()}\n${'─'.repeat(52)}\n\n`;
 snap.docs.forEach(doc => {
-    const d  = doc.data();
-    const ts = d.timestamp?.toDate?.() || new Date();
-    const dt = ts.toLocaleDateString() + ' ' + fmtTime(ts);
-    const who = d.senderUsername ? '@'+d.senderUsername : (d.senderName||'?');
-    if (d.type==='image') out += `[${dt}] ${who}: [Image] ${d.imageUrl}\n`;
-    else                  out += `[${dt}] ${who}: ${d.text}\n`;
+const d  = doc.data();
+const ts = d.timestamp?.toDate?.() || new Date();
+const dt = ts.toLocaleDateString() + ' ' + fmtTime(ts);
+const who = d.senderUsername ? '@'+d.senderUsername : (d.senderName||'?');
+if (d.type==='image') out += `[${dt}] ${who}: [Image] ${d.imageUrl}\n`;
+else                  out += `[${dt}] ${who}: ${d.text}\n`;
 });
 
 const blob = new Blob([out], {type:'text/plain'});
@@ -3292,7 +3403,7 @@ s.add(msgId);
 saveHiddenMsgs(s);
 // Re-render without re-fetching
 document.querySelectorAll('.msg-row').forEach(row => {
-    // Find and remove the row containing this message
+// Find and remove the row containing this message
 });
 // Easiest: just trigger a full re-render via the existing snapshot
 // The snapshot listener will re-fire if we force it, but simpler:
@@ -3300,8 +3411,8 @@ document.querySelectorAll('.msg-row').forEach(row => {
 showToast('Message hidden for you.');
 // Force re-render by re-subscribing
 if (chatId) {
-    const path = chatType==='dm' ? `conversations/${chatId}/messages` : `groups/${chatId}/messages`;
-    subMessages(path);
+const path = chatType==='dm' ? `conversations/${chatId}/messages` : `groups/${chatId}/messages`;
+subMessages(path);
 }
 }
 
@@ -3319,37 +3430,37 @@ ac.style.display = 'none';
 // ── LEAVE CHAT ─────────────────────────────────────────────
 async function leaveChat() {
 if (chatType === 'dm') {
-    if (!confirm('Hide this conversation on your side?')) return;
-    hideDM(chatId);
+if (!confirm('Hide this conversation on your side?')) return;
+hideDM(chatId);
 } else if (chatType === 'group') {
-    if (!confirm('Leave this group? You will be removed from the member list.')) return;
-    try {
-        const gRef  = db.collection('groups').doc(chatId);
-        const gSnap = await gRef.get();
-        const members = (gSnap.data()?.members || []).filter(uid => uid !== me.uid);
+if (!confirm('Leave this group? You will be removed from the member list.')) return;
+try {
+    const gRef  = db.collection('groups').doc(chatId);
+    const gSnap = await gRef.get();
+    const members = (gSnap.data()?.members || []).filter(uid => uid !== me.uid);
 
-        if (members.length === 0) {
-            // Last person — delete the whole group and messages
-            const msgs  = await db.collection(`groups/${chatId}/messages`).get();
-            const batch = db.batch();
-            const storeDels = [];
-            msgs.docs.forEach(doc => {
-                batch.delete(doc.ref);
-                const sp = doc.data().storagePath;
-                if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
-            });
-            batch.delete(gRef);
-            await batch.commit();
-            await Promise.all(storeDels);
-            showToast('Group deleted (you were the last member).');
-        } else {
-            await gRef.update({ members: firebase.firestore.FieldValue.arrayRemove(me.uid) });
-            showToast('You left the group.');
-        }
-        closeChat();
-    } catch(e) {
-        showToast('Could not leave group: ' + e.message);
+    if (members.length === 0) {
+        // Last person — delete the whole group and messages
+        const msgs  = await db.collection(`groups/${chatId}/messages`).get();
+        const batch = db.batch();
+        const storeDels = [];
+        msgs.docs.forEach(doc => {
+            batch.delete(doc.ref);
+            const sp = doc.data().storagePath;
+            if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
+        });
+        batch.delete(gRef);
+        await batch.commit();
+        await Promise.all(storeDels);
+        showToast('Group deleted (you were the last member).');
+    } else {
+        await gRef.update({ members: firebase.firestore.FieldValue.arrayRemove(me.uid) });
+        showToast('You left the group.');
     }
+    closeChat();
+} catch(e) {
+    showToast('Could not leave group: ' + e.message);
+}
 }
 }
 
@@ -3358,17 +3469,17 @@ async function openProfileModal() {
 // Pre-fill current avatar
 const av = document.getElementById('profAvPreview');
 if (me.photoURL) {
-    av.innerHTML = `<img src="${me.photoURL}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+av.innerHTML = `<img src="${me.photoURL}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
 } else {
-    av.innerHTML = initials(me.displayName||me.email);
+av.innerHTML = initials(me.displayName||me.email);
 }
 
 // Show pfp usage count
 const snap = await getCachedUserDoc(me.uid);
 const dat  = snap.data() || {};
 const pfpLog = (dat.pfpChanges || []).filter(ts => {
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    return (Date.now() - d) < 7 * 86400000;
+const d = ts.toDate ? ts.toDate() : new Date(ts);
+return (Date.now() - d) < 7 * 86400000;
 });
 document.getElementById('pfpCountLabel').textContent = `${pfpLog.length} / 3 photo changes this week`;
 document.getElementById('pfpMsg').className = 'm-msg';
@@ -3392,40 +3503,40 @@ if (!file) return;
 const snap   = await getCachedUserDoc(me.uid);
 const dat    = snap.data() || {};
 const pfpLog = (dat.pfpChanges || []).filter(ts => {
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    return (Date.now() - d) < 7 * 86400000;
+const d = ts.toDate ? ts.toDate() : new Date(ts);
+return (Date.now() - d) < 7 * 86400000;
 });
 if (pfpLog.length >= 3) {
-    return mmsg('pfpMsg', '⚠ You\'ve used all 3 photo changes this week. Try again next week or reset to initials.', 'err');
+return mmsg('pfpMsg', '⚠ You\'ve used all 3 photo changes this week. Try again next week or reset to initials.', 'err');
 }
 
 if (file.size > 4 * 1024 * 1024) return mmsg('pfpMsg', 'Image must be under 4 MB.', 'err');
 mmsg('pfpMsg', '⟳ Uploading…', 'inf');
 
 try {
-    const { url } = await uploadToCloudinary(file);
+const { url } = await uploadToCloudinary(file);
 
-    // Update auth profile
-    await me.updateProfile({ photoURL: url });
+// Update auth profile
+await me.updateProfile({ photoURL: url });
 
-    // Update Firestore
-    invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
-        photoURL:   url,
-        pfpChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
-    });
+// Update Firestore
+invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
+    photoURL:   url,
+    pfpChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
+});
 
-    // Refresh local state
-    const avMain = document.getElementById('myAv');
-    avMain.innerHTML = `<img src="${url}" alt="">`;
-    const avPrev = document.getElementById('profAvPreview');
-    avPrev.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+// Refresh local state
+const avMain = document.getElementById('myAv');
+avMain.innerHTML = `<img src="${url}" alt="">`;
+const avPrev = document.getElementById('profAvPreview');
+avPrev.innerHTML = `<img src="${url}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
 
-    const newCount = pfpLog.length + 1;
-    document.getElementById('pfpCountLabel').textContent = `${newCount} / 3 photo changes this week`;
-    mmsg('pfpMsg', '✓ Profile photo updated!', 'ok');
-    showToast('Profile photo updated! 📷');
+const newCount = pfpLog.length + 1;
+document.getElementById('pfpCountLabel').textContent = `${newCount} / 3 photo changes this week`;
+mmsg('pfpMsg', '✓ Profile photo updated!', 'ok');
+showToast('Profile photo updated! 📷');
 } catch(e) {
-    mmsg('pfpMsg', 'Upload failed: ' + e.message, 'err');
+mmsg('pfpMsg', 'Upload failed: ' + e.message, 'err');
 }
 }
 
@@ -3483,25 +3594,25 @@ if (newName === me.displayName) return mmsg('displayNameMsg', 'That\'s already y
 const snap  = await getCachedUserDoc(me.uid);
 const dat   = snap.data() || {};
 const nameLog = (dat.nameChanges || []).filter(ts => {
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    return (Date.now() - d) < 7 * 86400000;
+const d = ts.toDate ? ts.toDate() : new Date(ts);
+return (Date.now() - d) < 7 * 86400000;
 });
 if (nameLog.length >= 2) {
-    return mmsg('displayNameMsg', '⚠ You\'ve used both name changes this week. Try again next week.', 'err');
+return mmsg('displayNameMsg', '⚠ You\'ve used both name changes this week. Try again next week.', 'err');
 }
 
 mmsg('displayNameMsg', 'Saving…', 'inf');
 try {
-    await me.updateProfile({ displayName: newName });
-    invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
-        displayName: newName,
-        nameChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
-    });
-    document.getElementById('myName').textContent = newName;
-    mmsg('displayNameMsg', `✓ Name changed to "${newName}"! (${nameLog.length+1}/2 this week)`, 'ok');
-    showToast('Display name updated! ✓');
+await me.updateProfile({ displayName: newName });
+invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
+    displayName: newName,
+    nameChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
+});
+document.getElementById('myName').textContent = newName;
+mmsg('displayNameMsg', `✓ Name changed to "${newName}"! (${nameLog.length+1}/2 this week)`, 'ok');
+showToast('Display name updated! ✓');
 } catch(e) {
-    mmsg('displayNameMsg', 'Failed: ' + e.message, 'err');
+mmsg('displayNameMsg', 'Failed: ' + e.message, 'err');
 }
 }
 
@@ -3519,17 +3630,17 @@ document.getElementById('delGroupModal').classList.remove('hidden');
 
 let secsLeft = 15; // 15 seconds
 function tick() {
-    if (secsLeft <= 0) {
-        clearInterval(delGroupTimer);
-        document.getElementById('delCountdown').textContent = '0';
-        document.getElementById('delCountSub').textContent  = 'You can now confirm the deletion.';
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = 'auto';
-        return;
-    }
-    document.getElementById('delCountdown').textContent = secsLeft;
-    document.getElementById('delCountSub').textContent  = 'Please wait before you can confirm…';
-    secsLeft--;
+if (secsLeft <= 0) {
+    clearInterval(delGroupTimer);
+    document.getElementById('delCountdown').textContent = '0';
+    document.getElementById('delCountSub').textContent  = 'You can now confirm the deletion.';
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+    return;
+}
+document.getElementById('delCountdown').textContent = secsLeft;
+document.getElementById('delCountSub').textContent  = 'Please wait before you can confirm…';
+secsLeft--;
 }
 tick();
 delGroupTimer = setInterval(tick, 1000);
@@ -3546,30 +3657,30 @@ if (!delGroupTarget) return;
 mmsg('delGrpMsg', '⟳ Deleting group…', 'inf');
 
 try {
-    const gid = delGroupTarget.id;
+const gid = delGroupTarget.id;
 
-    // Delete all messages in sub-collection
-    const msgs = await db.collection(`groups/${gid}/messages`).get();
-    const batch = db.batch();
-    const storeDels = [];
-    msgs.docs.forEach(doc => {
-        batch.delete(doc.ref);
-        const sp = doc.data().storagePath;
-        if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
-    });
-    await batch.commit();
-    await Promise.all(storeDels);
+// Delete all messages in sub-collection
+const msgs = await db.collection(`groups/${gid}/messages`).get();
+const batch = db.batch();
+const storeDels = [];
+msgs.docs.forEach(doc => {
+    batch.delete(doc.ref);
+    const sp = doc.data().storagePath;
+    if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
+});
+await batch.commit();
+await Promise.all(storeDels);
 
-    // Delete group doc
-    await db.collection('groups').doc(gid).delete();
+// Delete group doc
+await db.collection('groups').doc(gid).delete();
 
-    if (delGroupTimer) { clearInterval(delGroupTimer); delGroupTimer = null; }
-    closeModal('delGroupModal');
-    if (chatId === gid) closeChat();
-    showToast('Group deleted.');
-    delGroupTarget = null;
+if (delGroupTimer) { clearInterval(delGroupTimer); delGroupTimer = null; }
+closeModal('delGroupModal');
+if (chatId === gid) closeChat();
+showToast('Group deleted.');
+delGroupTarget = null;
 } catch(e) {
-    mmsg('delGrpMsg', 'Delete failed: ' + e.message, 'err');
+mmsg('delGrpMsg', 'Delete failed: ' + e.message, 'err');
 }
 }
 
@@ -3620,24 +3731,24 @@ const box = document.getElementById('suggestBox');
 if (!val || val.length < 2) { box.style.display = 'none'; return; }
 clearTimeout(suggestTimer);
 suggestTimer = setTimeout(async () => {
-    try {
-        const snap = await db.collection('users')
-            .where('username','>=', val)
-            .where('username','<',  val + '\uf8ff')
-            .limit(6).get();
-        const results = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
-            .filter(u => u.uid !== me.uid && u.username);
-        if (!results.length) { box.style.display = 'none'; return; }
-        box.innerHTML = '';
-        results.forEach(u => {
-            const it = ce('div');
-            it.className = 'suggest-item';
-            it.innerHTML = `${mkAv(u.displayName||'?', u.photoURL||null, 28)}<div><div class="suggest-name">${esc(u.displayName||u.username)}</div><div class="suggest-handle">@${esc(u.username)}</div></div>`;
-            it.onmousedown = (e) => { e.preventDefault(); document.getElementById('addIn').value = u.username; box.style.display = 'none'; };
-            box.appendChild(it);
-        });
-        box.style.display = 'block';
-    } catch(e) { box.style.display = 'none'; }
+try {
+    const snap = await db.collection('users')
+        .where('username','>=', val)
+        .where('username','<',  val + '\uf8ff')
+        .limit(6).get();
+    const results = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+        .filter(u => u.uid !== me.uid && u.username);
+    if (!results.length) { box.style.display = 'none'; return; }
+    box.innerHTML = '';
+    results.forEach(u => {
+        const it = ce('div');
+        it.className = 'suggest-item';
+        it.innerHTML = `${mkAv(u.displayName||'?', u.photoURL||null, 28)}<div><div class="suggest-name">${esc(u.displayName||u.username)}</div><div class="suggest-handle">@${esc(u.username)}</div></div>`;
+        it.onmousedown = (e) => { e.preventDefault(); document.getElementById('addIn').value = u.username; box.style.display = 'none'; };
+        box.appendChild(it);
+    });
+    box.style.display = 'block';
+} catch(e) { box.style.display = 'none'; }
 }, 280);
 }
 
@@ -3697,16 +3808,16 @@ const isSent = btn.closest('.msg-row')?.classList.contains('sent');
 const picker = ce('div');
 picker.className = 'emoji-picker';
 EMOJIS.forEach(em => {
-    const sp = ce('span'); sp.className = 'ep-emoji'; sp.textContent = em;
-    sp.onclick = (e) => { e.stopPropagation(); toggleReaction(msgId, msgPath, em); picker.remove(); activePicker = null; };
-    picker.appendChild(sp);
+const sp = ce('span'); sp.className = 'ep-emoji'; sp.textContent = em;
+sp.onclick = (e) => { e.stopPropagation(); toggleReaction(msgId, msgPath, em); picker.remove(); activePicker = null; };
+picker.appendChild(sp);
 });
 picker.style.cssText = `position:absolute;bottom:calc(100% + 6px);${isSent?'right':'left'}:0;z-index:200;`;
 bwrap.style.position = 'relative';
 bwrap.appendChild(picker);
 activePicker = picker;
 setTimeout(() => {
-    document.addEventListener('click', function cls() { picker.remove(); activePicker = null; document.removeEventListener('click', cls); }, { once: true });
+document.addEventListener('click', function cls() { picker.remove(); activePicker = null; document.removeEventListener('click', cls); }, { once: true });
 }, 0);
 }
 
@@ -3725,15 +3836,15 @@ function handlePaste(event) {
 const items = event.clipboardData?.items;
 if (!items) return;
 for (const item of items) {
-    if (item.type.startsWith('image/')) {
-        event.preventDefault();
-        const file = item.getAsFile();
-        if (!file) return;
-        pastedFile = file;
-        document.getElementById('pasteThumb').src = URL.createObjectURL(file);
-        document.getElementById('pastePreview').classList.add('on');
-        return;
-    }
+if (item.type.startsWith('image/')) {
+    event.preventDefault();
+    const file = item.getAsFile();
+    if (!file) return;
+    pastedFile = file;
+    document.getElementById('pasteThumb').src = URL.createObjectURL(file);
+    document.getElementById('pastePreview').classList.add('on');
+    return;
+}
 }
 }
 
@@ -3744,13 +3855,13 @@ clearPaste();
 if (!await checkSend('image','')) return;
 document.getElementById('upInd').classList.add('on');
 try {
-    const { url, publicId } = await uploadToCloudinary(f);
-    const rt = replyTo ? { ...replyTo } : null;
-    clearReply();
-    await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
+const { url, publicId } = await uploadToCloudinary(f);
+const rt = replyTo ? { ...replyTo } : null;
+clearReply();
+await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
 } catch(e) {
-    if (e?.name === 'AbortError') showToast('Upload cancelled.');
-    else { showToast('Upload failed: ' + e.message); console.error('paste upload:', e); }
+if (e?.name === 'AbortError') showToast('Upload cancelled.');
+else { showToast('Upload failed: ' + e.message); console.error('paste upload:', e); }
 } finally { document.getElementById('upInd').classList.remove('on'); }
 }
 
@@ -3779,8 +3890,8 @@ return n.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2);
 function mkAv(name, photo, sz=34) {
 const s = `width:${sz}px;height:${sz}px;font-size:${Math.round(sz*.37)}px;flex-shrink:0;`;
 return photo
-    ? `<div class="av" style="${s}"><img src="${photo}" alt=""></div>`
-    : `<div class="av" style="${s}">${initials(name)}</div>`;
+? `<div class="av" style="${s}"><img src="${photo}" alt=""></div>`
+: `<div class="av" style="${s}">${initials(name)}</div>`;
 }
 
 function esc(s) {
@@ -3826,8 +3937,8 @@ let presenceTimer   = null;
 function setPresence(online) {
 if (!me) return;
 db.collection('users').doc(me.uid).update({
-    online:   online,
-    lastSeen: SV()
+online:   online,
+lastSeen: SV()
 }).catch(() => {});
 }
 
@@ -3835,27 +3946,27 @@ function subscribePresence() {
 if (document.hidden) return;
 // Watch all friends' presence
 friends.forEach(f => {
-    if (presenceUnsubs[f.uid]) return;
-    presenceUnsubs[f.uid] = db.collection('users').doc(f.uid)
-        .onSnapshot(snap => {
-            const d = snap.data() || {};
-            const ls = d.lastSeen?.toDate?.() || new Date(0);
-            const isOnline = d.online === true && (Date.now() - ls) < 3 * 60000;
-            friendPresence[f.uid] = { online: isOnline, lastSeen: ls };
-            renderFriends();
-            // Update chat header if this is the open DM
-            if (chatType === 'dm' && chatId === dmId(me.uid, f.uid)) {
-                updateChatSubStatus(isOnline, ls);
-            }
-        });
+if (presenceUnsubs[f.uid]) return;
+presenceUnsubs[f.uid] = db.collection('users').doc(f.uid)
+    .onSnapshot(snap => {
+        const d = snap.data() || {};
+        const ls = d.lastSeen?.toDate?.() || new Date(0);
+        const isOnline = d.online === true && (Date.now() - ls) < 3 * 60000;
+        friendPresence[f.uid] = { online: isOnline, lastSeen: ls };
+        renderFriends();
+        // Update chat header if this is the open DM
+        if (chatType === 'dm' && chatId === dmId(me.uid, f.uid)) {
+            updateChatSubStatus(isOnline, ls);
+        }
+    });
 });
 // Unsub from removed friends
 Object.keys(presenceUnsubs).forEach(uid => {
-    if (!friends.find(f => f.uid === uid)) {
-        presenceUnsubs[uid]();
-        delete presenceUnsubs[uid];
-        delete friendPresence[uid];
-    }
+if (!friends.find(f => f.uid === uid)) {
+    presenceUnsubs[uid]();
+    delete presenceUnsubs[uid];
+    delete friendPresence[uid];
+}
 });
 }
 
@@ -3870,10 +3981,10 @@ if (!el || chatType !== 'dm') return;
 const friend = friends.find(f => dmId(me.uid, f.uid) === chatId);
 if (!friend) return;
 if (isOnline) {
-    el.innerHTML = `<span class="ch-online">● Online</span>`;
+el.innerHTML = `<span class="ch-online">● Online</span>`;
 } else {
-    const ago = timeAgo(lastSeen);
-    el.textContent = ago ? `Last seen ${ago}` : `@${friend.username||''}`;
+const ago = timeAgo(lastSeen);
+el.textContent = ago ? `Last seen ${ago}` : `@${friend.username||''}`;
 }
 }
 
@@ -3894,20 +4005,20 @@ let isTyping     = false;
 function startTypingWatch(convPath) {
 if (typingUnsub) { typingUnsub(); typingUnsub = null; }
 typingUnsub = db.doc(convPath).onSnapshot(snap => {
-    const typing = snap.data()?.typing || {};
-    const now    = Date.now();
-    const others = Object.entries(typing)
-        .filter(([uid, ts]) => uid !== me.uid && ts && (now - ts.toDate().getTime()) < 5000)
-        .map(([uid]) => {
-            const f = friends.find(x => x.uid === uid);
-            return f ? (getNicknames()[uid] || f.displayName || f.username) : 'Someone';
-        });
-    const bar = document.getElementById('typingBar');
-    if (others.length) {
-        bar.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div> ${esc(others.join(', '))} ${others.length===1?'is':'are'} typing…`;
-    } else {
-        bar.innerHTML = '';
-    }
+const typing = snap.data()?.typing || {};
+const now    = Date.now();
+const others = Object.entries(typing)
+    .filter(([uid, ts]) => uid !== me.uid && ts && (now - ts.toDate().getTime()) < 5000)
+    .map(([uid]) => {
+        const f = friends.find(x => x.uid === uid);
+        return f ? (getNicknames()[uid] || f.displayName || f.username) : 'Someone';
+    });
+const bar = document.getElementById('typingBar');
+if (others.length) {
+    bar.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div> ${esc(others.join(', '))} ${others.length===1?'is':'are'} typing…`;
+} else {
+    bar.innerHTML = '';
+}
 });
 }
 
@@ -3916,14 +4027,14 @@ if (!chatId || !me) return;
 const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
 // Set typing
 if (!isTyping) {
-    isTyping = true;
-    db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
+isTyping = true;
+db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
 }
 // Reset timer to clear typing after 3s idle
 clearTimeout(typingTimer);
 typingTimer = setTimeout(() => {
-    isTyping = false;
-    db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
+isTyping = false;
+db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
 }, 3000);
 }
 
@@ -3939,22 +4050,22 @@ db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.de
 async function unfriend(friendUid) {
 if (!confirm('Remove this friend? This will hide your DM conversation too.')) return;
 try {
-    // Find and delete the friendRequest doc
-    const q1 = await db.collection('friendRequests')
-        .where('fromUid','==', me.uid).where('toUid','==', friendUid).limit(1).get();
-    const q2 = await db.collection('friendRequests')
-        .where('fromUid','==', friendUid).where('toUid','==', me.uid).limit(1).get();
-    const batch = db.batch();
-    [...q1.docs, ...q2.docs].forEach(d => batch.delete(d.ref));
-    await batch.commit();
+// Find and delete the friendRequest doc
+const q1 = await db.collection('friendRequests')
+    .where('fromUid','==', me.uid).where('toUid','==', friendUid).limit(1).get();
+const q2 = await db.collection('friendRequests')
+    .where('fromUid','==', friendUid).where('toUid','==', me.uid).limit(1).get();
+const batch = db.batch();
+[...q1.docs, ...q2.docs].forEach(d => batch.delete(d.ref));
+await batch.commit();
 
-    // Also hide DM if open
-    const cid = dmId(me.uid, friendUid);
-    const hidden = getHiddenDMs(); hidden.add(cid); saveHiddenDMs(hidden);
-    if (chatId === cid) closeChat();
-    showToast('Friend removed.');
+// Also hide DM if open
+const cid = dmId(me.uid, friendUid);
+const hidden = getHiddenDMs(); hidden.add(cid); saveHiddenDMs(hidden);
+if (chatId === cid) closeChat();
+showToast('Friend removed.');
 } catch(e) {
-    showToast('Could not remove friend: ' + e.message);
+showToast('Could not remove friend: ' + e.message);
 }
 }
 
@@ -3987,11 +4098,11 @@ mmsg('addMemberMsg','','');
 // Show add-perm toggle for owners only
 const permRow = document.getElementById('addPermRow');
 if (isOwner) {
-    permRow.style.display = 'flex';
-    document.getElementById('addPermDesc').textContent = adminOnly ? 'Admins only can add' : 'Everyone can add';
-    document.getElementById('addPermBtn').textContent  = adminOnly ? 'Allow Everyone' : 'Admin Only';
+permRow.style.display = 'flex';
+document.getElementById('addPermDesc').textContent = adminOnly ? 'Admins only can add' : 'Everyone can add';
+document.getElementById('addPermBtn').textContent  = adminOnly ? 'Allow Everyone' : 'Admin Only';
 } else {
-    permRow.style.display = 'none';
+permRow.style.display = 'none';
 }
 
 // Build member list — batch fetch
@@ -4004,30 +4115,30 @@ const owner      = gdata.createdBy;
 
 const profiles = {};
 for (let i = 0; i < memberUids.length; i += 10) {
-    const chunk = memberUids.slice(i, i+10);
-    if (!chunk.length) continue;
-    const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
-    s.docs.forEach(d => { profiles[d.id] = d.data(); });
+const chunk = memberUids.slice(i, i+10);
+if (!chunk.length) continue;
+const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
+s.docs.forEach(d => { profiles[d.id] = d.data(); });
 }
 
 el.innerHTML = '';
 for (const uid of memberUids) {
-    const udata       = profiles[uid] || {};
-    const isThisOwner = uid === owner;
-    const isThisAdmin = admins.includes(uid) || isThisOwner;
-    const isMe        = uid === me.uid;
+const udata       = profiles[uid] || {};
+const isThisOwner = uid === owner;
+const isThisAdmin = admins.includes(uid) || isThisOwner;
+const isMe        = uid === me.uid;
 
-    const row = ce('div');
-    row.className = 'admin-row';
-    row.innerHTML = `
-        ${mkAv(udata.displayName||'?', udata.photoURL||null, 28)}
-        <div class="admin-info">
-            <div class="admin-name">${esc(udata.displayName||udata.username||'?')}</div>
-            <div class="admin-tag">@${esc(udata.username||'')}</div>
-        </div>
-        ${isThisOwner ? `<span class="owner-badge">Owner</span>` : isThisAdmin ? `<span class="admin-badge">Admin</span>` : ''}
-        ${isOwner && !isThisOwner && !isMe ? `<button class="btn-toggle-admin" onclick="toggleAdmin('${uid}',${isThisAdmin})">${isThisAdmin ? 'Remove Admin' : 'Make Admin'}</button>` : ''}`;
-    el.appendChild(row);
+const row = ce('div');
+row.className = 'admin-row';
+row.innerHTML = `
+    ${mkAv(udata.displayName||'?', udata.photoURL||null, 28)}
+    <div class="admin-info">
+        <div class="admin-name">${esc(udata.displayName||udata.username||'?')}</div>
+        <div class="admin-tag">@${esc(udata.username||'')}</div>
+    </div>
+    ${isThisOwner ? `<span class="owner-badge">Owner</span>` : isThisAdmin ? `<span class="admin-badge">Admin</span>` : ''}
+    ${isOwner && !isThisOwner && !isMe ? `<button class="btn-toggle-admin" onclick="toggleAdmin('${uid}',${isThisAdmin})">${isThisAdmin ? 'Remove Admin' : 'Make Admin'}</button>` : ''}`;
+el.appendChild(row);
 }
 
 document.getElementById('manageGroupModal').classList.remove('hidden');
@@ -4053,15 +4164,15 @@ renderGroups();
 async function toggleAdmin(uid, currentlyAdmin) {
 if (!manageGroupId) return;
 if (currentlyAdmin) {
-    await db.collection('groups').doc(manageGroupId).update({
-        admins: firebase.firestore.FieldValue.arrayRemove(uid)
-    });
-    showToast('Admin removed.');
+await db.collection('groups').doc(manageGroupId).update({
+    admins: firebase.firestore.FieldValue.arrayRemove(uid)
+});
+showToast('Admin removed.');
 } else {
-    await db.collection('groups').doc(manageGroupId).update({
-        admins: firebase.firestore.FieldValue.arrayUnion(uid)
-    });
-    showToast('Admin added! ⭐');
+await db.collection('groups').doc(manageGroupId).update({
+    admins: firebase.firestore.FieldValue.arrayUnion(uid)
+});
+showToast('Admin added! ⭐');
 }
 openManageGroup(); // refresh list
 }
@@ -4104,17 +4215,17 @@ const cIdx   = before.lastIndexOf(':');
 const box    = document.getElementById('emojiSearchBox');
 
 if (cIdx !== -1) {
-    const afterColon = before.slice(cIdx + 1);
-    // Only activate if no space after the colon
-    if (!afterColon.includes(' ') && afterColon.length > 0) {
-        colonStart    = cIdx;
-        esearchActive = true;
-        const q = afterColon.toLowerCase();
-        document.getElementById('esearchIn').value = q;
-        searchEmoji(q);
-        box.style.display = 'block';
-        return;
-    }
+const afterColon = before.slice(cIdx + 1);
+// Only activate if no space after the colon
+if (!afterColon.includes(' ') && afterColon.length > 0) {
+    colonStart    = cIdx;
+    esearchActive = true;
+    const q = afterColon.toLowerCase();
+    document.getElementById('esearchIn').value = q;
+    searchEmoji(q);
+    box.style.display = 'block';
+    return;
+}
 }
 // Close if not active
 colonStart    = -1;
@@ -4125,21 +4236,21 @@ box.style.display = 'none';
 function searchEmoji(q) {
 const res     = document.getElementById('esearchResults');
 const matches = q
-    ? ALL_EMOJI.filter(([, name]) => name.includes(q.toLowerCase())).slice(0, 36)
-    : ALL_EMOJI.slice(0, 36);
+? ALL_EMOJI.filter(([, name]) => name.includes(q.toLowerCase())).slice(0, 36)
+: ALL_EMOJI.slice(0, 36);
 
 res.innerHTML = '';
 if (!matches.length) {
-    res.innerHTML = `<span style="font-size:11px;color:var(--muted);padding:4px;">No match</span>`;
-    return;
+res.innerHTML = `<span style="font-size:11px;color:var(--muted);padding:4px;">No match</span>`;
+return;
 }
 matches.forEach(([em]) => {
-    const sp = ce('span');
-    sp.className   = 'esearch-item';
-    sp.textContent = em;
-    sp.title       = em;
-    sp.onmousedown = (e) => { e.preventDefault(); insertEmoji(em); };
-    res.appendChild(sp);
+const sp = ce('span');
+sp.className   = 'esearch-item';
+sp.textContent = em;
+sp.title       = em;
+sp.onmousedown = (e) => { e.preventDefault(); insertEmoji(em); };
+res.appendChild(sp);
 });
 }
 
@@ -4160,33 +4271,33 @@ autoGrow(inp);
 function onEsearchKey(e) {
 // Let Enter/Tab select first result; Escape closes
 if (e.key === 'Escape') {
-    document.getElementById('emojiSearchBox').style.display = 'none';
-    esearchActive = false;
-    document.getElementById('msgInput').focus();
+document.getElementById('emojiSearchBox').style.display = 'none';
+esearchActive = false;
+document.getElementById('msgInput').focus();
 }
 }
 
 // Close emoji box on outside click
 document.addEventListener('click', (e) => {
 if (!e.target.closest('#emojiSearchBox') && !e.target.closest('#msgInput')) {
-    const box = document.getElementById('emojiSearchBox');
-    if (box) { box.style.display = 'none'; esearchActive = false; colonStart = -1; }
+const box = document.getElementById('emojiSearchBox');
+if (box) { box.style.display = 'none'; esearchActive = false; colonStart = -1; }
 }
 });
 
 // ── NOTIFICATION SETTINGS ──────────────────────────────────
 function getNotifSettings() {
 try {
-    const stored = JSON.parse(localStorage.getItem('normsg_notif') || 'null');
-    return {
-        push:      false,
-        inApp:     true,
-        sound:     true,
-        tabBadge:  true,
-        groupAll:  true,   // notify for ALL group messages by default
-        mentions:  true,   // always notify for @mentions by default
-        ...stored
-    };
+const stored = JSON.parse(localStorage.getItem('normsg_notif') || 'null');
+return {
+    push:      false,
+    inApp:     true,
+    sound:     true,
+    tabBadge:  true,
+    groupAll:  true,   // notify for ALL group messages by default
+    mentions:  true,   // always notify for @mentions by default
+    ...stored
+};
 } catch { return { push: false, inApp: true, sound: true, tabBadge: true, groupAll: true, mentions: true }; }
 }
 
@@ -4211,31 +4322,31 @@ const pushOn = document.getElementById('settingPush').checked;
 
 // If push just turned on, request browser permission
 if (pushOn) {
-    if (Notification.permission === 'denied') {
+if (Notification.permission === 'denied') {
+    document.getElementById('settingPush').checked = false;
+    mmsg('settingsMsg', '⚠ Notifications are blocked in your browser. Go to browser Settings → Site Settings → Notifications and allow NorMSG.', 'err');
+    return;
+}
+if (Notification.permission !== 'granted') {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
         document.getElementById('settingPush').checked = false;
-        mmsg('settingsMsg', '⚠ Notifications are blocked in your browser. Go to browser Settings → Site Settings → Notifications and allow NorMSG.', 'err');
+        mmsg('settingsMsg', '⚠ Permission denied. You can change this in your browser\'s site settings.', 'err');
         return;
     }
-    if (Notification.permission !== 'granted') {
-        const perm = await Notification.requestPermission();
-        if (perm !== 'granted') {
-            document.getElementById('settingPush').checked = false;
-            mmsg('settingsMsg', '⚠ Permission denied. You can change this in your browser\'s site settings.', 'err');
-            return;
-        }
-    }
-    mmsg('settingsMsg', '✓ Push notifications enabled!', 'ok');
+}
+mmsg('settingsMsg', '✓ Push notifications enabled!', 'ok');
 } else {
-    mmsg('settingsMsg','','');
+mmsg('settingsMsg','','');
 }
 
 saveNotifSettings({
-    push:     document.getElementById('settingPush').checked,
-    inApp:    document.getElementById('settingInApp').checked,
-    sound:    document.getElementById('settingSound').checked,
-    tabBadge: document.getElementById('settingTabBadge').checked,
-    groupAll: document.getElementById('settingGroupAll').checked,
-    mentions: document.getElementById('settingMentions').checked
+push:     document.getElementById('settingPush').checked,
+inApp:    document.getElementById('settingInApp').checked,
+sound:    document.getElementById('settingSound').checked,
+tabBadge: document.getElementById('settingTabBadge').checked,
+groupAll: document.getElementById('settingGroupAll').checked,
+mentions: document.getElementById('settingMentions').checked
 });
 }
 
@@ -4249,7 +4360,7 @@ let audioCtx = null;
 // Initialise AudioContext on first user interaction so sound is never blocked
 function ensureAudio() {
 if (!audioCtx) {
-    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
 }
 if (audioCtx?.state === 'suspended') audioCtx.resume().catch(()=>{});
 }
@@ -4258,18 +4369,18 @@ document.addEventListener('keydown', ensureAudio, { once: true });
 
 function playPing(freq = 880) {
 try {
-    ensureAudio();
-    if (!audioCtx || audioCtx.state !== 'running') return;
-    const osc  = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.connect(gain);
-    gain.connect(audioCtx.destination);
-    osc.type            = 'sine';
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
-    osc.start(audioCtx.currentTime);
-    osc.stop(audioCtx.currentTime + 0.35);
+ensureAudio();
+if (!audioCtx || audioCtx.state !== 'running') return;
+const osc  = audioCtx.createOscillator();
+const gain = audioCtx.createGain();
+osc.connect(gain);
+gain.connect(audioCtx.destination);
+osc.type            = 'sine';
+osc.frequency.value = freq;
+gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+osc.start(audioCtx.currentTime);
+osc.stop(audioCtx.currentTime + 0.35);
 } catch(e) {}
 }
 
@@ -4283,7 +4394,7 @@ const isGroup    = (convType || chatType) === 'group';
 
 // Is this message a @mention of me?
 const isMention = !!(msg.text && myUsername &&
-    new RegExp('@' + myUsername + '\\b', 'i').test(msg.text));
+new RegExp('@' + myUsername + '\\b', 'i').test(msg.text));
 
 // DMs always notify. Groups: notify if groupAll is on, OR if it's a @mention and mentions is on.
 const shouldNotify = !isGroup || s.groupAll || (isMention && s.mentions);
@@ -4291,35 +4402,35 @@ if (!shouldNotify) return;
 
 // Sound — higher pitch for mentions. AudioCtx created lazily on first user gesture.
 if (s.sound) {
-    if (isMention) playPing(1200);
-    else if (tabVisible) playPing(880);
+if (isMention) playPing(1200);
+else if (tabVisible) playPing(880);
 }
 
 // Tab badge
 if (s.tabBadge) {
-    unreadCount++;
-    document.title = `${isMention ? '🔔 ' : ''}(${unreadCount}) NorMSG`;
+unreadCount++;
+document.title = `${isMention ? '🔔 ' : ''}(${unreadCount}) NorMSG`;
 }
 
 // In-app banner — tab is visible
 if (s.inApp && tabVisible) {
-    showInAppNotif(senderName, body, displayName, isMention);
-    return;
+showInAppNotif(senderName, body, displayName, isMention);
+return;
 }
 
 // Push notification — tab hidden/closed
 if (s.push && !tabVisible && Notification.permission === 'granted') {
-    const title = isMention
-        ? `🔔 ${senderName} mentioned you in ${displayName}`
-        : `${senderName} in ${displayName}`;
-    const n = new Notification(title, {
-        body:     body || '(image)',
-        icon:     NOTIF_ICON,
-        badge:    NOTIF_ICON,
-        tag:      isMention ? `mention-${displayName}` : displayName,
-        renotify: true
-    });
-    n.onclick = () => { window.focus(); n.close(); };
+const title = isMention
+    ? `🔔 ${senderName} mentioned you in ${displayName}`
+    : `${senderName} in ${displayName}`;
+const n = new Notification(title, {
+    body:     body || '(image)',
+    icon:     NOTIF_ICON,
+    badge:    NOTIF_ICON,
+    tag:      isMention ? `mention-${displayName}` : displayName,
+    renotify: true
+});
+n.onclick = () => { window.focus(); n.close(); };
 }
 }
 
@@ -4329,37 +4440,37 @@ let inAppTimer = null;
 function showInAppNotif(sender, body, convName, isMention = false) {
 let banner = document.getElementById('inAppBanner');
 if (!banner) {
-    banner = document.createElement('div');
-    banner.id = 'inAppBanner';
-    if (!document.getElementById('inAppKF')) {
-        const s = document.createElement('style');
-        s.id = 'inAppKF';
-        s.textContent = `@keyframes slideIn { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }`;
-        document.head.appendChild(s);
-    }
-    banner.onclick = () => { banner.remove(); if (inAppTimer) clearTimeout(inAppTimer); };
-    document.body.appendChild(banner);
+banner = document.createElement('div');
+banner.id = 'inAppBanner';
+if (!document.getElementById('inAppKF')) {
+    const s = document.createElement('style');
+    s.id = 'inAppKF';
+    s.textContent = `@keyframes slideIn { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }`;
+    document.head.appendChild(s);
+}
+banner.onclick = () => { banner.remove(); if (inAppTimer) clearTimeout(inAppTimer); };
+document.body.appendChild(banner);
 }
 
 const borderColor = isMention ? 'var(--teal)' : 'var(--border2)';
 banner.style.cssText = `
-    position:fixed; top:18px; right:18px; z-index:9999;
-    background:var(--panel); border:1px solid ${borderColor};
-    border-left: 3px solid ${borderColor};
-    border-radius:16px; padding:11px 16px; max-width:310px;
-    box-shadow:0 12px 40px rgba(0,0,0,0.6);
-    display:flex; align-items:center; gap:10px;
-    animation: slideIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
-    cursor:pointer;
+position:fixed; top:18px; right:18px; z-index:9999;
+background:var(--panel); border:1px solid ${borderColor};
+border-left: 3px solid ${borderColor};
+border-radius:16px; padding:11px 16px; max-width:310px;
+box-shadow:0 12px 40px rgba(0,0,0,0.6);
+display:flex; align-items:center; gap:10px;
+animation: slideIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+cursor:pointer;
 `;
 
 banner.innerHTML = `
-    <img src="${NOTIF_ICON}" style="width:32px;height:32px;border-radius:8px;flex-shrink:0;" onerror="this.style.display='none'">
-    <div style="min-width:0;flex:1;">
-        <div style="font-size:12px;font-weight:700;color:${isMention?'var(--teal)':'var(--text)'};margin-bottom:2px;">${esc(sender)} · ${esc(convName)}</div>
-        <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(body)}</div>
-    </div>
-    <button onclick="event.stopPropagation();document.getElementById('inAppBanner')?.remove();" style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;padding:0 2px;">✕</button>
+<img src="${NOTIF_ICON}" style="width:32px;height:32px;border-radius:8px;flex-shrink:0;" onerror="this.style.display='none'">
+<div style="min-width:0;flex:1;">
+    <div style="font-size:12px;font-weight:700;color:${isMention?'var(--teal)':'var(--text)'};margin-bottom:2px;">${esc(sender)} · ${esc(convName)}</div>
+    <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(body)}</div>
+</div>
+<button onclick="event.stopPropagation();document.getElementById('inAppBanner')?.remove();" style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;padding:0 2px;">✕</button>
 `;
 
 if (inAppTimer) clearTimeout(inAppTimer);
@@ -4369,17 +4480,17 @@ inAppTimer = setTimeout(() => { banner?.remove(); }, isMention ? 8000 : 5000);
 // ── CLEAR TAB BADGE when tab becomes visible ───────────────
 document.addEventListener('visibilitychange', () => {
 if (!document.hidden && unreadCount > 0) {
-    unreadCount = 0;
-    document.title = 'NorMSG';
+unreadCount = 0;
+document.title = 'NorMSG';
 }
 if (document.hidden) {
-    pausePresenceSubscriptions();
+pausePresenceSubscriptions();
 } else if (me) {
-    subscribePresence();
-    renderFriends();
+subscribePresence();
+renderFriends();
 }
 if (!document.hidden && currentSidebarTab === 'dms') {
-    scheduleStatusesRefresh();
+scheduleStatusesRefresh();
 }
 });
 
@@ -4402,45 +4513,45 @@ const friendKey = getFriendUidsKey();
 const shouldSkipForTab = currentSidebarTab !== 'dms' && !force;
 const isFreshCache = (nowMs - statusLastLoadedAt) < 45000 && friendKey === statusLastFriendKey;
 if (shouldSkipForTab || (!force && isFreshCache)) {
-    return;
+return;
 }
 if (statusLoadInFlight) return statusLoadInFlight;
 
 statusLoadInFlight = (async () => {
-    try {
-    const now  = new Date();
-    const uids = [me.uid, ...friends.map(f => f.uid)];
-    allStatuses = {};
+try {
+const now  = new Date();
+const uids = [me.uid, ...friends.map(f => f.uid)];
+allStatuses = {};
 
-    // Simple per-uid query — no orderBy so no composite index needed
-    await Promise.all(uids.map(async uid => {
-        try {
-            const snap = await db.collection('statuses')
-                .where('uid', '==', uid)
-                .limit(20)
-                .get();
-            const active = snap.docs
-                .map(d => ({ id: d.id, ...d.data() }))
-                .filter(s => {
-                    const del = s.deleteAt?.toDate?.();
-                    return del && del > now;
-                })
-                .sort((a, b) => {
-                    const ta = a.createdAt?.toDate?.()?.getTime() || 0;
-                    const tb = b.createdAt?.toDate?.()?.getTime() || 0;
-                    return ta - tb;
-                });
-            if (active.length) allStatuses[uid] = active;
-        } catch(e) {
-            console.warn('Status fetch failed for', uid, e.message);
-        }
-    }));
-    statusLastLoadedAt = Date.now();
-    statusLastFriendKey = friendKey;
+// Simple per-uid query — no orderBy so no composite index needed
+await Promise.all(uids.map(async uid => {
+    try {
+        const snap = await db.collection('statuses')
+            .where('uid', '==', uid)
+            .limit(20)
+            .get();
+        const active = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .filter(s => {
+                const del = s.deleteAt?.toDate?.();
+                return del && del > now;
+            })
+            .sort((a, b) => {
+                const ta = a.createdAt?.toDate?.()?.getTime() || 0;
+                const tb = b.createdAt?.toDate?.()?.getTime() || 0;
+                return ta - tb;
+            });
+        if (active.length) allStatuses[uid] = active;
+    } catch(e) {
+        console.warn('Status fetch failed for', uid, e.message);
+    }
+}));
+statusLastLoadedAt = Date.now();
+statusLastFriendKey = friendKey;
 } catch(e) {
-    console.warn('loadStatuses error:', e.message);
+console.warn('loadStatuses error:', e.message);
 } finally {
-    statusLoadInFlight = null;
+statusLoadInFlight = null;
 }
 })();
 await statusLoadInFlight;
@@ -4459,11 +4570,11 @@ row.appendChild(buildStatusBubble(me.uid, me.displayName || 'You', me.photoURL, 
 
 // Show ALL friends — even those without statuses yet (greyed out)
 friends.forEach(f => {
-    const sts    = allStatuses[f.uid] || [];
-    const allSeen = sts.length > 0 && sts.every(s => myViewed.has(s.id));
-    // Only show bubble if they have statuses; skip empty friends to keep bar clean
-    if (!sts.length) return;
-    row.appendChild(buildStatusBubble(f.uid, f.displayName || f.username, f.photoURL, true, allSeen, false));
+const sts    = allStatuses[f.uid] || [];
+const allSeen = sts.length > 0 && sts.every(s => myViewed.has(s.id));
+// Only show bubble if they have statuses; skip empty friends to keep bar clean
+if (!sts.length) return;
+row.appendChild(buildStatusBubble(f.uid, f.displayName || f.username, f.photoURL, true, allSeen, false));
 });
 }
 
@@ -4474,25 +4585,25 @@ ring.className = 'status-ring' + (allSeen ? ' seen' : '') + (isMe ? ' mine' : ''
 
 const inner = ce('div'); inner.className = 'status-ring-inner';
 if (photoURL) {
-    inner.innerHTML = `<img src="${esc(photoURL)}" alt="">`;
+inner.innerHTML = `<img src="${esc(photoURL)}" alt="">`;
 } else {
-    inner.textContent = initials(name);
-    inner.style.cssText += 'font-family:Syne,sans-serif;font-weight:700;font-size:14px;color:white;';
+inner.textContent = initials(name);
+inner.style.cssText += 'font-family:Syne,sans-serif;font-weight:700;font-size:14px;color:white;';
 }
 ring.appendChild(inner);
 
 if (isMe) {
-    const plus = ce('div'); plus.className = 'status-add-btn'; plus.textContent = '+';
-    ring.appendChild(plus);
+const plus = ce('div'); plus.className = 'status-add-btn'; plus.textContent = '+';
+ring.appendChild(plus);
 }
 
 const label = ce('div'); label.className = 'status-name'; label.textContent = isMe ? 'My Status' : name;
 
 wrap.onclick = () => {
-    if (isMe && !hasStatus) { openAddStatus(); return; }
-    const sts = allStatuses[uid];
-    if (!sts?.length) { openAddStatus(); return; }
-    openStatusViewer(uid, name, photoURL, sts);
+if (isMe && !hasStatus) { openAddStatus(); return; }
+const sts = allStatuses[uid];
+if (!sts?.length) { openAddStatus(); return; }
+openStatusViewer(uid, name, photoURL, sts);
 };
 
 wrap.appendChild(ring);
@@ -4525,18 +4636,18 @@ const isOwner = statusCurrentUser.uid === me.uid;
 let delBtn = document.getElementById('svDeleteBtn');
 let addBtn = document.getElementById('svAddBtn');
 if (!delBtn) {
-    delBtn = ce('button');
-    delBtn.id = 'svDeleteBtn';
-    delBtn.style.cssText = 'background:rgba(244,63,94,0.2);border:1px solid rgba(244,63,94,0.4);color:#f43f5e;border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:auto;';
-    delBtn.textContent = '🗑 Delete';
-    document.getElementById('svHeader').appendChild(delBtn);
+delBtn = ce('button');
+delBtn.id = 'svDeleteBtn';
+delBtn.style.cssText = 'background:rgba(244,63,94,0.2);border:1px solid rgba(244,63,94,0.4);color:#f43f5e;border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:auto;';
+delBtn.textContent = '🗑 Delete';
+document.getElementById('svHeader').appendChild(delBtn);
 }
 if (!addBtn) {
-    addBtn = ce('button');
-    addBtn.id = 'svAddBtn';
-    addBtn.style.cssText = 'background:rgba(124,92,252,0.2);border:1px solid rgba(124,92,252,0.4);color:var(--a2);border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:4px;';
-    addBtn.textContent = '+ Add';
-    document.getElementById('svHeader').appendChild(addBtn);
+addBtn = ce('button');
+addBtn.id = 'svAddBtn';
+addBtn.style.cssText = 'background:rgba(124,92,252,0.2);border:1px solid rgba(124,92,252,0.4);color:var(--a2);border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:4px;';
+addBtn.textContent = '+ Add';
+document.getElementById('svHeader').appendChild(addBtn);
 }
 delBtn.style.display = isOwner ? 'inline-block' : 'none';
 addBtn.style.display = isOwner ? 'inline-block' : 'none';
@@ -4548,10 +4659,10 @@ addBtn.onclick = () => { closeStatusViewer(); openAddStatus(); };
 const prog = document.getElementById('svProgress');
 prog.innerHTML = '';
 statuses.forEach((_, i) => {
-    const seg = ce('div'); seg.className = 'sv-seg';
-    const fill = ce('div'); fill.className = 'sv-seg-fill';
-    if (i < statusCurrentIndex) fill.style.width = '100%';
-    seg.appendChild(fill); prog.appendChild(seg);
+const seg = ce('div'); seg.className = 'sv-seg';
+const fill = ce('div'); fill.className = 'sv-seg-fill';
+if (i < statusCurrentIndex) fill.style.width = '100%';
+seg.appendChild(fill); prog.appendChild(seg);
 });
 
 // Content
@@ -4560,31 +4671,31 @@ const cont = document.getElementById('svContent');
 cont.querySelectorAll('img,video,.sv-text-card').forEach(el => el.remove());
 
 if (s.type === 'text') {
-    cont.style.background = s.bgColor || '#1e293b';
-    const card = ce('div'); card.className = 'sv-text-card'; card.textContent = s.content;
-    cont.insertBefore(card, cont.firstChild);
+cont.style.background = s.bgColor || '#1e293b';
+const card = ce('div'); card.className = 'sv-text-card'; card.textContent = s.content;
+cont.insertBefore(card, cont.firstChild);
 } else if (s.type === 'photo') {
-    cont.style.background = '#000';
-    const img = ce('img'); img.src = s.url; img.style.maxWidth='100%'; img.style.maxHeight='100%';
-    cont.insertBefore(img, cont.firstChild);
+cont.style.background = '#000';
+const img = ce('img'); img.src = s.url; img.style.maxWidth='100%'; img.style.maxHeight='100%';
+cont.insertBefore(img, cont.firstChild);
 } else if (s.type === 'video') {
-    cont.style.background = '#000';
-    const vid = ce('video'); vid.src = s.url; vid.controls = true; vid.autoplay = true;
-    vid.style.maxWidth='100%'; vid.style.maxHeight='100%';
-    cont.insertBefore(vid, cont.firstChild);
+cont.style.background = '#000';
+const vid = ce('video'); vid.src = s.url; vid.controls = true; vid.autoplay = true;
+vid.style.maxWidth='100%'; vid.style.maxHeight='100%';
+cont.insertBefore(vid, cont.firstChild);
 }
 
 // Views (mine only)
 const viewsEl = document.getElementById('svViews');
 if (statusCurrentUser.uid === me.uid && s.views) {
-    const count = Object.keys(s.views).length;
-    viewsEl.innerHTML = `👁 ${count} view${count !== 1 ? 's' : ''}`;
+const count = Object.keys(s.views).length;
+viewsEl.innerHTML = `👁 ${count} view${count !== 1 ? 's' : ''}`;
 } else { viewsEl.innerHTML = ''; }
 
 // Mark viewed
 markStatusViewed(s.id);
 if (statusCurrentUser.uid !== me.uid) {
-    db.collection('statuses').doc(s.id).update({ [`views.${me.uid}`]: SV() }).catch(()=>{});
+db.collection('statuses').doc(s.id).update({ [`views.${me.uid}`]: SV() }).catch(()=>{});
 }
 
 // Auto advance progress
@@ -4592,8 +4703,8 @@ if (statusProgressTimer) clearTimeout(statusProgressTimer);
 const duration = s.type === 'video' ? 30000 : 5000;
 const fillEl = prog.children[statusCurrentIndex]?.querySelector('.sv-seg-fill');
 if (fillEl) {
-    fillEl.style.transition = `width ${duration}ms linear`;
-    fillEl.style.width = '100%';
+fillEl.style.transition = `width ${duration}ms linear`;
+fillEl.style.width = '100%';
 }
 statusProgressTimer = setTimeout(() => svNext(), duration);
 }
@@ -4601,42 +4712,42 @@ statusProgressTimer = setTimeout(() => svNext(), duration);
 function svNext() {
 if (!statusCurrentUser) return;
 if (statusCurrentIndex < statusCurrentUser.statuses.length - 1) {
-    statusCurrentIndex++;
-    renderStatusViewerItem();
+statusCurrentIndex++;
+renderStatusViewerItem();
 } else {
-    closeStatusViewer();
+closeStatusViewer();
 }
 }
 
 function svPrev() {
 if (!statusCurrentUser) return;
 if (statusCurrentIndex > 0) {
-    statusCurrentIndex--;
-    renderStatusViewerItem();
+statusCurrentIndex--;
+renderStatusViewerItem();
 }
 }
 
 async function deleteStatus(statusId) {
 if (!confirm('Delete this status?')) return;
 try {
-    await db.collection('statuses').doc(statusId).delete();
-    showToast('Status deleted.');
-    // Remove from local cache
-    if (allStatuses[me.uid]) {
-        allStatuses[me.uid] = allStatuses[me.uid].filter(s => s.id !== statusId);
+await db.collection('statuses').doc(statusId).delete();
+showToast('Status deleted.');
+// Remove from local cache
+if (allStatuses[me.uid]) {
+    allStatuses[me.uid] = allStatuses[me.uid].filter(s => s.id !== statusId);
+}
+// If there are more statuses, advance; otherwise close
+if (statusCurrentUser?.statuses) {
+    statusCurrentUser.statuses = statusCurrentUser.statuses.filter(s => s.id !== statusId);
+    if (statusCurrentUser.statuses.length > 0) {
+        statusCurrentIndex = Math.min(statusCurrentIndex, statusCurrentUser.statuses.length - 1);
+        renderStatusViewerItem();
+    } else {
+        closeStatusViewer();
     }
-    // If there are more statuses, advance; otherwise close
-    if (statusCurrentUser?.statuses) {
-        statusCurrentUser.statuses = statusCurrentUser.statuses.filter(s => s.id !== statusId);
-        if (statusCurrentUser.statuses.length > 0) {
-            statusCurrentIndex = Math.min(statusCurrentIndex, statusCurrentUser.statuses.length - 1);
-            renderStatusViewerItem();
-        } else {
-            closeStatusViewer();
-        }
-    }
+}
 } catch(e) {
-    showToast('Could not delete: ' + e.message);
+showToast('Could not delete: ' + e.message);
 }
 }
 
@@ -4671,15 +4782,15 @@ mmsg('stMsg','','');
 const sw = document.getElementById('stSwatches');
 sw.innerHTML = '';
 STATUS_COLORS.forEach((c, i) => {
-    const s = ce('div'); s.className = 'swatch' + (i===0?' on':'');
-    s.style.background = c;
-    s.onclick = () => {
-        stSelectedColor = c;
-        sw.querySelectorAll('.swatch').forEach(el => el.classList.remove('on'));
-        s.classList.add('on');
-        document.getElementById('stPreview').style.background = c;
-    };
-    sw.appendChild(s);
+const s = ce('div'); s.className = 'swatch' + (i===0?' on':'');
+s.style.background = c;
+s.onclick = () => {
+    stSelectedColor = c;
+    sw.querySelectorAll('.swatch').forEach(el => el.classList.remove('on'));
+    s.classList.add('on');
+    document.getElementById('stPreview').style.background = c;
+};
+sw.appendChild(s);
 });
 stSelectedColor = STATUS_COLORS[0];
 document.getElementById('stPreview').style.background = STATUS_COLORS[0];
@@ -4700,7 +4811,7 @@ updateTypeButtons();
 
 function updateTypeButtons() {
 ['text','photo','video'].forEach(t => {
-    document.getElementById('stType'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('on', t === stType);
+document.getElementById('stType'+t.charAt(0).toUpperCase()+t.slice(1)).classList.toggle('on', t === stType);
 });
 }
 
@@ -4717,9 +4828,9 @@ const img  = document.getElementById('stImgPreview');
 const vid  = document.getElementById('stVidPreview');
 const url  = URL.createObjectURL(file);
 if (file.type.startsWith('image/')) {
-    img.src = url; img.style.display = 'block'; vid.style.display = 'none';
+img.src = url; img.style.display = 'block'; vid.style.display = 'none';
 } else {
-    vid.src = url; vid.style.display = 'block'; img.style.display = 'none';
+vid.src = url; vid.style.display = 'block'; img.style.display = 'none';
 }
 wrap.classList.remove('hidden');
 document.getElementById('stMediaLabel').textContent = file.name;
@@ -4728,38 +4839,38 @@ document.getElementById('stMediaLabel').textContent = file.name;
 async function postStatus() {
 mmsg('stMsg','⟳ Posting…','inf');
 try {
-    const now      = new Date();
-    const deleteAt = new Date(now.getTime() + 24 * 3600000);
-    let statusData = {
-        uid:       me.uid,
-        displayName: me.displayName || me.email,
-        photoURL:  me.photoURL || null,
-        createdAt: SV(),
-        deleteAt:  TS.fromDate(deleteAt),
-        views:     {}
-    };
+const now      = new Date();
+const deleteAt = new Date(now.getTime() + 24 * 3600000);
+let statusData = {
+    uid:       me.uid,
+    displayName: me.displayName || me.email,
+    photoURL:  me.photoURL || null,
+    createdAt: SV(),
+    deleteAt:  TS.fromDate(deleteAt),
+    views:     {}
+};
 
-    if (stType === 'text') {
-        const txt = document.getElementById('stTextIn').value.trim();
-        if (!txt) return mmsg('stMsg','Enter some text.','err');
-        statusData = { ...statusData, type: 'text', content: txt, bgColor: stSelectedColor };
-    } else {
-        const file = document.getElementById('stMediaIn').files[0];
-        if (!file) return mmsg('stMsg','Select a file first.','err');
-        const maxSize = stType === 'video' ? 100 : 20;
-        if (file.size > maxSize * 1024 * 1024) return mmsg('stMsg', `File too large — max ${maxSize} MB.`, 'err');
-        const resType = stType === 'video' ? 'video' : 'image';
-        const { url } = await uploadToCloudinary(file, resType);
-        statusData = { ...statusData, type: stType, url };
-    }
+if (stType === 'text') {
+    const txt = document.getElementById('stTextIn').value.trim();
+    if (!txt) return mmsg('stMsg','Enter some text.','err');
+    statusData = { ...statusData, type: 'text', content: txt, bgColor: stSelectedColor };
+} else {
+    const file = document.getElementById('stMediaIn').files[0];
+    if (!file) return mmsg('stMsg','Select a file first.','err');
+    const maxSize = stType === 'video' ? 100 : 20;
+    if (file.size > maxSize * 1024 * 1024) return mmsg('stMsg', `File too large — max ${maxSize} MB.`, 'err');
+    const resType = stType === 'video' ? 'video' : 'image';
+    const { url } = await uploadToCloudinary(file, resType);
+    statusData = { ...statusData, type: stType, url };
+}
 
-    await db.collection('statuses').add(statusData);
-    closeModal('addStatusModal');
-    showToast('Status posted! ✨');
-    await loadStatuses({ force: true });
+await db.collection('statuses').add(statusData);
+closeModal('addStatusModal');
+showToast('Status posted! ✨');
+await loadStatuses({ force: true });
 } catch(e) {
-    mmsg('stMsg', 'Failed: ' + e.message, 'err');
-    console.error('postStatus:', e);
+mmsg('stMsg', 'Failed: ' + e.message, 'err');
+console.error('postStatus:', e);
 }
 }
 
@@ -4780,8 +4891,8 @@ if (!prompt) return;
 
 // Rate limit AI calls
 if (!checkAIRateLimit()) {
-    showToast('⚠ AI rate limit reached — please wait a moment.');
-    return;
+showToast('⚠ AI rate limit reached — please wait a moment.');
+return;
 }
 
 // Check if the sender has NorMSG Super (smarter model)
@@ -4790,57 +4901,57 @@ const model   = isSuper ? GROQ_MODEL_SUPER : GROQ_MODEL;
 
 // Post a "thinking" placeholder so everyone sees AI is working
 const thinkRef = await db.collection(msgPath).add({
-    type:          'ai-thinking',
-    text:          '',
-    senderUid:     'AI',
-    senderName:    'AI Assistant',
-    senderUsername:'AI',
-    senderPhoto:   null,
-    timestamp:     SV(),
-    deleteAt:      TS.fromDate(new Date(Date.now() + 7*24*3600000))
+type:          'ai-thinking',
+text:          '',
+senderUid:     'AI',
+senderName:    'AI Assistant',
+senderUsername:'AI',
+senderPhoto:   null,
+timestamp:     SV(),
+deleteAt:      TS.fromDate(new Date(Date.now() + 7*24*3600000))
 });
 
 // Fetch last 10 messages for context
 const ctxSnap = await db.collection(msgPath)
-    .orderBy('timestamp','desc').limit(10).get();
+.orderBy('timestamp','desc').limit(10).get();
 const history = ctxSnap.docs
-    .reverse()
-    .filter(d => d.id !== thinkRef.id && d.data().type === 'text')
-    .map(d => ({
-        role:    d.data().senderUid === 'AI' ? 'assistant' : 'user',
-        content: `${d.data().senderUsername || d.data().senderName || 'User'}: ${d.data().text}`
-    }));
+.reverse()
+.filter(d => d.id !== thinkRef.id && d.data().type === 'text')
+.map(d => ({
+    role:    d.data().senderUid === 'AI' ? 'assistant' : 'user',
+    content: `${d.data().senderUsername || d.data().senderName || 'User'}: ${d.data().text}`
+}));
 
 try {
-    // Build context string from history for the worker
-    const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content.split(':')[0]}: ${m.content.split(':').slice(1).join(':').trim()}`).join('\n');
-    const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown code blocks with the language specified. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
-    const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
+// Build context string from history for the worker
+const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content.split(':')[0]}: ${m.content.split(':').slice(1).join(':').trim()}`).join('\n');
+const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown code blocks with the language specified. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
+const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
 
-    const url = isSuper ? NORMAI_PRO_API : NORMAI_FREE_API;
-    const res = await fetch(url, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-            isSuper
-                ? { prompt: fullPrompt, context: prompt, mode: 'pro' }
-                : { prompt: fullPrompt + `\n\nUser: ${prompt}` }
-        )
-    });
+const url = isSuper ? NORMAI_PRO_API : NORMAI_FREE_API;
+const res = await fetch(url, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(
+        isSuper
+            ? { prompt: fullPrompt, context: prompt, mode: 'pro' }
+            : { prompt: fullPrompt + `\n\nUser: ${prompt}` }
+    )
+});
 
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err?.error?.message || `HTTP ${res.status}`);
-    }
+if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+}
 
-    const data   = await res.json();
-    const answer = data.reply ?? data.result ?? data.text ?? data.choices?.[0]?.message?.content ?? 'Sorry, I couldn\'t generate a response.';
+const data   = await res.json();
+const answer = data.reply ?? data.result ?? data.text ?? data.choices?.[0]?.message?.content ?? 'Sorry, I couldn\'t generate a response.';
 
-    await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper === true, timestamp: SV() });
+await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper === true, timestamp: SV() });
 
 } catch(e) {
-    await thinkRef.update({ type:'ai', text:`⚠ AI error: ${e.message}`, timestamp: SV() });
-    console.error('Groq error:', e);
+await thinkRef.update({ type:'ai', text:`⚠ AI error: ${e.message}`, timestamp: SV() });
+console.error('Groq error:', e);
 }
 }
 
@@ -4853,51 +4964,51 @@ let codeId  = 0;
 const parts = raw.split(/```(\w*)\n?([\s\S]*?)```/g);
 // parts: [text, lang, code, text, lang, code, ...]
 for (let i = 0; i < parts.length; i++) {
-    if (i % 3 === 0) {
-        // Plain text segment — escape and render inline code + line breaks
-        let seg = esc(parts[i]);
-        // Bold **text**
-        seg = seg.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        // Italic *text*
-        seg = seg.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        // Inline code `code`
-        seg = seg.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
-        // Line breaks
-        seg = seg.replace(/\n/g, '<br>');
-        html += seg;
-    } else if (i % 3 === 1) {
-        // Language label — captured by the next iteration
-    } else {
-        // Code block
-        const lang    = parts[i-1] || 'code';
-        const code    = parts[i];
-        const id      = `aicopy_${codeId++}`;
-        html += `<div class="ai-code-wrap">
-            <div class="ai-code-bar">
-                <span>${esc(lang)}</span>
-                <button class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
-            </div>
-            <pre>${esc(code)}</pre>
-        </div>`;
-    }
+if (i % 3 === 0) {
+    // Plain text segment — escape and render inline code + line breaks
+    let seg = esc(parts[i]);
+    // Bold **text**
+    seg = seg.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Italic *text*
+    seg = seg.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Inline code `code`
+    seg = seg.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
+    // Line breaks
+    seg = seg.replace(/\n/g, '<br>');
+    html += seg;
+} else if (i % 3 === 1) {
+    // Language label — captured by the next iteration
+} else {
+    // Code block
+    const lang    = parts[i-1] || 'code';
+    const code    = parts[i];
+    const id      = `aicopy_${codeId++}`;
+    html += `<div class="ai-code-wrap">
+        <div class="ai-code-bar">
+            <span>${esc(lang)}</span>
+            <button class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
+        </div>
+        <pre>${esc(code)}</pre>
+    </div>`;
+}
 }
 return html;
 }
 
 function copyAICode(btn, code) {
 navigator.clipboard.writeText(code).then(() => {
-    btn.textContent = '✓ Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+btn.textContent = '✓ Copied!';
+btn.classList.add('copied');
+setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
 }).catch(() => {
-    // Fallback for browsers without clipboard API
-    const ta = document.createElement('textarea');
-    ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    btn.textContent = '✓ Copied!';
-    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+// Fallback for browsers without clipboard API
+const ta = document.createElement('textarea');
+ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
+document.body.appendChild(ta); ta.select();
+document.execCommand('copy');
+document.body.removeChild(ta);
+btn.textContent = '✓ Copied!';
+setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
 });
 }
 
@@ -4914,21 +5025,21 @@ async function initAdminSystem() {
 // Check if current user is platform admin (owner or granted admin)
 const isOwner = me.email?.toLowerCase() === OWNER_EMAIL.toLowerCase();
 if (isOwner) {
-    isPlatformAdmin = true;
+isPlatformAdmin = true;
 } else {
-    const adminDoc = await db.collection('platformAdmins').doc(me.uid).get();
-    isPlatformAdmin = adminDoc.exists;
+const adminDoc = await db.collection('platformAdmins').doc(me.uid).get();
+isPlatformAdmin = adminDoc.exists;
 }
 // Platform admins always get Pro
 if (isPlatformAdmin) {
-    userPlan = 'pro';
-    updateNormAIBadge();
+userPlan = 'pro';
+updateNormAIBadge();
 }
 
 const adminBtn = document.getElementById('adminBtn');
 if (adminBtn) {
-    adminBtn.classList.toggle('non-admin', !isPlatformAdmin);
-    adminBtn.title = isPlatformAdmin ? 'Admin Panel' : 'Admin tools info';
+adminBtn.classList.toggle('non-admin', !isPlatformAdmin);
+adminBtn.title = isPlatformAdmin ? 'Admin Panel' : 'Admin tools info';
 }
 
 // Cache Super status for all friends for rendering
@@ -4940,8 +5051,8 @@ checkWeeklyLeaderboard();
 
 function handleAdminBtnClick() {
 if (isPlatformAdmin) {
-    openAdminPanel();
-    return;
+openAdminPanel();
+return;
 }
 showToast('Admin panel is for platform admins only. Ask an admin for access.');
 }
@@ -4949,14 +5060,14 @@ showToast('Admin panel is for platform admins only. Ask an admin for access.');
 async function hasSuper(uid) {
 const cacheFresh = (Date.now() - superLastLoadedAt) < 45000;
 if (cacheFresh && Object.prototype.hasOwnProperty.call(superCache, uid)) {
-    return superCache[uid] === true;
+return superCache[uid] === true;
 }
 try {
-    const snap = await db.collection('users').doc(uid).get();
-    const until = snap.data()?.normsgSuper?.until?.toDate?.();
-    const isActive = !!(until && until > new Date());
-    superCache[uid] = isActive;
-    return isActive;
+const snap = await db.collection('users').doc(uid).get();
+const until = snap.data()?.normsgSuper?.until?.toDate?.();
+const isActive = !!(until && until > new Date());
+superCache[uid] = isActive;
+return isActive;
 } catch { return false; }
 }
 
@@ -4966,44 +5077,44 @@ const uniqueUids = [...new Set(uids)];
 const friendKey = uniqueUids.slice().sort().join('|');
 const cacheFresh = (Date.now() - superLastLoadedAt) < 45000 && friendKey === superLastFriendKey;
 if (!force && cacheFresh) {
-    renderFriends();
-    return;
+renderFriends();
+return;
 }
 if (superLoadInFlight) return superLoadInFlight;
 
 const nextCache = {};
 superLoadInFlight = (async () => {
-    for (let i = 0; i < uniqueUids.length; i += 10) {
-        const chunk = uniqueUids.slice(i, i + 10);
-        if (!chunk.length) continue;
-        const snap = await db.collection('users')
-            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
-            .get();
-        snap.docs.forEach(d => {
-            const until = d.data()?.normsgSuper?.until?.toDate?.();
-            nextCache[d.id] = !!(until && until > new Date());
-        });
-    }
-    uniqueUids.forEach(uid => { superCache[uid] = nextCache[uid] || false; });
-    superLastLoadedAt = Date.now();
-    superLastFriendKey = friendKey;
+for (let i = 0; i < uniqueUids.length; i += 10) {
+    const chunk = uniqueUids.slice(i, i + 10);
+    if (!chunk.length) continue;
+    const snap = await db.collection('users')
+        .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
+        .get();
+    snap.docs.forEach(d => {
+        const until = d.data()?.normsgSuper?.until?.toDate?.();
+        nextCache[d.id] = !!(until && until > new Date());
+    });
+}
+uniqueUids.forEach(uid => { superCache[uid] = nextCache[uid] || false; });
+superLastLoadedAt = Date.now();
+superLastFriendKey = friendKey;
 })();
 
 try {
-    await superLoadInFlight;
+await superLoadInFlight;
 } finally {
-    superLoadInFlight = null;
+superLoadInFlight = null;
 }
 
 // Show Super badge and shimmer on my own profile row
 const myBadge = document.getElementById('mySuperBadge');
 const myHandle = document.getElementById('myHandle');
 if (superCache[me.uid]) {
-    if (myBadge) myBadge.style.display = 'block';
-    if (myHandle) myHandle.innerHTML = `<span class="super-name">@${myUsername}</span>`;
+if (myBadge) myBadge.style.display = 'block';
+if (myHandle) myHandle.innerHTML = `<span class="super-name">@${myUsername}</span>`;
 } else {
-    if (myBadge) myBadge.style.display = 'none';
-    if (myHandle) myHandle.textContent = `@${myUsername}`;
+if (myBadge) myBadge.style.display = 'none';
+if (myHandle) myHandle.textContent = `@${myUsername}`;
 }
 renderFriends();
 }
@@ -5013,8 +5124,8 @@ function incrementWeeklyCount() {
 if (!me) return;
 const weekKey = getWeekKey();
 db.collection('users').doc(me.uid).set({
-    weeklyCount:  firebase.firestore.FieldValue.increment(1),
-    weeklyKey:    weekKey
+weeklyCount:  firebase.firestore.FieldValue.increment(1),
+weeklyKey:    weekKey
 }, { merge: true }).catch(()=>{});
 }
 
@@ -5027,29 +5138,29 @@ return `${d.getFullYear()}-W${week}`;
 
 async function checkWeeklyLeaderboard() {
 try {
-    const weekKey = getWeekKey();
-    const snap = await db.collection('users')
-        .where('weeklyKey','==', weekKey)
-        .orderBy('weeklyCount','desc')
-        .limit(1).get();
-    if (snap.empty) return;
-    const top = snap.docs[0];
-    if (top.id === me.uid) {
-        // I'm the top chatter — auto-grant 1 month Super if not already
-        const current = await hasSuper(me.uid);
-        if (!current) {
-            await grantSuperToUid(me.uid, 30);
-            showToast('🏆 You\'re the top chatter this week! Enjoy 1 month of NorMSG Super! ✦');
-            await refreshSuperCache();
-        }
+const weekKey = getWeekKey();
+const snap = await db.collection('users')
+    .where('weeklyKey','==', weekKey)
+    .orderBy('weeklyCount','desc')
+    .limit(1).get();
+if (snap.empty) return;
+const top = snap.docs[0];
+if (top.id === me.uid) {
+    // I'm the top chatter — auto-grant 1 month Super if not already
+    const current = await hasSuper(me.uid);
+    if (!current) {
+        await grantSuperToUid(me.uid, 30);
+        showToast('🏆 You\'re the top chatter this week! Enjoy 1 month of NorMSG Super! ✦');
+        await refreshSuperCache();
     }
+}
 } catch(e) { /* needs weeklyCount index — will work after first message */ }
 }
 
 async function grantSuperToUid(uid, days) {
 const until = new Date(Date.now() + days * 86400000);
 await db.collection('users').doc(uid).set({
-    normsgSuper: { until: TS.fromDate(until), days, grantedAt: SV() }
+normsgSuper: { until: TS.fromDate(until), days, grantedAt: SV() }
 }, { merge: true });
 }
 
@@ -5058,33 +5169,152 @@ async function openAdminPanel() {
 if (!isPlatformAdmin) return;
 mmsg('giftMsg','','');
 mmsg('giftAdminMsg','','');
+mmsg('annMsg','','');
 document.getElementById('giftSuperIn').value  = '';
 document.getElementById('giftAdminIn').value  = '';
+document.getElementById('annTextIn').value    = '';
 document.getElementById('adminModal').classList.remove('hidden');
 loadLeaderboard();
+loadActiveAnnPreview();
+}
+
+// ── ANNOUNCEMENTS ────────────────────────────────────────────
+const ANN_STYLES = {
+    info:    { bg: 'linear-gradient(90deg,#1e40af,#3b82f6)', color: '#fff' },
+    warn:    { bg: 'linear-gradient(90deg,#92400e,#f59e0b)', color: '#fff' },
+    danger:  { bg: 'linear-gradient(90deg,#9f1239,#f43f5e)', color: '#fff' },
+    success: { bg: 'linear-gradient(90deg,#065f46,#34d399)', color: '#fff' },
+};
+
+async function postAnnouncement() {
+if (!isPlatformAdmin) return;
+const text  = document.getElementById('annTextIn').value.trim();
+const hours = parseInt(document.getElementById('annDuration').value);
+const style = document.getElementById('annStyle').value;
+if (!text) return mmsg('annMsg', 'Enter an announcement message.', 'err');
+mmsg('annMsg', 'Posting…', 'inf');
+try {
+    const expiresAt = new Date(Date.now() + hours * 3600000);
+    await db.collection('siteConfig').doc('announcement').set({
+        text, style, hours,
+        expiresAt: TS.fromDate(expiresAt),
+        postedBy:  me.uid,
+        postedAt:  SV(),
+    });
+    mmsg('annMsg', `✓ Announcement posted for ${hours < 24 ? hours+'h' : (hours/24)+'d'}!`, 'ok');
+    document.getElementById('annTextIn').value = '';
+    loadActiveAnnPreview();
+    checkAnnouncement(); // show it immediately
+} catch(e) { mmsg('annMsg', 'Error: ' + e.message, 'err'); }
+}
+
+async function cancelAnnouncement() {
+if (!isPlatformAdmin) return;
+try {
+    await db.collection('siteConfig').doc('announcement').delete();
+    document.getElementById('activeAnnPreview').innerHTML = '';
+    hideAnnouncementBanner();
+    mmsg('annMsg', 'Announcement removed.', 'ok');
+} catch(e) { mmsg('annMsg', 'Error: ' + e.message, 'err'); }
+}
+
+async function loadActiveAnnPreview() {
+const el = document.getElementById('activeAnnPreview');
+try {
+    const snap = await db.collection('siteConfig').doc('announcement').get();
+    if (!snap.exists) { el.innerHTML = ''; return; }
+    const d = snap.data();
+    const expires = d.expiresAt?.toDate?.();
+    if (!expires || expires < new Date()) { el.innerHTML = ''; return; }
+    const s = ANN_STYLES[d.style] || ANN_STYLES.info;
+    const timeLeft = timeUntil(expires);
+    el.innerHTML = `
+        <div style="background:${s.bg};color:${s.color};border-radius:10px;padding:9px 13px;
+            font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="flex:1;font-weight:600;">Active: "${esc(d.text)}"</span>
+            <span style="opacity:0.75;font-size:11px;">Expires in ${timeLeft}</span>
+            <button onclick="cancelAnnouncement()" style="
+                background:rgba(0,0,0,0.25);border:none;color:inherit;border-radius:8px;
+                padding:3px 10px;font-size:11px;cursor:pointer;font-family:'Figtree',sans-serif;
+                font-weight:700;white-space:nowrap;">✕ Remove</button>
+        </div>`;
+} catch(e) { el.innerHTML = ''; }
+}
+
+function timeUntil(date) {
+const ms = date - new Date();
+if (ms <= 0) return 'expired';
+const h = Math.floor(ms / 3600000);
+const m = Math.floor((ms % 3600000) / 60000);
+if (h >= 24) return Math.floor(h/24) + 'd ' + (h%24) + 'h';
+if (h > 0)   return h + 'h ' + m + 'm';
+return m + 'm';
+}
+
+async function checkAnnouncement() {
+// Called on login and periodically — shows banner if active announcement exists
+try {
+    const snap = await db.collection('siteConfig').doc('announcement').get();
+    if (!snap.exists) { hideAnnouncementBanner(); return; }
+    const d = snap.data();
+    const expires = d.expiresAt?.toDate?.();
+    if (!expires || expires < new Date()) { hideAnnouncementBanner(); return; }
+
+    // Check if user already dismissed this specific announcement
+    const dismissKey = 'normsg_ann_dismissed_' + (d.postedAt?.seconds || '');
+    if (localStorage.getItem(dismissKey)) { hideAnnouncementBanner(); return; }
+
+    showAnnouncementBanner(d.text, d.style, dismissKey);
+} catch(e) { /* silently ignore */ }
+}
+
+function showAnnouncementBanner(text, style, dismissKey) {
+const banner = document.getElementById('annBanner');
+const s = ANN_STYLES[style] || ANN_STYLES.info;
+banner.style.background = s.bg;
+banner.style.color      = s.color;
+document.getElementById('annBannerText').textContent = text;
+banner._dismissKey = dismissKey;
+banner.style.display = 'flex';
+// Push content down so banner doesn't cover the landing card / sidebar
+document.body.style.paddingTop = banner.offsetHeight + 'px';
+}
+
+function hideAnnouncementBanner() {
+const banner = document.getElementById('annBanner');
+banner.style.display = 'none';
+document.body.style.paddingTop = '';
+}
+
+function dismissAnnouncement() {
+const banner = document.getElementById('annBanner');
+if (banner._dismissKey) {
+    try { localStorage.setItem(banner._dismissKey, '1'); } catch {}
+}
+hideAnnouncementBanner();
 }
 
 async function loadLeaderboard() {
 const el = document.getElementById('adminLeaderboard');
 try {
-    const weekKey = getWeekKey();
-    const snap = await db.collection('users')
-        .where('weeklyKey','==',weekKey)
-        .orderBy('weeklyCount','desc')
-        .limit(5).get();
-    if (snap.empty) { el.textContent = 'No messages this week yet.'; return; }
-    el.innerHTML = snap.docs.map((d,i) => {
-        const data = d.data();
-        const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-        return `<div style="padding:5px 0;display:flex;gap:8px;align-items:center;">
-            <span style="font-size:16px;">${medals[i]}</span>
-            <span style="font-size:12px;font-weight:600;">${esc(data.displayName||data.username||'?')}</span>
-            <span style="font-size:11px;color:var(--muted);">@${esc(data.username||'')}</span>
-            <span style="font-size:11px;color:var(--a2);margin-left:auto;">${data.weeklyCount||0} msgs</span>
-        </div>`;
-    }).join('');
+const weekKey = getWeekKey();
+const snap = await db.collection('users')
+    .where('weeklyKey','==',weekKey)
+    .orderBy('weeklyCount','desc')
+    .limit(5).get();
+if (snap.empty) { el.textContent = 'No messages this week yet.'; return; }
+el.innerHTML = snap.docs.map((d,i) => {
+    const data = d.data();
+    const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+    return `<div style="padding:5px 0;display:flex;gap:8px;align-items:center;">
+        <span style="font-size:16px;">${medals[i]}</span>
+        <span style="font-size:12px;font-weight:600;">${esc(data.displayName||data.username||'?')}</span>
+        <span style="font-size:11px;color:var(--muted);">@${esc(data.username||'')}</span>
+        <span style="font-size:11px;color:var(--a2);margin-left:auto;">${data.weeklyCount||0} msgs</span>
+    </div>`;
+}).join('');
 } catch(e) {
-    el.textContent = 'Could not load (may need Firestore index on weeklyCount).';
+el.textContent = 'Could not load (may need Firestore index on weeklyCount).';
 }
 }
 
@@ -5094,13 +5324,13 @@ const days  = parseInt(document.getElementById('giftDuration').value);
 if (!uname) return;
 mmsg('giftMsg','Looking up user…','inf');
 try {
-    const uid = await getCachedUid(uname);
-    if (!uid) return mmsg('giftMsg',`@${uname} not found.`,'err');
-    await grantSuperToUid(uid, days);
-    mmsg('giftMsg', `✓ NorMSG Super gifted to @${uname} for ${days} day${days!==1?'s':''}! ✦`, 'ok');
-    document.getElementById('giftSuperIn').value = '';
-    superCache[uid] = true;
-    renderFriends();
+const uid = await getCachedUid(uname);
+if (!uid) return mmsg('giftMsg',`@${uname} not found.`,'err');
+await grantSuperToUid(uid, days);
+mmsg('giftMsg', `✓ NorMSG Super gifted to @${uname} for ${days} day${days!==1?'s':''}! ✦`, 'ok');
+document.getElementById('giftSuperIn').value = '';
+superCache[uid] = true;
+renderFriends();
 } catch(e) { mmsg('giftMsg','Error: '+e.message,'err'); }
 }
 
@@ -5109,11 +5339,11 @@ const uname = document.getElementById('giftAdminIn').value.trim().toLowerCase().
 if (!uname) return;
 mmsg('giftAdminMsg','Looking up user…','inf');
 try {
-    const uid = await getCachedUid(uname);
-    if (!uid) return mmsg('giftAdminMsg',`@${uname} not found.`,'err');
-    await db.collection('platformAdmins').doc(uid).set({ grantedBy: me.uid, grantedAt: SV() });
-    mmsg('giftAdminMsg',`✓ @${uname} is now a platform admin!`,'ok');
-    document.getElementById('giftAdminIn').value = '';
+const uid = await getCachedUid(uname);
+if (!uid) return mmsg('giftAdminMsg',`@${uname} not found.`,'err');
+await db.collection('platformAdmins').doc(uid).set({ grantedBy: me.uid, grantedAt: SV() });
+mmsg('giftAdminMsg',`✓ @${uname} is now a platform admin!`,'ok');
+document.getElementById('giftAdminIn').value = '';
 } catch(e) { mmsg('giftAdminMsg','Error: '+e.message,'err'); }
 }
 
@@ -5133,13 +5363,13 @@ function onMsgInputChange() {
 if (!chatId || !me) return;
 const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
 if (!isTyping) {
-    isTyping = true;
-    db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
+isTyping = true;
+db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
 }
 clearTimeout(typingTimer);
 typingTimer = setTimeout(() => {
-    isTyping = false;
-    db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
+isTyping = false;
+db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
 }, 3000);
 
 const inp = document.getElementById('msgInput');
@@ -5154,39 +5384,39 @@ const pos = inp.selectionStart;
 const before = val.slice(0, pos);
 const atIdx  = before.lastIndexOf('@');
 if (atIdx !== -1 && !before.slice(atIdx+1).includes(' ')) {
-    mentionSearch = before.slice(atIdx+1).toLowerCase();
-    mentionStart  = atIdx;
-    showMentionBox();
+mentionSearch = before.slice(atIdx+1).toLowerCase();
+mentionStart  = atIdx;
+showMentionBox();
 } else {
-    hideMentionBox();
+hideMentionBox();
 }
 }
 
 async function showMentionBox() {
 // Get group members if not cached
 if (!mentionMembers.length && chatId) {
-    const snap = await db.collection('groups').doc(chatId).get();
-    const uids = (snap.data()?.members || []).filter(u => u !== me.uid);
-    const chunks = [];
-    for (let i = 0; i < uids.length; i+=10) chunks.push(uids.slice(i,i+10));
-    mentionMembers = [];
-    for (const chunk of chunks) {
-        if (!chunk.length) continue;
-        const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
-        s.docs.forEach(d => mentionMembers.push({ uid: d.id, ...d.data() }));
-    }
+const snap = await db.collection('groups').doc(chatId).get();
+const uids = (snap.data()?.members || []).filter(u => u !== me.uid);
+const chunks = [];
+for (let i = 0; i < uids.length; i+=10) chunks.push(uids.slice(i,i+10));
+mentionMembers = [];
+for (const chunk of chunks) {
+    if (!chunk.length) continue;
+    const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
+    s.docs.forEach(d => mentionMembers.push({ uid: d.id, ...d.data() }));
+}
 }
 
 const filtered = [
-    // Always include @AI as first option in groups
-    { uid: 'AI', username: 'AI', displayName: '✦ AI Assistant', photoURL: null, isAI: true },
-    ...mentionMembers.filter(u =>
-        (u.username||'').toLowerCase().startsWith(mentionSearch) ||
-        (u.displayName||'').toLowerCase().startsWith(mentionSearch)
-    )
+// Always include @AI as first option in groups
+{ uid: 'AI', username: 'AI', displayName: '✦ AI Assistant', photoURL: null, isAI: true },
+...mentionMembers.filter(u =>
+    (u.username||'').toLowerCase().startsWith(mentionSearch) ||
+    (u.displayName||'').toLowerCase().startsWith(mentionSearch)
+)
 ].filter(u => u.isAI
-    ? 'ai'.startsWith(mentionSearch)
-    : true
+? 'ai'.startsWith(mentionSearch)
+: true
 ).slice(0, 7);
 
 const box = document.getElementById('mentionBox');
@@ -5195,11 +5425,11 @@ if (!filtered.length) { box.style.display='none'; return; }
 box.innerHTML = '';
 mentionIndex = 0;
 filtered.forEach((u, i) => {
-    const it = ce('div');
-    it.className = 'mention-item' + (i===0?' active':'');
-    it.innerHTML = `${mkAv(u.displayName||'?', u.photoURL||null, 26)}<div><div class="mention-name">${esc(u.displayName||'')}</div><div class="mention-handle">@${esc(u.username||'')}</div></div>`;
-    it.onmousedown = (e) => { e.preventDefault(); insertMention(u.username); };
-    box.appendChild(it);
+const it = ce('div');
+it.className = 'mention-item' + (i===0?' active':'');
+it.innerHTML = `${mkAv(u.displayName||'?', u.photoURL||null, 26)}<div><div class="mention-name">${esc(u.displayName||'')}</div><div class="mention-handle">@${esc(u.username||'')}</div></div>`;
+it.onmousedown = (e) => { e.preventDefault(); insertMention(u.username); };
+box.appendChild(it);
 });
 box.style.display = 'block';
 box._filtered = filtered;
@@ -5231,8 +5461,8 @@ if (!items.length) return;
 if (e.key === 'ArrowDown') { e.preventDefault(); mentionIndex = (mentionIndex+1)%items.length; items.forEach((it,i)=>it.classList.toggle('active',i===mentionIndex)); }
 else if (e.key === 'ArrowUp') { e.preventDefault(); mentionIndex = (mentionIndex-1+items.length)%items.length; items.forEach((it,i)=>it.classList.toggle('active',i===mentionIndex)); }
 else if (e.key === 'Tab' || (e.key==='Enter' && box.style.display!=='none')) {
-    const u = box._filtered?.[mentionIndex];
-    if (u) { e.preventDefault(); insertMention(u.username); }
+const u = box._filtered?.[mentionIndex];
+if (u) { e.preventDefault(); insertMention(u.username); }
 } else if (e.key === 'Escape') { hideMentionBox(); }
 });
 
@@ -5261,14 +5491,14 @@ out = out.replace(/\n/g, '<br>');
 
 // Clickable links — sanitized
 out = out.replace(/(https?:\/\/[^\s&lt;&gt;"]+)/g, (url) => {
-    const safe = sanitizeUrl(url);
-    return `<a href="${safe}" target="_blank" rel="noopener noreferrer" style="color:var(--a2);text-decoration:underline;">${url}</a>`;
+const safe = sanitizeUrl(url);
+return `<a href="${safe}" target="_blank" rel="noopener noreferrer" style="color:var(--a2);text-decoration:underline;">${url}</a>`;
 });
 
 // @mentions
 out = out.replace(/@([a-z0-9_.]+)/gi, (match, uname) => {
-    const isMe = uname.toLowerCase() === (myUsername||'').toLowerCase();
-    return `<span class="ping-highlight${isMe?' me':''}">${match}</span>`;
+const isMe = uname.toLowerCase() === (myUsername||'').toLowerCase();
+return `<span class="ping-highlight${isMe?' me':''}">${match}</span>`;
 });
 
 return out;
@@ -5287,29 +5517,29 @@ if (type === 'bold')    wrap = ['**','**'];
 if (type === 'italic')  wrap = ['_','_'];
 if (type === 'code')    wrap = ['`','`'];
 if (type === 'heading') {
-    // Insert # at start of the current line
-    const lineStart = val.lastIndexOf('\n', start - 1) + 1;
-    const lineText  = val.slice(lineStart);
-    if (lineText.startsWith('# ')) {
-        // Remove heading
-        inp.value = val.slice(0, lineStart) + lineText.slice(2);
-    } else {
-        inp.value = val.slice(0, lineStart) + '# ' + val.slice(lineStart);
-        inp.setSelectionRange(start + 2, end + 2);
-    }
-    inp.focus();
-    autoGrow(inp);
-    return;
+// Insert # at start of the current line
+const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+const lineText  = val.slice(lineStart);
+if (lineText.startsWith('# ')) {
+    // Remove heading
+    inp.value = val.slice(0, lineStart) + lineText.slice(2);
+} else {
+    inp.value = val.slice(0, lineStart) + '# ' + val.slice(lineStart);
+    inp.setSelectionRange(start + 2, end + 2);
+}
+inp.focus();
+autoGrow(inp);
+return;
 }
 
 if (sel) {
-    // Wrap selection
-    inp.value = val.slice(0, start) + wrap[0] + sel + wrap[1] + val.slice(end);
-    inp.setSelectionRange(start + wrap[0].length, end + wrap[0].length);
+// Wrap selection
+inp.value = val.slice(0, start) + wrap[0] + sel + wrap[1] + val.slice(end);
+inp.setSelectionRange(start + wrap[0].length, end + wrap[0].length);
 } else {
-    // Place cursor between markers
-    inp.value = val.slice(0, start) + wrap[0] + wrap[1] + val.slice(start);
-    inp.setSelectionRange(start + wrap[0].length, start + wrap[0].length);
+// Place cursor between markers
+inp.value = val.slice(0, start) + wrap[0] + wrap[1] + val.slice(start);
+inp.setSelectionRange(start + wrap[0].length, start + wrap[0].length);
 }
 inp.focus();
 autoGrow(inp);
@@ -5328,21 +5558,21 @@ async function sendFriendReqTo(username, btn) {
 if (!username) return;
 btn.disabled = true; btn.textContent = '…';
 try {
-    const targetUid = await getCachedUid(username);
-    if (!targetUid) { btn.textContent = '✗ Not found'; return; }
-    const alreadyFriend = friends.some(f => f.uid === targetUid);
-    if (alreadyFriend) { btn.textContent = '✓ Friends'; btn.disabled = true; return; }
-    const dup = await db.collection('friendRequests')
-        .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending').limit(1).get();
-    if (!dup.empty) { btn.textContent = '✓ Sent'; return; }
-    const updata = await getCachedProfile(targetUid) || {};
-    await db.collection('friendRequests').add({
-        fromUid: me.uid, fromName: me.displayName||me.email, fromUsername: myUsername, fromPhoto: me.photoURL||null,
-        toUid: targetUid, toName: updata.displayName||updata.email, toUsername: updata.username||'', toPhoto: updata.photoURL||null,
-        status: 'pending', createdAt: SV()
-    });
-    btn.textContent = '✓ Sent';
-    showToast(`Request sent! 🎉`);
+const targetUid = await getCachedUid(username);
+if (!targetUid) { btn.textContent = '✗ Not found'; return; }
+const alreadyFriend = friends.some(f => f.uid === targetUid);
+if (alreadyFriend) { btn.textContent = '✓ Friends'; btn.disabled = true; return; }
+const dup = await db.collection('friendRequests')
+    .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending').limit(1).get();
+if (!dup.empty) { btn.textContent = '✓ Sent'; return; }
+const updata = await getCachedProfile(targetUid) || {};
+await db.collection('friendRequests').add({
+    fromUid: me.uid, fromName: me.displayName||me.email, fromUsername: myUsername, fromPhoto: me.photoURL||null,
+    toUid: targetUid, toName: updata.displayName||updata.email, toUsername: updata.username||'', toPhoto: updata.photoURL||null,
+    status: 'pending', createdAt: SV()
+});
+btn.textContent = '✓ Sent';
+showToast(`Request sent! 🎉`);
 } catch(e) { btn.textContent = '✗ Error'; console.error(e); }
 }
 
@@ -5366,7 +5596,7 @@ if (!targetUid) return mmsg('addMemberMsg',`@${uname} not found.`,'err');
 if ((gdata.members||[]).includes(targetUid)) return mmsg('addMemberMsg','Already a member!','err');
 
 await db.collection('groups').doc(manageGroupId).update({
-    members: firebase.firestore.FieldValue.arrayUnion(targetUid)
+members: firebase.firestore.FieldValue.arrayUnion(targetUid)
 });
 document.getElementById('addMemberIn').value = '';
 mmsg('addMemberMsg',`✓ @${uname} added!`,'ok');
@@ -5390,101 +5620,101 @@ const el = document.getElementById('peopleList');
 el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">🔍 Loading suggestions…</div>`;
 
 try {
-    const myFriendUids = new Set(friends.map(f => f.uid));
-    myFriendUids.add(me.uid);
+const myFriendUids = new Set(friends.map(f => f.uid));
+myFriendUids.add(me.uid);
 
-    // discovered[uid] = { degree, via[] }
-    const discovered = {};
+// discovered[uid] = { degree, via[] }
+const discovered = {};
 
-    // Degree-2: friends of my friends
-    for (const f of friends.slice(0, 12)) {
-        const [q1, q2] = await Promise.all([
-            db.collection('friendRequests')
-                .where('fromUid','==',f.uid).where('status','==','accepted').limit(20).get(),
-            db.collection('friendRequests')
-                .where('toUid','==',f.uid).where('status','==','accepted').limit(20).get()
-        ]);
-        const fof = new Set();
-        q1.docs.forEach(d => fof.add(d.data().toUid));
-        q2.docs.forEach(d => fof.add(d.data().fromUid));
-        fof.forEach(uid => {
-            if (myFriendUids.has(uid)) return;
-            if (!discovered[uid]) discovered[uid] = { degree: 2, via: [] };
-            const name = f.displayName || f.username || '?';
-            if (!discovered[uid].via.includes(name)) discovered[uid].via.push(name);
-        });
-    }
+// Degree-2: friends of my friends
+for (const f of friends.slice(0, 12)) {
+    const [q1, q2] = await Promise.all([
+        db.collection('friendRequests')
+            .where('fromUid','==',f.uid).where('status','==','accepted').limit(20).get(),
+        db.collection('friendRequests')
+            .where('toUid','==',f.uid).where('status','==','accepted').limit(20).get()
+    ]);
+    const fof = new Set();
+    q1.docs.forEach(d => fof.add(d.data().toUid));
+    q2.docs.forEach(d => fof.add(d.data().fromUid));
+    fof.forEach(uid => {
+        if (myFriendUids.has(uid)) return;
+        if (!discovered[uid]) discovered[uid] = { degree: 2, via: [] };
+        const name = f.displayName || f.username || '?';
+        if (!discovered[uid].via.includes(name)) discovered[uid].via.push(name);
+    });
+}
 
-    // Degree-3: friends of degree-2 (capped at 5 to avoid too many reads)
-    const fofKeys = Object.keys(discovered).slice(0, 5);
-    for (const fofUid of fofKeys) {
-        const [q1, q2] = await Promise.all([
-            db.collection('friendRequests')
-                .where('fromUid','==',fofUid).where('status','==','accepted').limit(10).get(),
-            db.collection('friendRequests')
-                .where('toUid','==',fofUid).where('status','==','accepted').limit(10).get()
-        ]);
-        const fof2 = new Set();
-        q1.docs.forEach(d => fof2.add(d.data().toUid));
-        q2.docs.forEach(d => fof2.add(d.data().fromUid));
-        fof2.forEach(uid => {
-            if (myFriendUids.has(uid) || discovered[uid]) return;
-            const viaName = discovered[fofUid]?.via?.[0] || '?';
-            discovered[uid] = { degree: 3, via: [viaName] };
-        });
-    }
+// Degree-3: friends of degree-2 (capped at 5 to avoid too many reads)
+const fofKeys = Object.keys(discovered).slice(0, 5);
+for (const fofUid of fofKeys) {
+    const [q1, q2] = await Promise.all([
+        db.collection('friendRequests')
+            .where('fromUid','==',fofUid).where('status','==','accepted').limit(10).get(),
+        db.collection('friendRequests')
+            .where('toUid','==',fofUid).where('status','==','accepted').limit(10).get()
+    ]);
+    const fof2 = new Set();
+    q1.docs.forEach(d => fof2.add(d.data().toUid));
+    q2.docs.forEach(d => fof2.add(d.data().fromUid));
+    fof2.forEach(uid => {
+        if (myFriendUids.has(uid) || discovered[uid]) return;
+        const viaName = discovered[fofUid]?.via?.[0] || '?';
+        discovered[uid] = { degree: 3, via: [viaName] };
+    });
+}
 
-    const allUids = Object.keys(discovered);
-    if (!allUids.length) {
-        el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
-        return;
-    }
+const allUids = Object.keys(discovered);
+if (!allUids.length) {
+    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+    return;
+}
 
-    // Batch-fetch user profiles (10 per query)
-    const profiles = {};
-    for (let i = 0; i < allUids.length; i += 10) {
-        const chunk = allUids.slice(i, i + 10);
-        if (!chunk.length) continue;
-        const snap = await db.collection('users')
-            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
-        snap.docs.forEach(d => {
-            const data = d.data();
-            if (data.username) profiles[d.id] = { uid: d.id, ...data };
-        });
-    }
+// Batch-fetch user profiles (10 per query)
+const profiles = {};
+for (let i = 0; i < allUids.length; i += 10) {
+    const chunk = allUids.slice(i, i + 10);
+    if (!chunk.length) continue;
+    const snap = await db.collection('users')
+        .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
+    snap.docs.forEach(d => {
+        const data = d.data();
+        if (data.username) profiles[d.id] = { uid: d.id, ...data };
+    });
+}
 
-    el.innerHTML = '';
+el.innerHTML = '';
 
-    const deg2 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 2);
-    const deg3 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 3);
+const deg2 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 2);
+const deg3 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 3);
 
-    if (deg2.length) {
-        const sec = ce('div'); sec.className = 'people-section';
-        sec.innerHTML = `<span class="people-sec-label">👥 Friends of Friends</span>`;
-        deg2.slice(0, 15).forEach(uid => {
-            const via = discovered[uid].via.slice(0, 2).join(' & ');
-            sec.appendChild(buildPersonCard(profiles[uid], via ? `via ${via}` : ''));
-        });
-        el.appendChild(sec);
-    }
+if (deg2.length) {
+    const sec = ce('div'); sec.className = 'people-section';
+    sec.innerHTML = `<span class="people-sec-label">👥 Friends of Friends</span>`;
+    deg2.slice(0, 15).forEach(uid => {
+        const via = discovered[uid].via.slice(0, 2).join(' & ');
+        sec.appendChild(buildPersonCard(profiles[uid], via ? `via ${via}` : ''));
+    });
+    el.appendChild(sec);
+}
 
-    if (deg3.length) {
-        const sec = ce('div'); sec.className = 'people-section';
-        sec.innerHTML = `<span class="people-sec-label">🌐 Extended Network</span>`;
-        deg3.slice(0, 8).forEach(uid => {
-            const via = discovered[uid].via[0] || '';
-            sec.appendChild(buildPersonCard(profiles[uid], via ? `3° via ${via}` : '3°'));
-        });
-        el.appendChild(sec);
-    }
+if (deg3.length) {
+    const sec = ce('div'); sec.className = 'people-section';
+    sec.innerHTML = `<span class="people-sec-label">🌐 Extended Network</span>`;
+    deg3.slice(0, 8).forEach(uid => {
+        const via = discovered[uid].via[0] || '';
+        sec.appendChild(buildPersonCard(profiles[uid], via ? `3° via ${via}` : '3°'));
+    });
+    el.appendChild(sec);
+}
 
-    if (!deg2.length && !deg3.length) {
-        el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
-    }
+if (!deg2.length && !deg3.length) {
+    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+}
 
 } catch(e) {
-    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--danger);font-size:13px;">Could not load suggestions: ${esc(e.message)}</div>`;
-    console.error('openPeopleModal:', e);
+el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--danger);font-size:13px;">Could not load suggestions: ${esc(e.message)}</div>`;
+console.error('openPeopleModal:', e);
 }
 }
 
@@ -5492,15 +5722,15 @@ function buildPersonCard(u, via) {
 const alreadyFriend = friends.some(f => f.uid === u.uid);
 const card = ce('div'); card.className = 'people-card';
 card.innerHTML = `
-    ${mkAv(u.displayName||'?', u.photoURL||null, 36)}
-    <div class="people-card-info">
-        <div class="people-card-name">${esc(u.displayName||u.username||'?')}</div>
-        <div class="people-card-tag">@${esc(u.username||'')}</div>
-        ${via ? `<div class="people-via">${esc(via)}</div>` : ''}
-    </div>
-    <button class="btn-add-person" ${alreadyFriend?'disabled':''} onclick="sendFriendReqTo('${esc(u.username||'')}',this)">
-        ${alreadyFriend ? '✓ Friends' : '+ Add'}
-    </button>`;
+${mkAv(u.displayName||'?', u.photoURL||null, 36)}
+<div class="people-card-info">
+    <div class="people-card-name">${esc(u.displayName||u.username||'?')}</div>
+    <div class="people-card-tag">@${esc(u.username||'')}</div>
+    ${via ? `<div class="people-via">${esc(via)}</div>` : ''}
+</div>
+<button class="btn-add-person" ${alreadyFriend?'disabled':''} onclick="sendFriendReqTo('${esc(u.username||'')}',this)">
+    ${alreadyFriend ? '✓ Friends' : '+ Add'}
+</button>`;
 return card;
 }
 </script>
