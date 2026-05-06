@@ -151,6 +151,37 @@ exports.handler = async (event) => {
     ═══════════════════════════════════════════════════════
     -->
 
+    <!-- GitHub Pages → Netlify redirect banner -->
+    <script>
+        if (location.hostname === 'simplified-games.github.io') {
+            document.addEventListener('DOMContentLoaded', function () {
+                const banner = document.createElement('div');
+                banner.id = 'gh-redirect-banner';
+                banner.innerHTML = `
+                    <div style="
+                        position:fixed;top:0;left:0;right:0;z-index:99999;
+                        background:linear-gradient(90deg,#4338ca,#7c5cfc);
+                        color:#fff;font-family:Figtree,sans-serif;
+                        display:flex;align-items:center;justify-content:center;gap:12px;
+                        padding:13px 20px;box-shadow:0 2px 16px rgba(0,0,0,0.4);
+                        font-size:14px;text-align:center;flex-wrap:wrap;
+                    ">
+                        <span>⚠️ NorMSG has moved! This page does not have AI functionality yet.</span>
+                        <a href="https://normsg.netlify.app" style="
+                            background:#fff;color:#4338ca;font-weight:700;
+                            padding:6px 16px;border-radius:20px;text-decoration:none;
+                            font-size:13px;white-space:nowrap;flex-shrink:0;
+                        ">Go to normsg.netlify.app →</a>
+                        <button onclick="document.getElementById('gh-redirect-banner').remove()" style="
+                            background:rgba(255,255,255,0.15);border:none;color:#fff;
+                            cursor:pointer;padding:5px 10px;border-radius:20px;font-size:12px;
+                        ">✕ Dismiss</button>
+                    </div>`;
+                document.body.prepend(banner);
+            });
+        }
+    </script>
+
     <!-- Firebase SDKs -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
