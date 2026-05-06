@@ -1,9 +1,9 @@
 // netlify/functions/normai-pro.js
-// Pro-tier NorMAI proxy — replaces the Cloudflare Worker (normai-pro)
-// Set GROQ_API_KEY in Netlify → Site settings → Environment variables
+// Pro-tier NorMAI proxy
+// Set GROQ_API_KEY_PRO in Netlify → Site settings → Environment variables
 
-const GROQ_API_URL     = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL_PRO   = 'llama-3.3-70b-versatile';
+const GROQ_API_URL   = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL_PRO = 'llama-3.3-70b-versatile';
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -22,9 +22,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
     }
 
-    // Build messages array: system prompt + optional chat context + user message
     const messages = [];
-
     if (context) {
       messages.push({ role: 'user', content: prompt });
       messages.push({ role: 'user', content: context });
@@ -35,7 +33,7 @@ exports.handler = async (event) => {
     const groqRes = await fetch(GROQ_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY_PRO}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
