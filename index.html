@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src 'none'; object-src 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src https://accounts.google.com https://*.firebaseapp.com; object-src 'none';">
     <title>NorMSG</title>
     <link rel="icon" href="faviconnormsg.ico" type="image/x-icon">
 
@@ -24,6 +24,59 @@
          Field: deleteAt  ASC
          — Firebase will print a direct link to create it
            in your browser console the first time cleanup runs.
+    
+======================= netlify/functions/normai.js ===============================
+ // netlify/functions/normai.js
+// Free-tier NorMAI proxy
+// Set GROQ_API_KEY_FREE in Netlify → Site settings → Environment variables
+
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL   = 'llama-3.1-8b-instant';
+
+exports.handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    const { prompt } = JSON.parse(event.body || '{}');
+    if (!prompt) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
+    }
+
+    const groqRes = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY_FREE}`, // Change to GROQ_API_KEY_PRO for Pro normai-pro.js
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 512,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!groqRes.ok) {
+      const err = await groqRes.json().catch(() => ({}));
+      return { statusCode: groqRes.status, headers, body: JSON.stringify({ error: err }) };
+    }
+
+    const data  = await groqRes.json();
+    const reply = data.choices?.[0]?.message?.content ?? '';
+
+    return { statusCode: 200, headers, body: JSON.stringify({ reply }) };
+  } catch (e) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+  }
+};
 
     ── FIRESTORE RULES ────────────────────────────────────
     rules_version = '2';
@@ -2696,8 +2749,7 @@ switchTab('groups');
 }
 
 // ── OPEN CHAT ──────────────────────────────────────────────
-function openDM(friend) {
-chatType = 'dm';
+function openDM(friend) {chatType = 'dm';
 chatId   = dmId(me.uid, friend.uid);
 clearReply();
 clearMyTyping();
