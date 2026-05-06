@@ -1,17 +1,15 @@
 // netlify/functions/normai.js
-// Free-tier NorMAI proxy — replaces the Cloudflare Worker
-// Set GROQ_API_KEY in Netlify → Site settings → Environment variables
+// Free-tier NorMAI proxy
+// Set GROQ_API_KEY_FREE in Netlify → Site settings → Environment variables
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MODEL   = 'llama-3.1-8b-instant';
 
 exports.handler = async (event) => {
-  // Only allow POST
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
-  // CORS headers — update the origin to your Netlify site URL
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
@@ -27,7 +25,7 @@ exports.handler = async (event) => {
     const groqRes = await fetch(GROQ_API_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY_FREE}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
