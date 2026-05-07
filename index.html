@@ -2169,6 +2169,24 @@ function getNormAIUrl() {
     return userPlan === 'pro' ? NORMAI_PRO_API : NORMAI_FREE_API;
 }
 
+function extractNormAIReply(data) {
+    if (!data || typeof data !== 'object') return '';
+    const candidate = (
+        data.reply ??
+        data.result ??
+        data.text ??
+        data.output ??
+        data.response ??
+        data.message?.content ??
+        data.message ??
+        data.choices?.[0]?.message?.content ??
+        data.choices?.[0]?.text ??
+        data.candidates?.[0]?.content?.parts?.[0]?.text ??
+        ''
+    );
+    return typeof candidate === 'string' ? candidate.trim() : '';
+}
+
 async function loadUserPlan() {
     if (!me) return;
     try {
@@ -2203,7 +2221,7 @@ async function callNormAI(prompt, context = '') {
     });
     if (!res.ok) throw new Error(`NorMAI ${res.status}`);
     const data = await res.json();
-    return data.reply || data.result || data.text || '';
+    return extractNormAIReply(data);
 }
 
 async function openSmartReply() {
@@ -5008,7 +5026,7 @@ throw new Error(err?.error?.message || `HTTP ${res.status}`);
 }
 
 const data   = await res.json();
-const answer = data.reply || data.result || data.text || data.choices?.[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
+const answer = extractNormAIReply(data) || 'Sorry, I couldn\'t generate a response.';
 
 await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper === true, timestamp: SV() });
 
