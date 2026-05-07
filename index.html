@@ -784,6 +784,31 @@ exports.handler = async (event) => {
         }
         .poll-add-btn:hover { border-color: var(--accent); color: var(--a2); }
 
+        /* ── LOGIN SECURITY UI ───────────────────────────────── */
+        .login-attempts {
+            font-size: 10px; color: var(--muted); text-align: center;
+            margin-top: 6px; letter-spacing: 0.02em;
+        }
+        .login-attempts.warn { color: var(--warn); font-weight: 600; }
+        .login-attempts.danger { color: var(--danger); font-weight: 700; }
+        .captcha-box {
+            background: var(--card); border: 1px solid var(--border2);
+            border-radius: 11px; padding: 12px 14px; margin-bottom: 10px;
+            display: none;
+        }
+        .captcha-box.visible { display: block; }
+        .captcha-q {
+            font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text);
+        }
+        .captcha-q span { color: var(--a2); font-family: monospace; font-size: 15px; }
+        .lockout-timer {
+            text-align: center; padding: 10px; background: rgba(239,68,68,0.08);
+            border: 1px solid rgba(239,68,68,0.25); border-radius: 11px;
+            font-size: 12px; color: var(--danger); font-weight: 600;
+            margin-bottom: 10px; display: none;
+        }
+        .lockout-timer.visible { display: block; }
+
         #msgInput {
             flex: 1; background: none; border: none; outline: none;
             color: var(--text); font-family: 'Figtree', sans-serif;
@@ -1546,6 +1571,10 @@ exports.handler = async (event) => {
     <div class="modal-card">
         <div class="modal-title">Sign in</div>
         <div class="modal-sub">Enter the username and password given to you by an admin.</div>
+
+        <!-- Lockout banner -->
+        <div class="lockout-timer" id="lockoutTimer">🔒 Too many failed attempts. Try again in <span id="lockoutCountdown"></span>s.</div>
+
         <div style="position:relative;">
             <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;margin-top:-5px;">@</span>
             <input class="m-input" id="loginUsernameIn" placeholder="username" maxlength="30"
@@ -1555,10 +1584,18 @@ exports.handler = async (event) => {
         </div>
         <input class="m-input" id="loginPasswordIn" type="password" placeholder="Password"
             onkeydown="if(event.key==='Enter') doLoginWithCredentials()">
+
+        <!-- CAPTCHA (shown after 3 failures) -->
+        <div class="captcha-box" id="captchaBox">
+            <div class="captcha-q">🤖 Quick check — what is <span id="captchaQ"></span>?</div>
+            <input class="m-input" id="captchaIn" type="number" placeholder="Your answer" style="margin:0;" onkeydown="if(event.key==='Enter') doLoginWithCredentials()">
+        </div>
+
         <div class="m-msg" id="loginMsg"></div>
+        <div id="loginAttemptsHint" class="login-attempts"></div>
         <div class="modal-row">
             <button class="btn-sec" onclick="closeModal('loginModal')">Cancel</button>
-            <button class="btn-primary" onclick="doLoginWithCredentials()" style="flex:1;">Sign in →</button>
+            <button class="btn-primary" id="loginSubmitBtn" onclick="doLoginWithCredentials()" style="flex:1;">Sign in →</button>
         </div>
     </div>
 </div>
@@ -1989,7 +2026,7 @@ exports.handler = async (event) => {
         <div class="m-msg" id="pollMsg"></div>
         <div class="modal-row">
             <button class="btn-sec" onclick="closeModal('pollModal')">Cancel</button>
-            <button class="btn-pri" onclick="createPoll()">Post Poll</button>
+            <button class="btn-add" onclick="createPoll()">Post Poll ➤</button>
         </div>
     </div>
 </div>
@@ -2485,25 +2522,197 @@ function login()  { auth.signInWithPopup(gProv).catch(e => showToast('Sign-in fa
 function openLoginModal() {
 document.getElementById('loginUsernameIn').value = '';
 document.getElementById('loginPasswordIn').value = '';
+document.getElementById('captchaIn') && (document.getElementById('captchaIn').value = '');
 mmsg('loginMsg', '', '');
+updateLoginUI();
 document.getElementById('loginModal').classList.remove('hidden');
+setTimeout(() => {
+    if (!isLockedOut()) document.getElementById('loginUsernameIn').focus();
+}, 80);
+}
+
+// ── Login security state ─────────────────────────────────────
+const LOGIN_MAX_ATTEMPTS   = 5;      // lockout after this many failures
+const LOGIN_LOCKOUT_BASE   = 30;     // first lockout: 30s
+const LOGIN_LOCKOUT_MULT   = 2;      // doubles each lockout: 30 → 60 → 120 → …
+const LOGIN_CAPTCHA_AFTER  = 3;      // show captcha after this many failures
+const LS_KEY_ATTEMPTS      = 'nor_login_attempts';
+const LS_KEY_LOCKOUT_UNTIL = 'nor_login_lockout_until';
+const LS_KEY_LOCKOUT_COUNT = 'nor_login_lockout_count';
+
+let _captchaAnswer = null;
+let _lockoutInterval = null;
+
+function getLoginState() {
+    return {
+        attempts:     parseInt(localStorage.getItem(LS_KEY_ATTEMPTS)     || '0'),
+        lockoutUntil: parseInt(localStorage.getItem(LS_KEY_LOCKOUT_UNTIL)|| '0'),
+        lockoutCount: parseInt(localStorage.getItem(LS_KEY_LOCKOUT_COUNT)|| '0'),
+    };
+}
+function setLoginAttempts(n)     { localStorage.setItem(LS_KEY_ATTEMPTS,      n); }
+function setLockoutUntil(ts)     { localStorage.setItem(LS_KEY_LOCKOUT_UNTIL, ts); }
+function setLockoutCount(n)      { localStorage.setItem(LS_KEY_LOCKOUT_COUNT,  n); }
+function clearLoginState()       {
+    localStorage.removeItem(LS_KEY_ATTEMPTS);
+    localStorage.removeItem(LS_KEY_LOCKOUT_UNTIL);
+    localStorage.removeItem(LS_KEY_LOCKOUT_COUNT);
+}
+function isLockedOut() {
+    const { lockoutUntil } = getLoginState();
+    return Date.now() < lockoutUntil;
+}
+
+function generateCaptcha() {
+    const a = Math.floor(Math.random() * 12) + 1;
+    const b = Math.floor(Math.random() * 12) + 1;
+    const ops = [
+        { q: `${a} + ${b}`, ans: a + b },
+        { q: `${a + b} − ${b}`, ans: a },
+        { q: `${a} × ${b > 6 ? 2 : b}`, ans: a * (b > 6 ? 2 : b) },
+    ];
+    const pick = ops[Math.floor(Math.random() * ops.length)];
+    _captchaAnswer = pick.ans;
+    document.getElementById('captchaQ').textContent = pick.q;
+    document.getElementById('captchaIn').value = '';
+}
+
+function updateLoginUI() {
+    const { attempts, lockoutUntil, lockoutCount } = getLoginState();
+    const locked   = Date.now() < lockoutUntil;
+    const btn      = document.getElementById('loginSubmitBtn');
+    const hint     = document.getElementById('loginAttemptsHint');
+    const captcha  = document.getElementById('captchaBox');
+    const lockBnr  = document.getElementById('lockoutTimer');
+
+    // Lockout banner
+    if (locked) {
+        lockBnr.classList.add('visible');
+        btn.disabled = true;
+        if (_lockoutInterval) clearInterval(_lockoutInterval);
+        _lockoutInterval = setInterval(() => {
+            const rem = Math.ceil((lockoutUntil - Date.now()) / 1000);
+            if (rem <= 0) {
+                clearInterval(_lockoutInterval);
+                updateLoginUI();
+            } else {
+                document.getElementById('lockoutCountdown').textContent = rem;
+            }
+        }, 500);
+        document.getElementById('lockoutCountdown').textContent = Math.ceil((lockoutUntil - Date.now()) / 1000);
+        hint.textContent = '';
+        captcha.classList.remove('visible');
+        return;
+    }
+
+    // Not locked
+    lockBnr.classList.remove('visible');
+    btn.disabled = false;
+    if (_lockoutInterval) { clearInterval(_lockoutInterval); _lockoutInterval = null; }
+
+    // Captcha
+    const showCaptcha = attempts >= LOGIN_CAPTCHA_AFTER;
+    if (showCaptcha) {
+        captcha.classList.add('visible');
+        if (_captchaAnswer === null) generateCaptcha();
+    } else {
+        captcha.classList.remove('visible');
+        _captchaAnswer = null;
+    }
+
+    // Attempt hint
+    const remaining = LOGIN_MAX_ATTEMPTS - attempts;
+    if (attempts === 0) {
+        hint.textContent = '';
+        hint.className   = 'login-attempts';
+    } else if (remaining > 1) {
+        hint.textContent = `⚠ ${remaining} attempts remaining before lockout.`;
+        hint.className   = 'login-attempts warn';
+    } else if (remaining === 1) {
+        hint.textContent = `🚨 1 attempt remaining — next failure locks you out.`;
+        hint.className   = 'login-attempts danger';
+    } else {
+        hint.textContent = '';
+    }
 }
 
 async function doLoginWithCredentials() {
-const username = document.getElementById('loginUsernameIn').value.trim().toLowerCase();
-const password = document.getElementById('loginPasswordIn').value;
-if (!username) return mmsg('loginMsg', 'Enter your username.', 'err');
-if (!password) return mmsg('loginMsg', 'Enter your password.', 'err');
-mmsg('loginMsg', 'Signing in…', 'inf');
-try {
-    await auth.signInWithEmailAndPassword(username + '@normsg.local', password);
-    document.getElementById('loginModal').classList.add('hidden');
-} catch(e) {
-    const msg = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code)
-        ? 'Incorrect username or password.'
-        : 'Sign-in failed: ' + e.message;
-    mmsg('loginMsg', msg, 'err');
-}
+    if (isLockedOut()) return;
+
+    const username = document.getElementById('loginUsernameIn').value.trim().toLowerCase();
+    const password = document.getElementById('loginPasswordIn').value;
+    if (!username) return mmsg('loginMsg', 'Enter your username.', 'err');
+    if (!password) return mmsg('loginMsg', 'Enter your password.', 'err');
+
+    const { attempts } = getLoginState();
+
+    // Captcha check
+    if (attempts >= LOGIN_CAPTCHA_AFTER) {
+        const given = parseInt(document.getElementById('captchaIn').value);
+        if (isNaN(given) || given !== _captchaAnswer) {
+            generateCaptcha();
+            return mmsg('loginMsg', '🤖 Incorrect answer — try the new captcha.', 'err');
+        }
+    }
+
+    // Artificial delay to slow automated attacks (grows with attempt count)
+    const delayMs = Math.min(500 + attempts * 400, 3000);
+    const btn = document.getElementById('loginSubmitBtn');
+    btn.disabled = true;
+    mmsg('loginMsg', 'Signing in…', 'inf');
+    await new Promise(r => setTimeout(r, delayMs));
+
+    try {
+        await auth.signInWithEmailAndPassword(username + '@normsg.local', password);
+
+        // Success — clear lockout state
+        clearLoginState();
+        _captchaAnswer = null;
+        document.getElementById('loginModal').classList.add('hidden');
+
+    } catch(e) {
+        const isWrongCred = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential','auth/invalid-email'].includes(e.code);
+        const msg = isWrongCred ? 'Incorrect username or password.' : 'Sign-in failed: ' + e.message;
+        mmsg('loginMsg', msg, 'err');
+
+        // Clear password field on failure
+        document.getElementById('loginPasswordIn').value = '';
+
+        if (isWrongCred) {
+            const newAttempts = attempts + 1;
+            setLoginAttempts(newAttempts);
+
+            // Generate new captcha on each failure
+            if (newAttempts >= LOGIN_CAPTCHA_AFTER) {
+                _captchaAnswer = null;
+                generateCaptcha();
+            }
+
+            // Log to Firestore so admins can see brute-force attempts
+            db.collection('securityLogs').add({
+                event:     'failed_login',
+                username,
+                attempts:  newAttempts,
+                ua:        navigator.userAgent.slice(0, 200),
+                ts:        SV(),
+            }).catch(() => {});
+
+            // Trigger lockout if max attempts reached
+            if (newAttempts >= LOGIN_MAX_ATTEMPTS) {
+                const { lockoutCount } = getLoginState();
+                const newCount     = lockoutCount + 1;
+                const lockSecs     = LOGIN_LOCKOUT_BASE * Math.pow(LOGIN_LOCKOUT_MULT, newCount - 1);
+                const lockUntil    = Date.now() + lockSecs * 1000;
+                setLockoutUntil(lockUntil);
+                setLockoutCount(newCount);
+                setLoginAttempts(0);
+                mmsg('loginMsg', `🔒 Account locked for ${lockSecs}s due to too many failures.`, 'err');
+            }
+        }
+
+        btn.disabled = false;
+        updateLoginUI();
+    }
 }
 
 async function adminCreateAccount() {
@@ -6221,41 +6430,50 @@ async function createPoll() {
     const options = inputs.map(i => i.value.trim()).filter(Boolean);
     if (options.length < 2) return mmsg('pollMsg','Add at least 2 options.','err');
 
-    const path = `groups/${chatId}/messages`;
-    await db.collection(path).add({
-        type:           'poll',
-        question:       q,
-        options,
-        votes:          {},           // { uid: optionIndex }
-        senderUid:      me.uid,
-        senderName:     me.displayName || me.email,
-        senderUsername: myUsername,
-        senderPhoto:    me.photoURL || null,
-        timestamp:      SV(),
-    });
+    const postBtn = document.querySelector('#pollModal .btn-add');
+    if (postBtn) { postBtn.disabled = true; postBtn.textContent = 'Posting…'; }
 
-    // Update group lastAt
-    await db.collection('groups').doc(chatId).update({
-        lastMsg:           '📊 Poll: ' + q.slice(0,40),
-        lastAt:            SV(),
-        lastSenderUid:     me.uid,
-        lastSenderUsername: myUsername,
-    }).catch(() => {});
+    try {
+        const path = `groups/${chatId}/messages`;
+        await db.collection(path).add({
+            type:           'poll',
+            question:       q,
+            options,
+            votes:          {},
+            senderUid:      me.uid,
+            senderName:     me.displayName || me.email,
+            senderUsername: myUsername,
+            senderPhoto:    me.photoURL || null,
+            timestamp:      SV(),
+        });
 
-    closeModal('pollModal');
+        await db.collection('groups').doc(chatId).update({
+            lastMsg:            '📊 Poll: ' + q.slice(0, 40),
+            lastAt:             SV(),
+            lastSenderUid:      me.uid,
+            lastSenderUsername: myUsername,
+        }).catch(() => {});
+
+        closeModal('pollModal');
+    } catch(e) {
+        mmsg('pollMsg', 'Failed to post poll: ' + (e.message || e), 'err');
+        if (postBtn) { postBtn.disabled = false; postBtn.textContent = 'Post Poll ➤'; }
+    }
 }
 
 async function votePoll(msgId, msgPath, optionIdx) {
     if (!msgPath) return;
-    // Un-vote if clicking current vote
-    const ref  = db.collection(msgPath).doc(msgId);
-    const snap = await ref.get();
-    if (!snap.exists) return;
-    const votes = snap.data().votes || {};
-    const update = votes[me.uid] === optionIdx
-        ? { [`votes.${me.uid}`]: firebase.firestore.FieldValue.delete() }
-        : { [`votes.${me.uid}`]: optionIdx };
-    await ref.update(update);
+    try {
+        const ref  = db.collection(msgPath).doc(msgId);
+        const snap = await ref.get();
+        if (!snap.exists) return;
+        const votes  = snap.data().votes || {};
+        const DEL    = firebase.firestore.FieldValue.delete();
+        const update = votes[me.uid] === optionIdx
+            ? { [`votes.${me.uid}`]: DEL }
+            : { [`votes.${me.uid}`]: optionIdx };
+        await ref.update(update);
+    } catch(e) { console.error('votePoll error:', e); }
 }
 
 // ── Init AI chats when user logs in ───────────────────────
