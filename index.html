@@ -164,6 +164,7 @@ exports.handler = async (event) => {
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
 
     <!-- Fonts: Syne (display) + Figtree (body) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1018,11 +1019,7 @@ exports.handler = async (event) => {
         .ch-online.off { color: var(--muted); }
 
         /* ── TYPING INDICATOR ────────────────────────────── */
-        #typingBar {
-            padding: 3px 20px 2px; font-size: 11px; color: var(--a2);
-            min-height: 20px; font-style: italic; flex-shrink: 0;
-            display: flex; align-items: center; gap: 6px;
-        }
+        /* typing-dots used by AI thinking indicator */
         .typing-dots span {
             display: inline-block; width: 4px; height: 4px;
             border-radius: 50%; background: var(--a2); margin: 0 1px;
@@ -2179,7 +2176,7 @@ exports.handler = async (event) => {
                     <button class="ic-btn" id="leaveBtn" onclick="leaveChat()" style="font-size:17px;color:var(--danger);" title="Leave chat">🚪</button>
                 </div>
             </div>
-            <div id="typingBar"></div>
+
 
             <div id="timeoutBanner" class="hidden">
                 <span>⏱</span><span id="toMsg">—</span>
@@ -2257,6 +2254,13 @@ const firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
+
+// ── APP CHECK (reCAPTCHA v3) — blocks direct API abuse ─────
+const appCheck = firebase.appCheck();
+appCheck.activate(
+    new firebase.appCheck.ReCaptchaV3Provider('6Lfbrt4sAAAAAKoP8fQYNmXO_K1BcrUUiWY5-msG'),
+    true   // isTokenAutoRefreshEnabled — silently refreshes the token every 1 hour
+);
 const auth    = firebase.auth();
 const db      = firebase.firestore();
 const storage = firebase.storage();
@@ -2761,7 +2765,6 @@ Object.values(dmUnsubLastAt).forEach(u => u && u());
 presenceUnsubs = {};
 dmUnsubLastAt  = {};
 dmLastAt       = {};
-if (typingUnsub) { typingUnsub(); typingUnsub = null; }
 auth.signOut();
 }
 
@@ -3256,7 +3259,6 @@ switchTab('groups');
 function openDM(friend) {chatType = 'dm';
 chatId   = dmId(me.uid, friend.uid);
 clearReply();
-clearMyTyping();
 
 const av = document.getElementById('chatAv');
 av.innerHTML = friend.photoURL ? `<img src="${friend.photoURL}" alt="">` : initials(friend.displayName||'?');
@@ -3281,13 +3283,11 @@ document.getElementById('sidebar').classList.remove('open');
 
 subMessages(`conversations/${chatId}/messages`);
 runCleanup(`conversations/${chatId}/messages`);
-startTypingWatch(`conversations/${chatId}`);
 }
 
 function openGroup(group) {chatType = 'group';
 chatId   = group.id;
 clearReply();
-clearMyTyping();
 
 const av = document.getElementById('chatAv');
 av.innerHTML = esc((group.name[0]||'G').toUpperCase());
@@ -3306,7 +3306,6 @@ document.getElementById('sidebar').classList.remove('open');
 
 subMessages(`groups/${chatId}/messages`);
 runCleanup(`groups/${chatId}/messages`);
-startTypingWatch(`groups/${chatId}`);
 mentionMembers = []; // reset @ cache for new group
 }
 
@@ -3516,7 +3515,6 @@ if (validErr) { showToast(validErr); return; }
 
 if (!await checkSend('text', text)) return;
 inp.value = ''; inp.style.height = '';
-clearMyTyping();
 const rt = replyTo ? { ...replyTo } : null;
 clearReply();
 await pushMsg({ type:'text', text, ...(rt ? { replyTo: rt } : {}) });
@@ -4384,53 +4382,6 @@ return date.toLocaleDateString();
 }
 
 // ── TYPING INDICATORS ──────────────────────────────────────
-let typingUnsub  = null;
-let typingTimer  = null;
-let isTyping     = false;
-
-function startTypingWatch(convPath) {
-if (typingUnsub) { typingUnsub(); typingUnsub = null; }
-typingUnsub = db.doc(convPath).onSnapshot(snap => {
-const typing = snap.data()?.typing || {};
-const now    = Date.now();
-const others = Object.entries(typing)
-.filter(([uid, ts]) => uid !== me.uid && ts && (now - ts.toDate().getTime()) < 5000)
-.map(([uid]) => {
-    const f = friends.find(x => x.uid === uid);
-    return f ? (getNicknames()[uid] || f.displayName || f.username) : 'Someone';
-});
-const bar = document.getElementById('typingBar');
-if (others.length) {
-bar.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div> ${esc(others.join(', '))} ${others.length===1?'is':'are'} typing…`;
-} else {
-bar.innerHTML = '';
-}
-});
-}
-
-function onMsgInputChange() {
-if (!chatId || !me) return;
-const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
-// Set typing
-if (!isTyping) {
-isTyping = true;
-db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
-}
-// Reset timer to clear typing after 3s idle
-clearTimeout(typingTimer);
-typingTimer = setTimeout(() => {
-isTyping = false;
-db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
-}, 3000);
-}
-
-function clearMyTyping() {
-if (!chatId || !me) return;
-isTyping = false;
-clearTimeout(typingTimer);
-const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
-db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
-}
 
 // ── UNFRIEND ───────────────────────────────────────────────
 async function unfriend(friendUid) {
@@ -5743,16 +5694,6 @@ let mentionMembers = [];   // group members for suggestions
 
 function onMsgInputChange() {
 if (!chatId || !me) return;
-const convPath = chatType==='dm' ? `conversations/${chatId}` : `groups/${chatId}`;
-if (!isTyping) {
-isTyping = true;
-db.doc(convPath).set({ [`typing.${me.uid}`]: SV() }, { merge: true }).catch(()=>{});
-}
-clearTimeout(typingTimer);
-typingTimer = setTimeout(() => {
-isTyping = false;
-db.doc(convPath).update({ [`typing.${me.uid}`]: firebase.firestore.FieldValue.delete() }).catch(()=>{});
-}, 3000);
 
 const inp = document.getElementById('msgInput');
 
@@ -6268,7 +6209,6 @@ function openAIChat(chatId) {
     document.getElementById('renameChatBtn').classList.add('hidden');
     document.getElementById('leaveBtn').style.display = 'none';
     document.getElementById('timeoutBanner').classList.add('hidden');
-    document.getElementById('typingBar').textContent = '';
 
     // Render messages
     renderAIChatMessages(chatId);
