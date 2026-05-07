@@ -1409,6 +1409,53 @@ exports.handler = async (event) => {
             .mob-bar { display: flex !important; }
         }
         .mob-bar { display: none; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surf); align-items: center; gap: 10px; flex-shrink: 0; }
+
+        /* ── NORMAI CHAT ─────────────────────────────────────── */
+        .ai-tab-icon { background: linear-gradient(135deg,var(--a2),var(--teal));
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+        #aiPanel { display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0; }
+        .ai-chat-list { flex:1;overflow-y:auto;padding:6px 9px; }
+        .ai-chat-item {
+            display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:12px;
+            cursor:pointer;transition:background 0.15s;border:1px solid transparent;margin-bottom:4px;
+        }
+        .ai-chat-item:hover { background:var(--card);border-color:var(--border); }
+        .ai-chat-item.on { background:rgba(167,139,250,0.12);border-color:rgba(167,139,250,0.3); }
+        .ai-chat-icon { font-size:18px;flex-shrink:0; }
+        .ai-chat-info { flex:1;min-width:0; }
+        .ai-chat-title { font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+        .ai-chat-meta  { font-size:10px;color:var(--muted);margin-top:1px; }
+        .ai-chat-del { background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;padding:3px 6px;border-radius:7px;transition:all 0.15s;flex-shrink:0; }
+        .ai-chat-del:hover { color:var(--danger);background:rgba(244,63,94,0.12); }
+        .ai-new-btn { width:100%;padding:9px;border:none;border-radius:10px;cursor:pointer;font-family:'Figtree',sans-serif;font-weight:700;font-size:12px;letter-spacing:0.04em;
+            background:linear-gradient(135deg,rgba(124,92,252,0.18),rgba(14,165,233,0.12));
+            border:1px solid rgba(124,92,252,0.3);color:var(--a2);transition:all 0.18s; }
+        .ai-new-btn:hover { background:linear-gradient(135deg,rgba(124,92,252,0.28),rgba(14,165,233,0.2)); }
+        .ai-new-btn:disabled { opacity:0.45;cursor:not-allowed; }
+        .ai-rate-bar { font-size:10px;color:var(--muted);padding:4px 14px 6px;display:flex;gap:10px; }
+        .ai-rate-bar span { display:inline-flex;align-items:center;gap:3px; }
+        /* AI message bubbles */
+        .ai-msg-wrap { display:flex;flex-direction:column;margin-bottom:14px; }
+        .ai-msg-wrap.user-msg { align-items:flex-end; }
+        .ai-msg-wrap.ai-msg   { align-items:flex-start; }
+        .ai-bubble {
+            max-width:82%;padding:9px 13px;border-radius:16px;font-size:13px;line-height:1.5;
+            word-break:break-word;white-space:pre-wrap;
+        }
+        .user-msg .ai-bubble { background:var(--a2);color:#fff;border-bottom-right-radius:4px; }
+        .ai-msg   .ai-bubble {
+            background:var(--card);border:1px solid var(--border);color:var(--text);
+            border-bottom-left-radius:4px;
+        }
+        .ai-msg-meta { font-size:10px;color:var(--muted);margin-top:3px;padding:0 4px; }
+        .ai-thinking-dot { display:inline-block;animation:aiDot 1.2s infinite both; }
+        .ai-thinking-dot:nth-child(2){animation-delay:.2s}
+        .ai-thinking-dot:nth-child(3){animation-delay:.4s}
+        @keyframes aiDot { 0%,80%,100%{opacity:.2;transform:scale(0.8)} 40%{opacity:1;transform:scale(1)} }
+        .ai-empty-state { flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:32px;text-align:center; }
+        .ai-empty-ico  { font-size:38px;margin-bottom:4px; }
+        .ai-empty-title{ font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text); }
+        .ai-empty-sub  { font-size:12px;color:var(--muted);line-height:1.5; }
     </style>
 </head>
 <body>
@@ -1934,6 +1981,7 @@ exports.handler = async (event) => {
         <div class="tabs">
             <button class="tab on" id="tabDMs"     onclick="switchTab('dms')">DMs <span id="reqBadge" class="badge hidden">0</span></button>
             <button class="tab"    id="tabGroups"  onclick="switchTab('groups')">Groups</button>
+            <button class="tab"    id="tabAI"      onclick="switchTab('ai')"><span class="ai-tab-icon">✦ AI</span></button>
         </div>
 
         <!-- DMs panel -->
@@ -1981,6 +2029,15 @@ exports.handler = async (event) => {
             </div>
             <div class="btm-bar">
                 <button class="btn-new-grp" onclick="openGroupModal()">＋ &nbsp;New Group Chat</button>
+            </div>
+        </div>
+
+        <!-- NorMAI Chat panel -->
+        <div id="aiPanel" style="display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0;">
+            <div class="ai-chat-list scr" id="aiChatList"></div>
+            <div class="btm-bar" style="padding:10px 12px;gap:6px;">
+                <button class="ai-new-btn" id="aiNewBtn" onclick="createAIChat()">✦ New AI Chat</button>
+                <div class="ai-rate-bar" id="aiRateBar" style="padding:4px 2px 0;justify-content:center;"></div>
             </div>
         </div>
     </div>
@@ -2452,6 +2509,7 @@ setProfile();
 subscribeAll();
 scheduleStatusesRefresh({ force: true });
 initAdminSystem();
+initAIChats();
 }
 
 function getFriendUidsKey() {
@@ -2790,13 +2848,16 @@ el.appendChild(d);
 
 // ── TABS ───────────────────────────────────────────────────
 function switchTab(t) {
-const dms = t==='dms';
-currentSidebarTab = dms ? 'dms' : 'groups';
+const dms = t==='dms', grp = t==='groups', ai = t==='ai';
+currentSidebarTab = t;
 document.getElementById('tabDMs').classList.toggle('on', dms);
-document.getElementById('tabGroups').classList.toggle('on', !dms);
+document.getElementById('tabGroups').classList.toggle('on', grp);
+document.getElementById('tabAI').classList.toggle('on', ai);
 document.getElementById('dmsPanel').style.display    = dms ? 'flex' : 'none';
-document.getElementById('groupsPanel').style.display = dms ? 'none' : 'flex';
+document.getElementById('groupsPanel').style.display = grp ? 'flex' : 'none';
+document.getElementById('aiPanel').style.display     = ai  ? 'flex' : 'none';
 if (dms) scheduleStatusesRefresh();
+if (ai) { renderAIChats(); updateAIRateBar(); }
 }
 
 // ── FRIEND REQUESTS ────────────────────────────────────────
@@ -3126,6 +3187,7 @@ return `<div class="reply-quote" onclick="">
 
 // ── SEND ───────────────────────────────────────────────────
 async function sendMsg() {
+if (chatType === 'ai') { sendAIChatMsg(); return; }
 const inp  = document.getElementById('msgInput');
 const text = inp.value.trim();
 if (!text || !chatId) return;
@@ -5738,6 +5800,285 @@ ${alreadyFriend ? '✓ Friends' : '+ Add'}
 </button>`;
 return card;
 }
+
+// ══════════════════════════════════════════════════════════════
+//  NORMAI CHAT — dedicated AI conversation tab
+// ══════════════════════════════════════════════════════════════
+
+const AI_MAX_CHATS  = 3;
+const AI_RATE_WIN   = 60000;                          // 1 min window
+const AI_FREE_RPM   = 2;   const AI_PRO_RPM  = 4;    // requests per minute
+const AI_FREE_MAX   = 12;  const AI_PRO_MAX  = 24;   // max msgs per chat
+
+let activeAIChatId  = null;           // currently open AI chat
+let aiReqTs         = {};             // chatId → [timestamps] in-memory rate tracking
+
+// ── localStorage helpers ───────────────────────────────────
+function aiChatsKey()      { return `normsg_aichats_${me?.uid}`; }
+function aiMsgsKey(id)     { return `normsg_aichat_${me?.uid}_${id}`; }
+
+function getAIChats() {
+    try { return JSON.parse(localStorage.getItem(aiChatsKey()) || '[]'); } catch { return []; }
+}
+function saveAIChats(arr) {
+    try { localStorage.setItem(aiChatsKey(), JSON.stringify(arr)); } catch {}
+}
+function getAIMsgs(id) {
+    try { return JSON.parse(localStorage.getItem(aiMsgsKey(id)) || '[]'); } catch { return []; }
+}
+function saveAIMsgs(id, msgs) {
+    try { localStorage.setItem(aiMsgsKey(id), JSON.stringify(msgs)); } catch {}
+}
+
+// ── Rate limit check ───────────────────────────────────────
+function checkAIChatRate(chatId) {
+    const now = Date.now();
+    if (!aiReqTs[chatId]) aiReqTs[chatId] = [];
+    aiReqTs[chatId] = aiReqTs[chatId].filter(t => now - t < AI_RATE_WIN);
+    const limit = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
+    if (aiReqTs[chatId].length >= limit) return false;
+    aiReqTs[chatId].push(now);
+    return true;
+}
+function aiReqsLeft(chatId) {
+    const now = Date.now();
+    const ts  = (aiReqTs[chatId] || []).filter(t => now - t < AI_RATE_WIN);
+    const lim = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
+    return Math.max(0, lim - ts.length);
+}
+function aiMsgLimitReached(chatId) {
+    const msgs = getAIMsgs(chatId).filter(m => m.role === 'user');
+    const max  = userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX;
+    return msgs.length >= max;
+}
+
+// ── Render chat list in sidebar ────────────────────────────
+function renderAIChats() {
+    if (!me) return;
+    const el    = document.getElementById('aiChatList');
+    const chats = getAIChats();
+    const btn   = document.getElementById('aiNewBtn');
+    if (btn) btn.disabled = chats.length >= AI_MAX_CHATS;
+
+    if (!chats.length) {
+        el.innerHTML = `<div class="ai-empty-state" style="padding-top:24px;">
+            <div class="ai-empty-ico">✦</div>
+            <div class="ai-empty-title">No AI chats yet</div>
+            <div class="ai-empty-sub">Create one to start chatting<br>with NorMAI</div>
+        </div>`;
+        return;
+    }
+    el.innerHTML = '';
+    chats.forEach(c => {
+        const msgs    = getAIMsgs(c.id);
+        const maxMsgs = userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX;
+        const used    = msgs.filter(m => m.role === 'user').length;
+        const d = document.createElement('div');
+        d.className = 'ai-chat-item' + (activeAIChatId === c.id ? ' on' : '');
+        d.innerHTML = `
+            <div class="ai-chat-icon">✦</div>
+            <div class="ai-chat-info">
+                <div class="ai-chat-title">${esc(c.title)}</div>
+                <div class="ai-chat-meta">${used}/${maxMsgs} messages</div>
+            </div>
+            <button class="ai-chat-del" title="Delete chat">🗑</button>`;
+        d.querySelector('.ai-chat-del').onclick = e => deleteAIChat(c.id, e);
+        d.onclick = () => openAIChat(c.id);
+        el.appendChild(d);
+    });
+}
+
+// ── Rate bar under New Chat button ─────────────────────────
+function updateAIRateBar() {
+    const bar = document.getElementById('aiRateBar');
+    if (!bar || !activeAIChatId) { if (bar) bar.textContent = ''; return; }
+    const rpm  = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
+    const max  = userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX;
+    const left = aiReqsLeft(activeAIChatId);
+    const msgs = getAIMsgs(activeAIChatId).filter(m => m.role === 'user').length;
+    bar.innerHTML = `<span>⚡ ${left}/${rpm} req/min</span><span>💬 ${msgs}/${max} in chat</span>`;
+}
+
+// ── Create a new AI chat ───────────────────────────────────
+function createAIChat() {
+    const chats = getAIChats();
+    if (chats.length >= AI_MAX_CHATS) {
+        showToast(`Max ${AI_MAX_CHATS} AI chats — delete one first! 🗑`);
+        return;
+    }
+    const id    = 'ai_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+    const chat  = { id, title: 'New Chat', createdAt: Date.now() };
+    chats.push(chat);
+    saveAIChats(chats);
+    renderAIChats();
+    openAIChat(id);
+}
+
+// ── Delete an AI chat ──────────────────────────────────────
+function deleteAIChat(chatId, e) {
+    e.stopPropagation();
+    const chats = getAIChats().filter(c => c.id !== chatId);
+    saveAIChats(chats);
+    try { localStorage.removeItem(aiMsgsKey(chatId)); } catch {}
+    delete aiReqTs[chatId];
+    if (activeAIChatId === chatId) {
+        activeAIChatId = null;
+        chatType = null;
+        document.getElementById('emptyState').style.display = '';
+        document.getElementById('activeChat').style.display = 'none';
+    }
+    renderAIChats();
+    updateAIRateBar();
+}
+
+// ── Open an AI chat ────────────────────────────────────────
+function openAIChat(chatId) {
+    activeAIChatId = chatId;
+    chatType   = 'ai';
+    // Unsubscribe any active DM/group listener
+    if (msgUnsub) { msgUnsub(); msgUnsub = null; }
+
+    // Switch to chat panel
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('activeChat').style.display = 'flex';
+
+    const chats = getAIChats();
+    const chat  = chats.find(c => c.id === chatId);
+
+    // Patch header for AI mode
+    document.getElementById('chatName').textContent = chat?.title || 'AI Chat';
+    document.getElementById('chatSub').textContent  = userPlan === 'pro'
+        ? `NorMAI Pro · ${AI_PRO_RPM}/min · ${AI_PRO_MAX} msgs`
+        : `NorMAI · ${AI_FREE_RPM}/min · ${AI_FREE_MAX} msgs`;
+    document.getElementById('renameChatBtn').classList.add('hidden');
+    document.getElementById('leaveBtn').style.display = 'none';
+    document.getElementById('timeoutBanner').classList.add('hidden');
+    document.getElementById('typingBar').textContent = '';
+
+    // Render messages
+    renderAIChatMessages(chatId);
+
+    // Update sidebar highlight
+    renderAIChats();
+    updateAIRateBar();
+
+    // Mobile: close sidebar
+    document.getElementById('sidebar').classList.remove('open');
+
+    // Focus input
+    setTimeout(() => document.getElementById('msgInput')?.focus(), 80);
+}
+
+// ── Render messages in the chat panel ─────────────────────
+function renderAIChatMessages(chatId) {
+    const area  = document.getElementById('messagesArea');
+    const msgs  = getAIMsgs(chatId);
+    if (!msgs.length) {
+        area.innerHTML = `<div class="ai-empty-state">
+            <div class="ai-empty-ico">✦</div>
+            <div class="ai-empty-title">Ask NorMAI anything</div>
+            <div class="ai-empty-sub" style="max-width:240px;">
+                ${userPlan === 'pro'
+                    ? `Pro · ${AI_PRO_RPM} req/min · up to ${AI_PRO_MAX} messages`
+                    : `Free · ${AI_FREE_RPM} req/min · up to ${AI_FREE_MAX} messages`}
+            </div>
+        </div>`;
+        return;
+    }
+    area.innerHTML = msgs.map(m => {
+        if (m.role === 'thinking') return `
+            <div class="ai-msg-wrap ai-msg">
+                <div class="ai-bubble" style="color:var(--muted);">
+                    <span class="ai-thinking-dot">●</span>
+                    <span class="ai-thinking-dot">●</span>
+                    <span class="ai-thinking-dot">●</span>
+                </div>
+            </div>`;
+        const isUser  = m.role === 'user';
+        const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+        const content = isUser ? esc(m.text) : renderAIText(m.text);
+        return `<div class="ai-msg-wrap ${isUser ? 'user-msg' : 'ai-msg'}">
+            <div class="ai-bubble">${content}</div>
+            <div class="ai-msg-meta">${isUser ? 'You' : '✦ NorMAI'} · ${timeStr}</div>
+        </div>`;
+    }).join('');
+    area.scrollTop = area.scrollHeight;
+}
+
+// ── Send a message in AI chat ──────────────────────────────
+async function sendAIChatMsg() {
+    if (!activeAIChatId) return;
+    const inp  = document.getElementById('msgInput');
+    const text = inp.value.trim();
+    if (!text) return;
+
+    // Check per-chat message cap
+    if (aiMsgLimitReached(activeAIChatId)) {
+        showToast(`Chat limit reached (${userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX} msgs). Start a new chat!`);
+        return;
+    }
+    // Check per-minute rate limit
+    if (!checkAIChatRate(activeAIChatId)) {
+        const rpm = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
+        showToast(`Rate limit: max ${rpm} requests/min for ${userPlan === 'pro' ? 'Pro' : 'Free'}.`);
+        return;
+    }
+
+    inp.value = '';
+    autoGrow(inp);
+
+    // Save user message
+    const msgs = getAIMsgs(activeAIChatId);
+    msgs.push({ role: 'user', text, ts: Date.now() });
+
+    // Auto-title from first message
+    const chats = getAIChats();
+    const chat  = chats.find(c => c.id === activeAIChatId);
+    if (chat && chat.title === 'New Chat') {
+        chat.title = text.slice(0, 36) + (text.length > 36 ? '…' : '');
+        saveAIChats(chats);
+    }
+
+    // Add thinking placeholder
+    msgs.push({ role: 'thinking', ts: Date.now() });
+    saveAIMsgs(activeAIChatId, msgs);
+    renderAIChatMessages(activeAIChatId);
+    updateAIRateBar();
+    renderAIChats();
+
+    // Build context from last 8 exchanges
+    const history = msgs
+        .filter(m => m.role === 'user' || m.role === 'assistant')
+        .slice(-16)
+        .map(m => `${m.role === 'user' ? 'User' : 'NorMAI'}: ${m.text}`)
+        .join('\n');
+
+    try {
+        const isPro = userPlan === 'pro';
+        const sysPrompt = `You are NorMAI, a smart and friendly AI assistant inside NorMSG. Be helpful, concise and clear. Use markdown code blocks for code.${isPro ? ' Give thorough, detailed answers.' : ''}`;
+        const fullPrompt = sysPrompt + (history ? `\n\nConversation so far:\n${history}\n\nUser: ${text}` : `\n\nUser: ${text}`);
+        const answer = await callNormAI(fullPrompt, isPro ? history : '');
+
+        // Replace thinking with assistant reply
+        const updatedMsgs = getAIMsgs(activeAIChatId).filter(m => m.role !== 'thinking');
+        updatedMsgs.push({ role: 'assistant', text: answer || '(No response — try again)', ts: Date.now() });
+        saveAIMsgs(activeAIChatId, updatedMsgs);
+    } catch(e) {
+        const updatedMsgs = getAIMsgs(activeAIChatId).filter(m => m.role !== 'thinking');
+        updatedMsgs.push({ role: 'assistant', text: `⚠ Error: ${e.message}`, ts: Date.now() });
+        saveAIMsgs(activeAIChatId, updatedMsgs);
+    }
+
+    renderAIChatMessages(activeAIChatId);
+    updateAIRateBar();
+    renderAIChats();
+}
+
+// ── Init AI chats when user logs in ───────────────────────
+function initAIChats() {
+    if (currentSidebarTab === 'ai') renderAIChats();
+}
+
 </script>
 </body>
 </html>
