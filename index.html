@@ -739,6 +739,50 @@ exports.handler = async (event) => {
             transition: color 0.15s; flex-shrink: 0;
         }
         .img-btn:hover { color: var(--a2); }
+        #pollBtn { display: none; } /* shown only in group chats */
+
+        /* ── POLL BUBBLE ─────────────────────────────────── */
+        .poll-bubble {
+            background: var(--panel); border: 1px solid var(--border2);
+            border-radius: 14px; padding: 13px 15px; min-width: 230px; max-width: 320px;
+        }
+        .poll-q {
+            font-size: 13px; font-weight: 700; margin-bottom: 11px;
+            color: var(--text); line-height: 1.4;
+        }
+        .poll-q::before { content: '📊 '; }
+        .poll-opt {
+            display: flex; align-items: center; gap: 9px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 9px; padding: 8px 10px; margin-bottom: 7px;
+            cursor: pointer; position: relative; overflow: hidden;
+            transition: border-color 0.15s;
+        }
+        .poll-opt:hover { border-color: var(--accent); }
+        .poll-opt.voted { border-color: var(--accent); background: rgba(124,92,252,0.1); }
+        .poll-opt-bar {
+            position: absolute; left: 0; top: 0; bottom: 0;
+            background: rgba(124,92,252,0.13); border-radius: 9px;
+            pointer-events: none; transition: width 0.35s ease;
+        }
+        .poll-opt-label { font-size: 12px; font-weight: 500; flex: 1; position: relative; z-index: 1; }
+        .poll-opt-pct   { font-size: 11px; color: var(--muted); position: relative; z-index: 1; white-space: nowrap; }
+        .poll-footer    { font-size: 10px; color: var(--muted); margin-top: 8px; text-align: right; }
+
+        /* ── POLL MODAL extras ───────────────────────────── */
+        .poll-opt-row { display: flex; gap: 7px; margin-bottom: 7px; align-items: center; }
+        .poll-opt-row .m-input { margin: 0; flex: 1; }
+        .poll-rm-btn {
+            background: none; border: none; color: var(--muted); cursor: pointer;
+            font-size: 16px; padding: 0 4px; transition: color 0.15s;
+        }
+        .poll-rm-btn:hover { color: var(--danger); }
+        .poll-add-btn {
+            background: none; border: 1px dashed var(--border2); color: var(--muted);
+            border-radius: 9px; padding: 7px 12px; cursor: pointer; font-size: 12px;
+            width: 100%; margin-bottom: 14px; transition: all 0.15s;
+        }
+        .poll-add-btn:hover { border-color: var(--accent); color: var(--a2); }
 
         #msgInput {
             flex: 1; background: none; border: none; outline: none;
@@ -1926,6 +1970,30 @@ exports.handler = async (event) => {
     </div>
 </div>
 
+<!-- ═══════════════ POLL MODAL ════════════════ -->
+<div id="pollModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:400px;">
+        <div class="modal-title">📊 Create a Poll</div>
+        <div class="modal-sub">Ask your group a question — everyone can vote.</div>
+
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Question</div>
+        <input class="m-input" id="pollQuestion" placeholder="What do you want to ask?" maxlength="120" style="margin-bottom:14px;">
+
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Options</div>
+        <div id="pollOptions">
+            <div class="poll-opt-row"><input class="m-input" placeholder="Option 1" maxlength="60"><button class="poll-rm-btn" onclick="removePollOpt(this)">✕</button></div>
+            <div class="poll-opt-row"><input class="m-input" placeholder="Option 2" maxlength="60"><button class="poll-rm-btn" onclick="removePollOpt(this)">✕</button></div>
+        </div>
+        <button class="poll-add-btn" onclick="addPollOption()">＋ Add option</button>
+
+        <div class="m-msg" id="pollMsg"></div>
+        <div class="modal-row">
+            <button class="btn-sec" onclick="closeModal('pollModal')">Cancel</button>
+            <button class="btn-pri" onclick="createPoll()">Post Poll</button>
+        </div>
+    </div>
+</div>
+
 <!-- ═══════════════ LIGHTBOX (with zoom + pan) ════════════════ -->
 <div id="lightbox" class="hidden">
     <button class="lb-close" onclick="closeLightbox()" style="position:fixed;top:18px;right:22px;background:var(--panel);border:1px solid var(--border2);color:var(--text);font-size:18px;width:42px;height:42px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:602;">✕</button>
@@ -2116,6 +2184,7 @@ exports.handler = async (event) => {
                         <div class="esearch-results" id="esearchResults"></div>
                     </div>
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
+                    <button class="img-btn" id="pollBtn" onclick="openPollModal()" title="Create a poll (group chats only)">📊</button>
                     <button class="img-btn" id="normAIBtn" onclick="openSmartReply()" title="NorMAI — smart reply suggestions" style="font-size:15px;color:var(--a2);">✦</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
                         oninput="autoGrow(this);onMsgInputChange();updateFmtToolbar(this)"
@@ -2995,6 +3064,7 @@ updateChatSubStatus(pres?.online === true, pres?.lastSeen || null);
 // Hide manage group button for DMs
 document.getElementById('renameChatBtn').classList.add('hidden');
 document.getElementById('leaveBtn').title = 'Hide conversation';
+document.getElementById('pollBtn').style.display = 'none'; // polls only in groups
 markRead(chatId);
 activateChat();
 renderFriends();
@@ -3005,8 +3075,7 @@ runCleanup(`conversations/${chatId}/messages`);
 startTypingWatch(`conversations/${chatId}`);
 }
 
-function openGroup(group) {
-chatType = 'group';
+function openGroup(group) {chatType = 'group';
 chatId   = group.id;
 clearReply();
 clearMyTyping();
@@ -3020,6 +3089,7 @@ document.getElementById('chatSub').textContent  = (group.members?.length||0) + '
 // Show manage button to all group members
 document.getElementById('renameChatBtn').classList.remove('hidden');
 document.getElementById('leaveBtn').title = 'Leave group';
+document.getElementById('pollBtn').style.display = 'inline-flex'; // polls available in groups
 markRead(chatId);
 activateChat();
 renderGroups();
@@ -3041,7 +3111,7 @@ clearToBanner();
 }
 
 // ── MESSAGES ───────────────────────────────────────────────
-const MSG_PAGE = 50;   // reads per page — change to load more
+const MSG_PAGE = 100;  // reads per page — change to load more
 
 function subMessages(path) {
 if (msgUnsub) { msgUnsub(); msgUnsub = null; }
@@ -3109,6 +3179,27 @@ bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
         onclick="openLB('${esc(msg.imageUrl)}')">
     ${exp ? `<div class="img-exp">⏱ ${exp}</div>` : ''}
 </div>`;
+} else if (msg.type === 'poll') {
+const votes   = msg.votes || {};
+const opts    = msg.options || [];
+const total   = Object.keys(votes).length;
+const myVote  = votes[me.uid] !== undefined ? votes[me.uid] : -1;
+const optHTML = opts.map((opt, i) => {
+    const count = Object.values(votes).filter(v => v === i).length;
+    const pct   = total ? Math.round(count / total * 100) : 0;
+    const isMe  = myVote === i;
+    const pid2  = (msg._path||'').replace(/'/g,"\\'");
+    return `<div class="poll-opt${isMe?' voted':''}" onclick="votePoll('${msg.id}','${pid2}',${i})">
+        <div class="poll-opt-bar" style="width:${pct}%"></div>
+        <span class="poll-opt-label">${esc(opt)}</span>
+        <span class="poll-opt-pct">${pct}%</span>
+    </div>`;
+}).join('');
+bubble = `<div class="poll-bubble">
+    <div class="poll-q">${esc(msg.question||'Poll')}</div>
+    ${optHTML}
+    <div class="poll-footer">${total} vote${total===1?'':'s'}${myVote>=0?' · You voted':''}${mine?' · <span style="cursor:pointer;color:var(--danger);" onclick="delMsg(\''+mid+'\',\''+( (msg._path||'').replace(/'/g,"\\'") )+'\',\'\',false)">Delete</span>':''}</div>
+</div>`;
 } else {
 bubble = `<div class="bubble ${mine?'sent':'recv'}">
     ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
@@ -3131,17 +3222,18 @@ const grp = myGroups.find(g => g.id === chatId);
 return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
 })();
 
-const isAIMsg = msg.type === 'ai' || msg.type === 'ai-thinking';
+const isAIMsg   = msg.type === 'ai' || msg.type === 'ai-thinking';
+const isPollMsg = msg.type === 'poll';
 
-const actionBtn = (msg.type === 'deleted' || isAIMsg) ? '' : (mine
+const actionBtn = (msg.type === 'deleted' || isAIMsg || isPollMsg) ? '' : (mine
 ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
 : isGroupAdmin
     ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
     : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
 
-const replySnip = msg.type === 'image' ? '[Image]' : (msg.text||'').slice(0,60);
-const replyBtn  = isAIMsg ? '' : `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
-const emojiTrigger = isAIMsg ? '' : `<button class="emoji-trigger" onclick="openEmojiPicker(event,'${mid}','${pid}')">😊</button>`;
+const replySnip = msg.type === 'image' ? '[Image]' : msg.type === 'poll' ? '[Poll]' : (msg.text||'').slice(0,60);
+const replyBtn  = (isAIMsg || isPollMsg) ? '' : `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
+const emojiTrigger = (isAIMsg || isPollMsg) ? '' : `<button class="emoji-trigger" onclick="openEmojiPicker(event,'${mid}','${pid}')">😊</button>`;
 
 // Reactions
 const reactions = msg.reactions || {};
@@ -6086,6 +6178,84 @@ async function sendAIChatMsg() {
     renderAIChatMessages(activeAIChatId);
     updateAIRateBar();
     renderAIChats();
+}
+
+// ── POLLS ───────────────────────────────────────────────────
+function openPollModal() {
+    if (chatType !== 'group') return;
+    document.getElementById('pollQuestion').value = '';
+    mmsg('pollMsg','','');
+    // Reset to 2 blank options
+    const el = document.getElementById('pollOptions');
+    el.innerHTML = `
+        <div class="poll-opt-row"><input class="m-input" placeholder="Option 1" maxlength="60"><button class="poll-rm-btn" onclick="removePollOpt(this)">✕</button></div>
+        <div class="poll-opt-row"><input class="m-input" placeholder="Option 2" maxlength="60"><button class="poll-rm-btn" onclick="removePollOpt(this)">✕</button></div>`;
+    document.getElementById('pollModal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('pollQuestion').focus(), 80);
+}
+
+function addPollOption() {
+    const el   = document.getElementById('pollOptions');
+    const rows  = el.querySelectorAll('.poll-opt-row');
+    if (rows.length >= 6) { mmsg('pollMsg','Max 6 options.','err'); return; }
+    const idx  = rows.length + 1;
+    const row  = document.createElement('div');
+    row.className = 'poll-opt-row';
+    row.innerHTML = `<input class="m-input" placeholder="Option ${idx}" maxlength="60"><button class="poll-rm-btn" onclick="removePollOpt(this)">✕</button>`;
+    el.appendChild(row);
+    row.querySelector('input').focus();
+}
+
+function removePollOpt(btn) {
+    const el   = document.getElementById('pollOptions');
+    const rows  = el.querySelectorAll('.poll-opt-row');
+    if (rows.length <= 2) { mmsg('pollMsg','Need at least 2 options.','err'); return; }
+    btn.closest('.poll-opt-row').remove();
+}
+
+async function createPoll() {
+    const q = document.getElementById('pollQuestion').value.trim();
+    if (!q) return mmsg('pollMsg','Enter a question.','err');
+
+    const inputs  = [...document.querySelectorAll('#pollOptions .m-input')];
+    const options = inputs.map(i => i.value.trim()).filter(Boolean);
+    if (options.length < 2) return mmsg('pollMsg','Add at least 2 options.','err');
+
+    const path = `groups/${chatId}/messages`;
+    await db.collection(path).add({
+        type:           'poll',
+        question:       q,
+        options,
+        votes:          {},           // { uid: optionIndex }
+        senderUid:      me.uid,
+        senderName:     me.displayName || me.email,
+        senderUsername: myUsername,
+        senderPhoto:    me.photoURL || null,
+        timestamp:      SV(),
+    });
+
+    // Update group lastAt
+    await db.collection('groups').doc(chatId).update({
+        lastMsg:           '📊 Poll: ' + q.slice(0,40),
+        lastAt:            SV(),
+        lastSenderUid:     me.uid,
+        lastSenderUsername: myUsername,
+    }).catch(() => {});
+
+    closeModal('pollModal');
+}
+
+async function votePoll(msgId, msgPath, optionIdx) {
+    if (!msgPath) return;
+    // Un-vote if clicking current vote
+    const ref  = db.collection(msgPath).doc(msgId);
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    const votes = snap.data().votes || {};
+    const update = votes[me.uid] === optionIdx
+        ? { [`votes.${me.uid}`]: firebase.firestore.FieldValue.delete() }
+        : { [`votes.${me.uid}`]: optionIdx };
+    await ref.update(update);
 }
 
 // ── Init AI chats when user logs in ───────────────────────
