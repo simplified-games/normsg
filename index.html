@@ -128,6 +128,12 @@ exports.handler = async (event) => {
             (request.auth.token.email == 'simplifiedlearning10@gmail.com' ||
              exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)));
         }
+        match /siteConfig/{docId} {
+          allow read:  if request.auth != null;
+          allow write: if request.auth != null &&
+            (request.auth.token.email == 'simplifiedlearning10@gmail.com' ||
+             exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)));
+        }
       }
     }
 
@@ -2140,7 +2146,7 @@ async function callNormAI(prompt, context = '') {
     });
     if (!res.ok) throw new Error(`NorMAI ${res.status}`);
     const data = await res.json();
-    return data.reply ?? data.result ?? data.text ?? '';
+    return data.reply || data.result || data.text || '';
 }
 
 async function openSmartReply() {
@@ -2166,42 +2172,41 @@ async function openSmartReply() {
     }
 }
 
-function showNormAIPanel(text, isPro) {
-    document.getElementById('normAIPanel')?.remove();
-    const panel = document.createElement('div');
-    panel.id = 'normAIPanel';
-    panel.style.cssText = `position:absolute;bottom:calc(100% + 8px);left:0;right:0;
-        background:var(--panel);border:1px solid var(--border2);border-radius:16px;
-        padding:12px 14px;z-index:50;box-shadow:0 8px 32px rgba(0,0,0,0.55);animation:fadeIn 0.18s ease;`;
-    const lines = text.split('\n').map(l => l.replace(/^\d+[\.\)]\s*/,'').trim()).filter(Boolean);
-    panel.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
-            <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:800;letter-spacing:0.05em;
-                background:linear-gradient(135deg,var(--a2),var(--teal));
-                -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
-                ✦ NorMAI${isPro ? ' Pro' : ''}
-            </span>
-            <button onclick="document.getElementById('normAIPanel').remove()"
-                style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;">✕</button>
-        </div>
-        ${lines.map(l=>`<div onclick="useNormAISuggestion(this)"
-            style="padding:7px 10px;border-radius:10px;font-size:13px;cursor:pointer;
-                border:1px solid var(--border);margin-bottom:5px;transition:background 0.12s;line-height:1.45;"
-            onmouseenter="this.style.background='var(--card)'"
-            onmouseleave="this.style.background=''">
-            ${esc(l)}</div>`).join('')}
-        ${!isPro?`<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">
-            Upgrade to <strong style="color:var(--a2);">Pro</strong> for context-aware multi-suggestions
-        </div>`:''}`;
-    document.querySelector('.in-row').style.position = 'relative';
-    document.querySelector('.in-row').appendChild(panel);
+function showNormAIPanel(text, isPro) {document.getElementById('normAIPanel')?.remove();
+const panel = document.createElement('div');
+panel.id = 'normAIPanel';
+panel.style.cssText = `position:absolute;bottom:calc(100% + 8px);left:0;right:0;
+    background:var(--panel);border:1px solid var(--border2);border-radius:16px;
+    padding:12px 14px;z-index:50;box-shadow:0 8px 32px rgba(0,0,0,0.55);animation:fadeIn 0.18s ease;`;
+const lines = text.split('\n').map(l => l.replace(/^\d+[\.\)]\s*/,'').trim()).filter(Boolean);
+panel.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+        <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:800;letter-spacing:0.05em;
+            background:linear-gradient(135deg,var(--a2),var(--teal));
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+            ✦ NorMAI${isPro ? ' Pro' : ''}
+        </span>
+        <button onclick="document.getElementById('normAIPanel').remove()"
+            style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px;">✕</button>
+    </div>
+    ${lines.map(l=>`<div onclick="useNormAISuggestion(this)"
+        style="padding:7px 10px;border-radius:10px;font-size:13px;cursor:pointer;
+            border:1px solid var(--border);margin-bottom:5px;transition:background 0.12s;line-height:1.45;"
+        onmouseenter="this.style.background='var(--card)'"
+        onmouseleave="this.style.background=''">
+        ${esc(l)}</div>`).join('')}
+    ${!isPro?`<div style="font-size:10px;color:var(--muted);margin-top:6px;text-align:center;">
+        Upgrade to <strong style="color:var(--a2);">Pro</strong> for context-aware multi-suggestions
+    </div>`:''}`;
+document.querySelector('.in-row').style.position = 'relative';
+document.querySelector('.in-row').appendChild(panel);
 }
 
 function useNormAISuggestion(el) {
-    const inp = document.getElementById('msgInput');
-    inp.value = el.textContent.trim();
-    inp.focus(); autoGrow(inp);
-    document.getElementById('normAIPanel')?.remove();
+const inp = document.getElementById('msgInput');
+inp.value = el.textContent.trim();
+inp.focus(); autoGrow(inp);
+document.getElementById('normAIPanel')?.remove();
 }
 
 // ── FIRESTORE READ CACHE ───────────────────────────────────
@@ -2218,34 +2223,34 @@ const userProfileCache = {};               // uid → {data, ts}
 
 // Cached fetch of any users/{uid} doc
 async function getCachedUserDoc(uid) {
-    const cached = userDocCache[uid];
-    if (cached && (Date.now() - cached.ts < USER_DOC_TTL)) return cached.snap;
-    const snap = await db.collection('users').doc(uid).get();
-    userDocCache[uid] = { snap, ts: Date.now() };
-    return snap;
+const cached = userDocCache[uid];
+if (cached && (Date.now() - cached.ts < USER_DOC_TTL)) return cached.snap;
+const snap = await db.collection('users').doc(uid).get();
+userDocCache[uid] = { snap, ts: Date.now() };
+return snap;
 }
 
 // Invalidate own cache entry after a write so next read is fresh
 function invalidateUserCache(uid) {
-    delete userDocCache[uid];
+delete userDocCache[uid];
 }
 
 // Cached username → uid lookup (permanent cache — usernames are immutable)
 async function getCachedUid(uname) {
-    if (usernameCache[uname]) return usernameCache[uname];
-    const doc = await db.collection('usernames').doc(uname).get();
-    if (doc.exists) usernameCache[uname] = doc.data().uid;
-    return usernameCache[uname] || null;
+if (usernameCache[uname]) return usernameCache[uname];
+const doc = await db.collection('usernames').doc(uname).get();
+if (doc.exists) usernameCache[uname] = doc.data().uid;
+return usernameCache[uname] || null;
 }
 
 // Cached fetch of another user's profile (lighter TTL)
 async function getCachedProfile(uid) {
-    const cached = userProfileCache[uid];
-    if (cached && (Date.now() - cached.ts < USER_PROFILE_TTL)) return cached.data;
-    const snap = await db.collection('users').doc(uid).get();
-    const data = snap.data() || null;
-    userProfileCache[uid] = { data, ts: Date.now() };
-    return data;
+const cached = userProfileCache[uid];
+if (cached && (Date.now() - cached.ts < USER_PROFILE_TTL)) return cached.data;
+const snap = await db.collection('users').doc(uid).get();
+const data = snap.data() || null;
+userProfileCache[uid] = { data, ts: Date.now() };
+return data;
 }
 
 // ── SECURITY ───────────────────────────────────────────────
@@ -2259,43 +2264,43 @@ const AI_RATE_WINDOW = 60000;
 const AI_RATE_MAX    = 10;
 let aiCallTs = [];
 function checkAIRateLimit() {
-    const now = Date.now();
-    aiCallTs   = aiCallTs.filter(t => now - t < AI_RATE_WINDOW);
-    if (aiCallTs.length >= AI_RATE_MAX) return false;
-    aiCallTs.push(now);
-    return true;
+const now = Date.now();
+aiCallTs   = aiCallTs.filter(t => now - t < AI_RATE_WINDOW);
+if (aiCallTs.length >= AI_RATE_MAX) return false;
+aiCallTs.push(now);
+return true;
 }
 
 // 3. Session inactivity timeout — auto-logout after 60 min of no interaction
 const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
 let sessionTimer = null;
 function resetSessionTimer() {
-    clearTimeout(sessionTimer);
-    sessionTimer = setTimeout(() => {
-        showToast('Session expired — logging you out for security.');
-        setTimeout(() => logout(), 2000);
-    }, SESSION_TIMEOUT_MS);
+clearTimeout(sessionTimer);
+sessionTimer = setTimeout(() => {
+    showToast('Session expired — logging you out for security.');
+    setTimeout(() => logout(), 2000);
+}, SESSION_TIMEOUT_MS);
 }
 ['click','keydown','mousemove','touchstart'].forEach(ev =>
-    document.addEventListener(ev, resetSessionTimer, { passive: true })
+document.addEventListener(ev, resetSessionTimer, { passive: true })
 );
 
 // 4. URL sanitizer — only allow safe protocols in user-generated links
 function sanitizeUrl(url) {
-    try {
-        const u = new URL(url);
-        return ['https:','http:','mailto:'].includes(u.protocol) ? url : '#';
-    } catch { return '#'; }
+try {
+    const u = new URL(url);
+    return ['https:','http:','mailto:'].includes(u.protocol) ? url : '#';
+} catch { return '#'; }
 }
 
 // 5. Message content validation — called before any send
 function validateMsg(text) {
-    if (!text || !text.trim()) return 'Message is empty.';
-    if (text.length > MAX_MSG_LENGTH)
-        return `Message too long (${text.length}/${MAX_MSG_LENGTH} chars).`;
-    if ((text.match(/\n/g)||[]).length > MAX_MSG_LINES)
-        return `Too many lines (max ${MAX_MSG_LINES}).`;
-    return null;  // null = valid
+if (!text || !text.trim()) return 'Message is empty.';
+if (text.length > MAX_MSG_LENGTH)
+    return `Message too long (${text.length}/${MAX_MSG_LENGTH} chars).`;
+if ((text.match(/\n/g)||[]).length > MAX_MSG_LINES)
+    return `Too many lines (max ${MAX_MSG_LINES}).`;
+return null;  // null = valid
 }
 
 // ── STATE ──────────────────────────────────────────────────
@@ -2334,223 +2339,223 @@ function isUnread(id, lastAt)  { if (!lastAt) return false; return lastAt.getTim
 function login()  { auth.signInWithPopup(gProv).catch(e => showToast('Sign-in failed: ' + e.message)); }
 
 function openLoginModal() {
-    document.getElementById('loginUsernameIn').value = '';
-    document.getElementById('loginPasswordIn').value = '';
-    mmsg('loginMsg', '', '');
-    document.getElementById('loginModal').classList.remove('hidden');
+document.getElementById('loginUsernameIn').value = '';
+document.getElementById('loginPasswordIn').value = '';
+mmsg('loginMsg', '', '');
+document.getElementById('loginModal').classList.remove('hidden');
 }
 
 async function doLoginWithCredentials() {
-    const username = document.getElementById('loginUsernameIn').value.trim().toLowerCase();
-    const password = document.getElementById('loginPasswordIn').value;
-    if (!username) return mmsg('loginMsg', 'Enter your username.', 'err');
-    if (!password) return mmsg('loginMsg', 'Enter your password.', 'err');
-    mmsg('loginMsg', 'Signing in…', 'inf');
-    try {
-        await auth.signInWithEmailAndPassword(username + '@normsg.local', password);
-        document.getElementById('loginModal').classList.add('hidden');
-    } catch(e) {
-        const msg = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code)
-            ? 'Incorrect username or password.'
-            : 'Sign-in failed: ' + e.message;
-        mmsg('loginMsg', msg, 'err');
-    }
+const username = document.getElementById('loginUsernameIn').value.trim().toLowerCase();
+const password = document.getElementById('loginPasswordIn').value;
+if (!username) return mmsg('loginMsg', 'Enter your username.', 'err');
+if (!password) return mmsg('loginMsg', 'Enter your password.', 'err');
+mmsg('loginMsg', 'Signing in…', 'inf');
+try {
+    await auth.signInWithEmailAndPassword(username + '@normsg.local', password);
+    document.getElementById('loginModal').classList.add('hidden');
+} catch(e) {
+    const msg = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code)
+        ? 'Incorrect username or password.'
+        : 'Sign-in failed: ' + e.message;
+    mmsg('loginMsg', msg, 'err');
+}
 }
 
 async function adminCreateAccount() {
-    if (!isPlatformAdmin) return;
-    const username    = document.getElementById('createAccUsernameIn').value.trim().toLowerCase();
-    const displayName = document.getElementById('createAccDisplayIn').value.trim();
-    const password    = document.getElementById('createAccPasswordIn').value;
-    if (!username)         return mmsg('createAccMsg', 'Enter a username.', 'err');
-    if (!displayName)      return mmsg('createAccMsg', 'Enter a display name.', 'err');
-    if (password.length < 6) return mmsg('createAccMsg', 'Password must be at least 6 characters.', 'err');
-    mmsg('createAccMsg', 'Creating account…', 'inf');
-    try {
-        const ex = await db.collection('usernames').doc(username).get();
-        if (ex.exists) return mmsg('createAccMsg', `@${username} is already taken.`, 'err');
+if (!isPlatformAdmin) return;
+const username    = document.getElementById('createAccUsernameIn').value.trim().toLowerCase();
+const displayName = document.getElementById('createAccDisplayIn').value.trim();
+const password    = document.getElementById('createAccPasswordIn').value;
+if (!username)         return mmsg('createAccMsg', 'Enter a username.', 'err');
+if (!displayName)      return mmsg('createAccMsg', 'Enter a display name.', 'err');
+if (password.length < 6) return mmsg('createAccMsg', 'Password must be at least 6 characters.', 'err');
+mmsg('createAccMsg', 'Creating account…', 'inf');
+try {
+    const ex = await db.collection('usernames').doc(username).get();
+    if (ex.exists) return mmsg('createAccMsg', `@${username} is already taken.`, 'err');
 
-        const fakeEmail = username + '@normsg.local';
-        const cred = await auth.createUserWithEmailAndPassword(fakeEmail, password);
-        const newUid = cred.user.uid;
-        await cred.user.updateProfile({ displayName });
+    const fakeEmail = username + '@normsg.local';
+    const cred = await auth.createUserWithEmailAndPassword(fakeEmail, password);
+    const newUid = cred.user.uid;
+    await cred.user.updateProfile({ displayName });
 
-        const batch = db.batch();
-        batch.set(db.collection('users').doc(newUid), {
-            displayName, email: fakeEmail, photoURL: null, username,
-            createdByAdmin: me.uid, createdAt: SV()
-        });
-        batch.set(db.collection('usernames').doc(username), { uid: newUid });
-        await batch.commit();
+    const batch = db.batch();
+    batch.set(db.collection('users').doc(newUid), {
+        displayName, email: fakeEmail, photoURL: null, username,
+        createdByAdmin: me.uid, createdAt: SV()
+    });
+    batch.set(db.collection('usernames').doc(username), { uid: newUid });
+    await batch.commit();
 
-        mmsg('createAccMsg', `✓ Account @${username} created! Make sure to note the password before closing.`, 'ok');
-        document.getElementById('createAccUsernameIn').value = '';
-        document.getElementById('createAccDisplayIn').value  = '';
-        document.getElementById('createAccPasswordIn').value = '';
+    mmsg('createAccMsg', `✓ Account @${username} created! Make sure to note the password before closing.`, 'ok');
+    document.getElementById('createAccUsernameIn').value = '';
+    document.getElementById('createAccDisplayIn').value  = '';
+    document.getElementById('createAccPasswordIn').value = '';
 
-        // Creating an account signs you in as that user — sign the admin back out
-        // so they can re-sign in with Google
-        showToast('⚠️ Account created! Signing you back out — please sign in again.');
-        setTimeout(() => auth.signOut(), 3000);
-    } catch(e) { mmsg('createAccMsg', 'Error: ' + e.message, 'err'); }
+    // Creating an account signs you in as that user — sign the admin back out
+    // so they can re-sign in with Google
+    showToast('⚠️ Account created! Signing you back out — please sign in again.');
+    setTimeout(() => auth.signOut(), 3000);
+} catch(e) { mmsg('createAccMsg', 'Error: ' + e.message, 'err'); }
 }
 
 function logout() {
-    setPresence(false);
-    clearInterval(presenceTimer);
-    [msgUnsub, unsubF, unsubR, unsubG].forEach(u => u && u());    Object.values(presenceUnsubs).forEach(u => u && u());
-    Object.values(dmUnsubLastAt).forEach(u => u && u());
-    presenceUnsubs = {};
-    dmUnsubLastAt  = {};
-    dmLastAt       = {};
-    if (typingUnsub) { typingUnsub(); typingUnsub = null; }
-    auth.signOut();
+setPresence(false);
+clearInterval(presenceTimer);
+[msgUnsub, unsubF, unsubR, unsubG].forEach(u => u && u());    Object.values(presenceUnsubs).forEach(u => u && u());
+Object.values(dmUnsubLastAt).forEach(u => u && u());
+presenceUnsubs = {};
+dmUnsubLastAt  = {};
+dmLastAt       = {};
+if (typingUnsub) { typingUnsub(); typingUnsub = null; }
+auth.signOut();
 }
 
 auth.onAuthStateChanged(async user => {
-    if (user) {
-        me = user;
-        const isInternalAccount = user.email?.endsWith('@normsg.local');
-        // Upsert user profile (skip for internal accounts — already set up by admin)
-        if (!isInternalAccount) {
-            await db.collection('users').doc(user.uid).set({
-                displayName: user.displayName,
-                email:       user.email,
-                photoURL:    user.photoURL || null
-            }, { merge: true });
-        }
-
-        const snap  = await db.collection('users').doc(user.uid).get();
-        myUsername  = snap.data()?.username || null;
-        await loadUserPlan();
-        resetSessionTimer();
-
-        if (!myUsername) {
-            document.getElementById('landingScreen').classList.add('hidden');
-            document.getElementById('usernameModal').classList.remove('hidden');
-        } else {
-            finishLogin();
-        }
-    } else {
-        me = null; myUsername = null;
-        document.getElementById('landingScreen').classList.remove('hidden');
-        document.getElementById('mainApp').classList.add('hidden');
-        document.getElementById('usernameModal').classList.add('hidden');
+if (user) {
+    me = user;
+    const isInternalAccount = user.email?.endsWith('@normsg.local');
+    // Upsert user profile (skip for internal accounts — already set up by admin)
+    if (!isInternalAccount) {
+        await db.collection('users').doc(user.uid).set({
+            displayName: user.displayName,
+            email:       user.email,
+            photoURL:    user.photoURL || null
+        }, { merge: true });
     }
+
+    const snap  = await db.collection('users').doc(user.uid).get();
+    myUsername  = snap.data()?.username || null;
+    await loadUserPlan();
+    resetSessionTimer();
+
+    if (!myUsername) {
+        document.getElementById('landingScreen').classList.add('hidden');
+        document.getElementById('usernameModal').classList.remove('hidden');
+    } else {
+        finishLogin();
+    }
+} else {
+    me = null; myUsername = null;
+    document.getElementById('landingScreen').classList.remove('hidden');
+    document.getElementById('mainApp').classList.add('hidden');
+    document.getElementById('usernameModal').classList.add('hidden');
+}
 });
 
 function finishLogin() {
-    document.getElementById('usernameModal').classList.add('hidden');
-    document.getElementById('landingScreen').classList.add('hidden');
-    document.getElementById('mainApp').classList.remove('hidden');
-    setProfile();
-    subscribeAll();
-    scheduleStatusesRefresh({ force: true });
-    initAdminSystem();
+document.getElementById('usernameModal').classList.add('hidden');
+document.getElementById('landingScreen').classList.add('hidden');
+document.getElementById('mainApp').classList.remove('hidden');
+setProfile();
+subscribeAll();
+scheduleStatusesRefresh({ force: true });
+initAdminSystem();
 }
 
 function getFriendUidsKey() {
-    return friends.map(f => f.uid).sort().join('|');
+return friends.map(f => f.uid).sort().join('|');
 }
 
 function scheduleStatusesRefresh({ force = false } = {}) {
-    if (force) statusRefreshQueued = true;
-    if (statusRefreshTimer) clearTimeout(statusRefreshTimer);
-    // Coalesce rapid snapshot bursts into a single status read pass.
-    statusRefreshTimer = setTimeout(async () => {
-        statusRefreshTimer = null;
-        try {
-            await loadStatuses({ force });
-        } finally {
-            statusRefreshQueued = false;
-        }
-    }, force ? 50 : 300);
+if (force) statusRefreshQueued = true;
+if (statusRefreshTimer) clearTimeout(statusRefreshTimer);
+// Coalesce rapid snapshot bursts into a single status read pass.
+statusRefreshTimer = setTimeout(async () => {
+    statusRefreshTimer = null;
+    try {
+        await loadStatuses({ force });
+    } finally {
+        statusRefreshQueued = false;
+    }
+}, force ? 50 : 300);
 }
 
 // ── USERNAME SETUP ─────────────────────────────────────────
 async function saveUsername() {
-    const v = document.getElementById('unameInput').value.trim().toLowerCase();
-    if (v.length < 3) return mmsg('unameMsg', 'Minimum 3 characters.', 'err');
-    if (!/^[a-z0-9_.]+$/.test(v)) return mmsg('unameMsg', 'Letters, numbers, _ and . only.', 'err');
+const v = document.getElementById('unameInput').value.trim().toLowerCase();
+if (v.length < 3) return mmsg('unameMsg', 'Minimum 3 characters.', 'err');
+if (!/^[a-z0-9_.]+$/.test(v)) return mmsg('unameMsg', 'Letters, numbers, _ and . only.', 'err');
 
-    mmsg('unameMsg', 'Checking…', 'inf');
+mmsg('unameMsg', 'Checking…', 'inf');
 
-    const ex = await db.collection('usernames').doc(v).get();
-    if (ex.exists) return mmsg('unameMsg', 'Username taken — try another!', 'err');
+const ex = await db.collection('usernames').doc(v).get();
+if (ex.exists) return mmsg('unameMsg', 'Username taken — try another!', 'err');
 
-    const batch = db.batch();
-    batch.set(db.collection('usernames').doc(v), { uid: me.uid });
-    batch.update(db.collection('users').doc(me.uid), { username: v });
-    await batch.commit();
+const batch = db.batch();
+batch.set(db.collection('usernames').doc(v), { uid: me.uid });
+batch.update(db.collection('users').doc(me.uid), { username: v });
+await batch.commit();
 
-    myUsername = v;
-    finishLogin();
+myUsername = v;
+finishLogin();
 }
 
 // ── PROFILE ────────────────────────────────────────────────
 function setProfile() {
-    const name = me.displayName || me.email;
-    document.getElementById('myName').textContent   = name;
-    document.getElementById('myHandle').textContent = '@' + myUsername;
-    const av = document.getElementById('myAv');
-    av.innerHTML = me.photoURL ? `<img src="${me.photoURL}" alt="">` : initials(name);
+const name = me.displayName || me.email;
+document.getElementById('myName').textContent   = name;
+document.getElementById('myHandle').textContent = '@' + myUsername;
+const av = document.getElementById('myAv');
+av.innerHTML = me.photoURL ? `<img src="${me.photoURL}" alt="">` : initials(name);
 }
 
 // ── SUBSCRIPTIONS ──────────────────────────────────────────
 function subscribeAll() {
-    subFriends();
-    subRequests();
-    subGroups();
-    // Presence heartbeat every 60s
-    setPresence(true);
-    clearInterval(presenceTimer);
-    presenceTimer = setInterval(() => setPresence(true), 60000);
+subFriends();
+subRequests();
+subGroups();
+// Presence heartbeat every 60s
+setPresence(true);
+clearInterval(presenceTimer);
+presenceTimer = setInterval(() => setPresence(true), 60000);
 }
 
 function subFriends() {
-    if (unsubF) unsubF();
-    const uid = me.uid;
-    let fromF = [], toF = [];
+if (unsubF) unsubF();
+const uid = me.uid;
+let fromF = [], toF = [];
 
-    const u1 = db.collection('friendRequests')
-        .where('fromUid','==',uid).where('status','==','accepted')
-        .onSnapshot(snap => {
-            fromF = snap.docs.map(d => {
-                const x = d.data();
-                return { uid: x.toUid, displayName: x.toName, username: x.toUsername, photoURL: x.toPhoto };
-            });
-            const prevKey = getFriendUidsKey();
-            friends = dedup([...fromF, ...toF]);
-            const nextKey = getFriendUidsKey();
-            subscribePresence();
-            subDmLastAts();
-            renderFriends();
-            if (nextKey !== prevKey || statusRefreshQueued) {
-                scheduleStatusesRefresh();
-                refreshSuperCache().catch(()=>{});
-            }
+const u1 = db.collection('friendRequests')
+    .where('fromUid','==',uid).where('status','==','accepted')
+    .onSnapshot(snap => {
+        fromF = snap.docs.map(d => {
+            const x = d.data();
+            return { uid: x.toUid, displayName: x.toName, username: x.toUsername, photoURL: x.toPhoto };
         });
+        const prevKey = getFriendUidsKey();
+        friends = dedup([...fromF, ...toF]);
+        const nextKey = getFriendUidsKey();
+        subscribePresence();
+        subDmLastAts();
+        renderFriends();
+        if (nextKey !== prevKey || statusRefreshQueued) {
+            scheduleStatusesRefresh();
+            refreshSuperCache().catch(()=>{});
+        }
+    });
 
-    const u2 = db.collection('friendRequests')
-        .where('toUid','==',uid).where('status','==','accepted')
-        .onSnapshot(snap => {
-            toF = snap.docs.map(d => {
-                const x = d.data();
-                return { uid: x.fromUid, displayName: x.fromName, username: x.fromUsername, photoURL: x.fromPhoto };
-            });
-            const prevKey = getFriendUidsKey();
-            friends = dedup([...fromF, ...toF]);
-            const nextKey = getFriendUidsKey();
-            subscribePresence();
-            subDmLastAts();
-            renderFriends();
-            if (nextKey !== prevKey || statusRefreshQueued) {
-                scheduleStatusesRefresh();
-                refreshSuperCache().catch(()=>{});
-            }
+const u2 = db.collection('friendRequests')
+    .where('toUid','==',uid).where('status','==','accepted')
+    .onSnapshot(snap => {
+        toF = snap.docs.map(d => {
+            const x = d.data();
+            return { uid: x.fromUid, displayName: x.fromName, username: x.fromUsername, photoURL: x.fromPhoto };
         });
+        const prevKey = getFriendUidsKey();
+        friends = dedup([...fromF, ...toF]);
+        const nextKey = getFriendUidsKey();
+        subscribePresence();
+        subDmLastAts();
+        renderFriends();
+        if (nextKey !== prevKey || statusRefreshQueued) {
+            scheduleStatusesRefresh();
+            refreshSuperCache().catch(()=>{});
+        }
+    });
 
-    unsubF = () => { u1(); u2(); };
+unsubF = () => { u1(); u2(); };
 }
 
 // Subscribe to lastAt on every DM conversation — fires notifications for background DMs
@@ -2558,180 +2563,180 @@ function subFriends() {
 let dmBatchUnsub = null;
 
 function subDmLastAts() {
-    // Unsub old listener
-    if (dmBatchUnsub) { dmBatchUnsub(); dmBatchUnsub = null; }
-    if (!friends.length) return;
+// Unsub old listener
+if (dmBatchUnsub) { dmBatchUnsub(); dmBatchUnsub = null; }
+if (!friends.length) return;
 
-    // Collect all DM conversation IDs for this user's friends
-    const myDmIds = friends.map(f => dmId(me.uid, f.uid));
+// Collect all DM conversation IDs for this user's friends
+const myDmIds = friends.map(f => dmId(me.uid, f.uid));
 
-    // Firestore 'in' queries support max 30 items — chunk if needed
-    const chunks = [];
-    for (let i = 0; i < myDmIds.length; i += 30) chunks.push(myDmIds.slice(i, i + 30));
+// Firestore 'in' queries support max 30 items — chunk if needed
+const chunks = [];
+for (let i = 0; i < myDmIds.length; i += 30) chunks.push(myDmIds.slice(i, i + 30));
 
-    let initialized = false;
-    const unsubs = chunks.map(chunk =>
-        db.collection('conversations')
-            .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
-            .onSnapshot(snap => {
-                snap.docChanges().forEach(change => {
-                    const cid  = change.doc.id;
-                    const d    = change.doc.data();
-                    const newLastAt  = d?.lastAt?.toDate?.() || null;
-                    const prevLastAt = dmLastAt[cid];
-                    dmLastAt[cid] = newLastAt;
+let initialized = false;
+const unsubs = chunks.map(chunk =>
+    db.collection('conversations')
+        .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
+        .onSnapshot(snap => {
+            snap.docChanges().forEach(change => {
+                const cid  = change.doc.id;
+                const d    = change.doc.data();
+                const newLastAt  = d?.lastAt?.toDate?.() || null;
+                const prevLastAt = dmLastAt[cid];
+                dmLastAt[cid] = newLastAt;
 
-                    renderFriends();
+                renderFriends();
 
-                    if (!initialized) return;
-                    if (change.type === 'added' && !prevLastAt) return;
-                    if (!newLastAt || !prevLastAt) return;
-                    if (newLastAt.getTime() <= prevLastAt.getTime()) return;
-                    if (d.lastSenderUid === me.uid) return;
-                    if (cid === chatId) return;
+                if (!initialized) return;
+                if (change.type === 'added' && !prevLastAt) return;
+                if (!newLastAt || !prevLastAt) return;
+                if (newLastAt.getTime() <= prevLastAt.getTime()) return;
+                if (d.lastSenderUid === me.uid) return;
+                if (cid === chatId) return;
 
-                    const f = friends.find(fr => dmId(me.uid, fr.uid) === cid);
-                    fireNotification({
-                        senderUid:      d.lastSenderUid,
-                        senderUsername: d.lastSenderUsername || '',
-                        text:           d.lastText || '',
-                        type:           d.lastType || 'text'
-                    }, f?.displayName || f?.username || 'DM', 'dm');
-                });
-                initialized = true;
-            })
-    );
+                const f = friends.find(fr => dmId(me.uid, fr.uid) === cid);
+                fireNotification({
+                    senderUid:      d.lastSenderUid,
+                    senderUsername: d.lastSenderUsername || '',
+                    text:           d.lastText || '',
+                    type:           d.lastType || 'text'
+                }, f?.displayName || f?.username || 'DM', 'dm');
+            });
+            initialized = true;
+        })
+);
 
-    dmBatchUnsub = () => unsubs.forEach(u => u());
+dmBatchUnsub = () => unsubs.forEach(u => u());
 
-    // Clean up stale dmLastAt keys for removed friends
-    Object.keys(dmLastAt).forEach(cid => {
-        if (!myDmIds.includes(cid)) delete dmLastAt[cid];
-    });
+// Clean up stale dmLastAt keys for removed friends
+Object.keys(dmLastAt).forEach(cid => {
+    if (!myDmIds.includes(cid)) delete dmLastAt[cid];
+});
 }
 
 function subRequests() {
-    if (unsubR) unsubR();
-    unsubR = db.collection('friendRequests')
-        .where('toUid','==',me.uid).where('status','==','pending')
-        .onSnapshot(snap => {
-            pendingReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            renderRequests();
-            const b = document.getElementById('reqBadge');
-            if (pendingReqs.length) { b.textContent = pendingReqs.length; b.classList.remove('hidden'); }
-            else b.classList.add('hidden');
-        });
+if (unsubR) unsubR();
+unsubR = db.collection('friendRequests')
+    .where('toUid','==',me.uid).where('status','==','pending')
+    .onSnapshot(snap => {
+        pendingReqs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderRequests();
+        const b = document.getElementById('reqBadge');
+        if (pendingReqs.length) { b.textContent = pendingReqs.length; b.classList.remove('hidden'); }
+        else b.classList.add('hidden');
+    });
 }
 
 function subGroups() {
-    if (unsubG) unsubG();
-    const prevGroupLastAt = {};
-    let groupsInitialized = false;
+if (unsubG) unsubG();
+const prevGroupLastAt = {};
+let groupsInitialized = false;
 
-    unsubG = db.collection('groups')
-        .where('members','array-contains',me.uid)
-        .onSnapshot(snap => {
-            myGroups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            renderGroups();
+unsubG = db.collection('groups')
+    .where('members','array-contains',me.uid)
+    .onSnapshot(snap => {
+        myGroups = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderGroups();
 
-            if (!groupsInitialized) {
-                // Record initial lastAt for all groups — no notifications on first load
-                snap.docs.forEach(d => {
-                    prevGroupLastAt[d.id] = d.data()?.lastAt?.toDate?.() || null;
-                });
-                groupsInitialized = true;
-                return;
-            }
+        if (!groupsInitialized) {
+            // Record initial lastAt for all groups — no notifications on first load
+            snap.docs.forEach(d => {
+                prevGroupLastAt[d.id] = d.data()?.lastAt?.toDate?.() || null;
+            });
+            groupsInitialized = true;
+            return;
+        }
 
-            // Only check modified docs for new messages
-            snap.docChanges()
-                .filter(c => c.type === 'modified')
-                .forEach(change => {
-                    const g         = { id: change.doc.id, ...change.doc.data() };
-                    const newLastAt = g.lastAt?.toDate?.() || null;
-                    const prev      = prevGroupLastAt[g.id];
+        // Only check modified docs for new messages
+        snap.docChanges()
+            .filter(c => c.type === 'modified')
+            .forEach(change => {
+                const g         = { id: change.doc.id, ...change.doc.data() };
+                const newLastAt = g.lastAt?.toDate?.() || null;
+                const prev      = prevGroupLastAt[g.id];
 
-                    if (newLastAt && prev && newLastAt.getTime() > prev.getTime()
-                        && g.lastSenderUid !== me.uid
-                        && g.id !== chatId) {
-                        fireNotification({
-                            senderUid:      g.lastSenderUid,
-                            senderUsername: g.lastSenderUsername || '',
-                            text:           g.lastText || '',
-                            type:           g.lastType || 'text'
-                        }, g.name || 'Group', 'group');
-                    }
-                    prevGroupLastAt[g.id] = newLastAt;
-                });
-        });
+                if (newLastAt && prev && newLastAt.getTime() > prev.getTime()
+                    && g.lastSenderUid !== me.uid
+                    && g.id !== chatId) {
+                    fireNotification({
+                        senderUid:      g.lastSenderUid,
+                        senderUsername: g.lastSenderUsername || '',
+                        text:           g.lastText || '',
+                        type:           g.lastType || 'text'
+                    }, g.name || 'Group', 'group');
+                }
+                prevGroupLastAt[g.id] = newLastAt;
+            });
+    });
 }
 
 // ── RENDER SIDEBAR ─────────────────────────────────────────
 function renderFriends() {
-    const el      = document.getElementById('dmsList');
-    const q       = document.getElementById('dmSearch').value.toLowerCase();
-    const hidden  = getHiddenDMs();
-    const nicks   = getNicknames();
+const el      = document.getElementById('dmsList');
+const q       = document.getElementById('dmSearch').value.toLowerCase();
+const hidden  = getHiddenDMs();
+const nicks   = getNicknames();
 
-    const vis = friends.filter(f => {
-        const cid  = dmId(me.uid, f.uid);
-        const nick = nicks[f.uid] || '';
-        return !hidden.has(cid) && (
-            (f.displayName||'').toLowerCase().includes(q) ||
-            (f.username||'').toLowerCase().includes(q) ||
-            nick.toLowerCase().includes(q)
-        );
-    });
+const vis = friends.filter(f => {
+    const cid  = dmId(me.uid, f.uid);
+    const nick = nicks[f.uid] || '';
+    return !hidden.has(cid) && (
+        (f.displayName||'').toLowerCase().includes(q) ||
+        (f.username||'').toLowerCase().includes(q) ||
+        nick.toLowerCase().includes(q)
+    );
+});
 
-    // Sort by most recently chatted (lastAt descending), fallback to name
-    vis.sort((a, b) => {
-        const la = dmLastAt[dmId(me.uid, a.uid)]?.getTime() || 0;
-        const lb = dmLastAt[dmId(me.uid, b.uid)]?.getTime() || 0;
-        return lb - la;
-    });
+// Sort by most recently chatted (lastAt descending), fallback to name
+vis.sort((a, b) => {
+    const la = dmLastAt[dmId(me.uid, a.uid)]?.getTime() || 0;
+    const lb = dmLastAt[dmId(me.uid, b.uid)]?.getTime() || 0;
+    return lb - la;
+});
 
-    if (!vis.length) {
-        el.innerHTML = `<div class="no-items"><div class="no-ico">👥</div><div class="no-txt">${friends.length ? 'No match.' : 'No friends yet!<br>Add one below.'}</div></div>`;
-        return;
-    }
-    el.innerHTML = '';
-    vis.forEach(f => {
-        const cid      = dmId(me.uid, f.uid);
-        const nick     = nicks[f.uid];
-        const pres     = friendPresence[f.uid];
-        const isOnline = pres?.online === true;
-        const unread   = isUnread(cid, dmLastAt[cid]) && chatId !== cid;
-        const fIsSuper = superCache[f.uid] === true;
-        const displayLabel = nick
-            ? `${esc(nick)} <span class="nick-badge">@${esc(f.username||'')}</span>`
-            : fIsSuper
-                ? `<span class="super-name">${esc(f.displayName)}</span> <span class="super-badge">✦</span>`
-                : esc(f.displayName);
-        const statusTxt = isOnline
-            ? '<span style="font-size:10px;color:var(--green);font-weight:600;">● Online</span>'
-            : (() => { const ago = timeAgo(pres?.lastSeen); return ago ? `<span style="font-size:10px;color:var(--muted);">${ago}</span>` : `<span style="font-size:10px;color:var(--muted);">@${esc(f.username||'')}</span>`; })();
+if (!vis.length) {
+    el.innerHTML = `<div class="no-items"><div class="no-ico">👥</div><div class="no-txt">${friends.length ? 'No match.' : 'No friends yet!<br>Add one below.'}</div></div>`;
+    return;
+}
+el.innerHTML = '';
+vis.forEach(f => {
+    const cid      = dmId(me.uid, f.uid);
+    const nick     = nicks[f.uid];
+    const pres     = friendPresence[f.uid];
+    const isOnline = pres?.online === true;
+    const unread   = isUnread(cid, dmLastAt[cid]) && chatId !== cid;
+    const fIsSuper = superCache[f.uid] === true;
+    const displayLabel = nick
+        ? `${esc(nick)} <span class="nick-badge">@${esc(f.username||'')}</span>`
+        : fIsSuper
+            ? `<span class="super-name">${esc(f.displayName)}</span> <span class="super-badge">✦</span>`
+            : esc(f.displayName);
+    const statusTxt = isOnline
+        ? '<span style="font-size:10px;color:var(--green);font-weight:600;">● Online</span>'
+        : (() => { const ago = timeAgo(pres?.lastSeen); return ago ? `<span style="font-size:10px;color:var(--muted);">${ago}</span>` : `<span style="font-size:10px;color:var(--muted);">@${esc(f.username||'')}</span>`; })();
 
-        const d = ce('div');
-        d.className = 'conv-item' + (chatId === cid ? ' on' : '') + (unread ? ' unread' : '');
-        d.innerHTML = `
-            <div style="position:relative;flex-shrink:0;">
-                ${mkAv(f.displayName, f.photoURL, 34)}
-                ${isOnline ? `<span class="online-dot" style="position:absolute;bottom:0;right:0;"></span>` : ''}
-            </div>
-            <div class="cv-info min-w-0">
-                <div class="cv-name">${displayLabel}</div>
-                <div class="cv-last">${statusTxt}</div>
-            </div>
-            <div style="display:flex;gap:3px;flex-shrink:0;">
-                <button class="conv-del" style="opacity:0;position:static;transform:none;background:rgba(167,139,250,0.12);color:var(--a2);border-radius:7px;padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();openNicknameModal('${f.uid}','${esc(f.displayName).replace(/'/g,"\\'")}')">✎</button>
-                <button class="conv-del" style="opacity:0;position:static;transform:none;" onclick="event.stopPropagation();hideDM('${cid}')">✕</button>
-                <button class="conv-del" style="opacity:0;position:static;transform:none;background:rgba(244,63,94,0.1);color:var(--danger);border-radius:7px;padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();unfriend('${f.uid}')">🚫</button>
-            </div>`;
-        d.addEventListener('mouseenter', () => d.querySelectorAll('.conv-del').forEach(b => b.style.opacity='1'));
-        d.addEventListener('mouseleave', () => d.querySelectorAll('.conv-del').forEach(b => b.style.opacity='0'));
-        d.onclick = () => openDM(f);
-        el.appendChild(d);
-    });
+    const d = ce('div');
+    d.className = 'conv-item' + (chatId === cid ? ' on' : '') + (unread ? ' unread' : '');
+    d.innerHTML = `
+        <div style="position:relative;flex-shrink:0;">
+            ${mkAv(f.displayName, f.photoURL, 34)}
+            ${isOnline ? `<span class="online-dot" style="position:absolute;bottom:0;right:0;"></span>` : ''}
+        </div>
+        <div class="cv-info min-w-0">
+            <div class="cv-name">${displayLabel}</div>
+            <div class="cv-last">${statusTxt}</div>
+        </div>
+        <div style="display:flex;gap:3px;flex-shrink:0;">
+            <button class="conv-del" style="opacity:0;position:static;transform:none;background:rgba(167,139,250,0.12);color:var(--a2);border-radius:7px;padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();openNicknameModal('${f.uid}','${esc(f.displayName).replace(/'/g,"\\'")}')">✎</button>
+            <button class="conv-del" style="opacity:0;position:static;transform:none;" onclick="event.stopPropagation();hideDM('${cid}')">✕</button>
+            <button class="conv-del" style="opacity:0;position:static;transform:none;background:rgba(244,63,94,0.1);color:var(--danger);border-radius:7px;padding:3px 7px;font-size:11px;" onclick="event.stopPropagation();unfriend('${f.uid}')">🚫</button>
+        </div>`;
+    d.addEventListener('mouseenter', () => d.querySelectorAll('.conv-del').forEach(b => b.style.opacity='1'));
+    d.addEventListener('mouseleave', () => d.querySelectorAll('.conv-del').forEach(b => b.style.opacity='0'));
+    d.onclick = () => openDM(f);
+    el.appendChild(d);
+});
 }
 
 function renderRequests() {const el  = document.getElementById('reqList');
@@ -2741,45 +2746,45 @@ sec.style.display = 'block';
 document.getElementById('reqCount').textContent = `(${pendingReqs.length})`;
 el.innerHTML = '';
 pendingReqs.forEach(r => {
-    const d = ce('div');
-    d.className = 'req-card';
-    d.innerHTML = `
-        <div style="display:flex;align-items:center;gap:9px;">
-            ${mkAv(r.fromName, r.fromPhoto, 30)}
-            <div><div style="font-size:12px;font-weight:600;">${esc(r.fromName)}</div><div style="font-size:11px;color:var(--muted);">@${esc(r.fromUsername||'')}</div></div>
-        </div>
-        <div class="req-acts">
-            <button class="btn-acc" onclick="acceptReq('${r.id}')">✓ Accept</button>
-            <button class="btn-dec" onclick="declineReq('${r.id}')">✕ Decline</button>
-        </div>`;
-    el.appendChild(d);
+const d = ce('div');
+d.className = 'req-card';
+d.innerHTML = `
+    <div style="display:flex;align-items:center;gap:9px;">
+        ${mkAv(r.fromName, r.fromPhoto, 30)}
+        <div><div style="font-size:12px;font-weight:600;">${esc(r.fromName)}</div><div style="font-size:11px;color:var(--muted);">@${esc(r.fromUsername||'')}</div></div>
+    </div>
+    <div class="req-acts">
+        <button class="btn-acc" onclick="acceptReq('${r.id}')">✓ Accept</button>
+        <button class="btn-dec" onclick="declineReq('${r.id}')">✕ Decline</button>
+    </div>`;
+el.appendChild(d);
 });
 }
 
 function renderGroups() {
 const el = document.getElementById('groupsList');
 if (!myGroups.length) {
-    el.innerHTML = `<div class="no-items"><div class="no-ico">💬</div><div class="no-txt">No groups yet.<br>Create one below!</div></div>`;
-    return;
+el.innerHTML = `<div class="no-items"><div class="no-ico">💬</div><div class="no-txt">No groups yet.<br>Create one below!</div></div>`;
+return;
 }
 
 // Sort by most recently chatted (lastAt descending)
 const sorted = [...myGroups].sort((a, b) => {
-    const la = a.lastAt?.toDate?.()?.getTime() || 0;
-    const lb = b.lastAt?.toDate?.()?.getTime() || 0;
-    return lb - la;
+const la = a.lastAt?.toDate?.()?.getTime() || 0;
+const lb = b.lastAt?.toDate?.()?.getTime() || 0;
+return lb - la;
 });
 
 el.innerHTML = '';
 sorted.forEach(g => {
-    const lastAt   = g.lastAt?.toDate?.() || null;
-    const unread   = isUnread(g.id, lastAt) && chatId !== g.id;
-    const isCreator = g.createdBy === me.uid;
-    const d = ce('div');
-    d.className = 'conv-item' + (chatId === g.id ? ' on' : '') + (unread ? ' unread' : '');
-    d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name[0]||'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
-    d.onclick = () => openGroup(g);
-    el.appendChild(d);
+const lastAt   = g.lastAt?.toDate?.() || null;
+const unread   = isUnread(g.id, lastAt) && chatId !== g.id;
+const isCreator = g.createdBy === me.uid;
+const d = ce('div');
+d.className = 'conv-item' + (chatId === g.id ? ' on' : '') + (unread ? ' unread' : '');
+d.innerHTML = `<div class="av av-grp" style="width:34px;height:34px;font-size:13px;flex-shrink:0;">${esc((g.name[0]||'G').toUpperCase())}</div><div class="cv-info"><div class="cv-name">${esc(g.name)}</div><div class="cv-last">${g.members?.length||0} members</div></div>${isCreator ? `<button class="conv-del" onclick="event.stopPropagation();startDeleteGroup('${g.id}','${esc(g.name)}')">🗑</button>` : ''}`;
+d.onclick = () => openGroup(g);
+el.appendChild(d);
 });
 }
 
@@ -2812,32 +2817,32 @@ const upro = await getCachedProfile(targetUid);
 const updata = upro || {};
 
 const dup = await db.collection('friendRequests')
-    .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending')
-    .limit(1).get();
+.where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending')
+.limit(1).get();
 if (!dup.empty) return showAddMsg('Request already sent!', 'err');
 
 // Also check reverse (they already sent us one)
 const rev = await db.collection('friendRequests')
-    .where('fromUid','==',targetUid).where('toUid','==',me.uid).where('status','==','pending')
-    .limit(1).get();
+.where('fromUid','==',targetUid).where('toUid','==',me.uid).where('status','==','pending')
+.limit(1).get();
 if (!rev.empty) {
-    // Just accept theirs
-    await db.collection('friendRequests').doc(rev.docs[0].id).update({ status: 'accepted' });
-    input.value = '';
-    return showAddMsg(`@${uname} already sent you a request — accepted! 🎉`, 'ok');
+// Just accept theirs
+await db.collection('friendRequests').doc(rev.docs[0].id).update({ status: 'accepted' });
+input.value = '';
+return showAddMsg(`@${uname} already sent you a request — accepted! 🎉`, 'ok');
 }
 
 await db.collection('friendRequests').add({
-    fromUid:      me.uid,
-    fromName:     me.displayName || me.email,
-    fromUsername: myUsername,
-    fromPhoto:    me.photoURL || null,
-    toUid:        targetUid,
-    toName:       updata.displayName || updata.email,
-    toUsername:   updata.username || '',
-    toPhoto:      updata.photoURL || null,
-    status:       'pending',
-    createdAt:    SV()
+fromUid:      me.uid,
+fromName:     me.displayName || me.email,
+fromUsername: myUsername,
+fromPhoto:    me.photoURL || null,
+toUid:        targetUid,
+toName:       updata.displayName || updata.email,
+toUsername:   updata.username || '',
+toPhoto:      updata.photoURL || null,
+status:       'pending',
+createdAt:    SV()
 });
 
 input.value = '';
@@ -2862,10 +2867,10 @@ if (!friends.length) {
 el.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:12px 8px;">Add some friends first!</div>`;
 } else {
 friends.forEach(f => {
-    const lb = ce('label');
-    lb.className = 'member-item';
-    lb.innerHTML = `<input type="checkbox" value="${f.uid}"> ${mkAv(f.displayName, f.photoURL, 26)} <div><div class="mi-name">${esc(f.displayName)}</div><div class="mi-user">@${esc(f.username||'')}</div></div>`;
-    el.appendChild(lb);
+const lb = ce('label');
+lb.className = 'member-item';
+lb.innerHTML = `<input type="checkbox" value="${f.uid}"> ${mkAv(f.displayName, f.photoURL, 26)} <div><div class="mi-name">${esc(f.displayName)}</div><div class="mi-user">@${esc(f.username||'')}</div></div>`;
+el.appendChild(lb);
 });
 }
 document.getElementById('groupModal').classList.remove('hidden');
@@ -2967,8 +2972,8 @@ msgUnsub = db.collection(path)
 .orderBy('timestamp','asc')
 .limitToLast(MSG_PAGE)
 .onSnapshot(snap => {
-    renderMsgs(snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() })));
-    if (chatId) markRead(chatId);
+renderMsgs(snap.docs.map(d => ({ id: d.id, _path: path, ...d.data() })));
+if (chatId) markRead(chatId);
 });
 }
 
@@ -2986,74 +2991,74 @@ const nxt    = arr[i+1];
 const same   = nxt && nxt.senderUid === msg.senderUid;
 
 if (ds !== lastDate) {
-    lastDate = ds;
-    const div = ce('div');
-    div.className = 'date-div';
-    div.innerHTML = `<span>${ds}</span>`;
-    area.appendChild(div);
+lastDate = ds;
+const div = ce('div');
+div.className = 'date-div';
+div.innerHTML = `<span>${ds}</span>`;
+area.appendChild(div);
 }
 
 const row = ce('div');
 row.className = 'msg-row' + (mine ? ' sent' : '');
 
 const avPart = mine ? '' :
-    `<div class="msg-av ${same?'inv':''}">` +
-    (msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
-    `</div>`;
+`<div class="msg-av ${same?'inv':''}">` +
+(msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
+`</div>`;
 
 let bubble = '';
 if (msg.type === 'deleted') {
-    bubble = `<div class="bubble ${mine?'sent':'recv'}" style="opacity:0.45;font-style:italic;font-size:12px;">
-        🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
-    </div>`;
+bubble = `<div class="bubble ${mine?'sent':'recv'}" style="opacity:0.45;font-style:italic;font-size:12px;">
+    🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
+</div>`;
 } else if (msg.type === 'ai') {
-    const superBadge = msg.usedSuper ? `<span class="ai-super-badge">✦ SUPER</span>` : '';
-    bubble = `<div class="bubble ai">
-        <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant${superBadge}</div>
-        ${renderAIText(msg.text)}
-    </div>`;
+const superBadge = msg.usedSuper ? `<span class="ai-super-badge">✦ SUPER</span>` : '';
+bubble = `<div class="bubble ai">
+    <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant${superBadge}</div>
+    ${renderAIText(msg.text)}
+</div>`;
 } else if (msg.type === 'ai-thinking') {
-    bubble = `<div class="bubble ai">
-        <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant</div>
-        <div class="ai-thinking"><div class="typing-dots"><span></span><span></span><span></span></div> Thinking…</div>
-    </div>`;
+bubble = `<div class="bubble ai">
+    <div class="ai-header"><div class="ai-avatar">✦</div> AI Assistant</div>
+    <div class="ai-thinking"><div class="typing-dots"><span></span><span></span><span></span></div> Thinking…</div>
+</div>`;
 } else if (msg.type === 'image') {
-    const exp = expLabel(ts, 72);
-    bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
-        ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
-        <img class="msg-img" src="${esc(msg.imageUrl)}" loading="lazy"
-            onclick="openLB('${esc(msg.imageUrl)}')">
-        ${exp ? `<div class="img-exp">⏱ ${exp}</div>` : ''}
-    </div>`;
+const exp = expLabel(ts, 72);
+bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
+    ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
+    <img class="msg-img" src="${esc(msg.imageUrl)}" loading="lazy"
+        onclick="openLB('${esc(msg.imageUrl)}')">
+    ${exp ? `<div class="img-exp">⏱ ${exp}</div>` : ''}
+</div>`;
 } else {
-    bubble = `<div class="bubble ${mine?'sent':'recv'}">
-        ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
-        ${renderMsgText(msg.text)}
-    </div>`;
+bubble = `<div class="bubble ${mine?'sent':'recv'}">
+    ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
+    ${renderMsgText(msg.text)}
+</div>`;
 }
 
 const showName = chatType==='group' && !mine && !same;
 const senderIsSuper = msg.senderSuper === true;
 const senderNameHTML = senderIsSuper
-    ? `<span class="msg-sender-name super-name">@${esc(msg.senderUsername||msg.senderName||'')} <span class="super-badge">✦ SUPER</span></span>`
-    : `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>`;
+? `<span class="msg-sender-name super-name">@${esc(msg.senderUsername||msg.senderName||'')} <span class="super-badge">✦ SUPER</span></span>`
+: `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>`;
 const sp   = (msg.storagePath||'').replace(/'/g,"\\'");
 const pid  = (msg._path||'').replace(/'/g,"\\'");
 const mid  = msg.id;
 
 // Check if current user is group admin
 const isGroupAdmin = chatType === 'group' && (() => {
-    const grp = myGroups.find(g => g.id === chatId);
-    return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
+const grp = myGroups.find(g => g.id === chatId);
+return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
 })();
 
 const isAIMsg = msg.type === 'ai' || msg.type === 'ai-thinking';
 
 const actionBtn = (msg.type === 'deleted' || isAIMsg) ? '' : (mine
-    ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
-    : isGroupAdmin
-        ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
-        : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
+? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
+: isGroupAdmin
+    ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
+    : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
 
 const replySnip = msg.type === 'image' ? '[Image]' : (msg.text||'').slice(0,60);
 const replyBtn  = isAIMsg ? '' : `<button class="msg-reply-btn" onclick="setReply('${mid}','${esc((msg.senderUsername||msg.senderName||'?')).replace(/'/g,"\\'")}','${replySnip.replace(/'/g,"\\'").replace(/\n/g,' ')}')">↩</button>`;
@@ -3063,32 +3068,32 @@ const emojiTrigger = isAIMsg ? '' : `<button class="emoji-trigger" onclick="open
 const reactions = msg.reactions || {};
 let reactHTML = '';
 if (!isAIMsg) {
-    const grouped = {};
-    Object.entries(reactions).forEach(([uid, emoji]) => {
-        if (!grouped[emoji]) grouped[emoji] = [];
-        grouped[emoji].push(uid);
-    });
-    const chips = Object.entries(grouped).map(([emoji, uids]) => {
-        const iMine = uids.includes(me.uid);
-        return `<span class="reaction-chip${iMine?' mine':''}" onclick="toggleReaction('${mid}','${pid}','${emoji}')">${emoji} <span class="reaction-count">${uids.length}</span></span>`;
-    }).join('');
-    if (chips) reactHTML = `<div class="reactions-row">${chips}</div>`;
+const grouped = {};
+Object.entries(reactions).forEach(([uid, emoji]) => {
+    if (!grouped[emoji]) grouped[emoji] = [];
+    grouped[emoji].push(uid);
+});
+const chips = Object.entries(grouped).map(([emoji, uids]) => {
+    const iMine = uids.includes(me.uid);
+    return `<span class="reaction-chip${iMine?' mine':''}" onclick="toggleReaction('${mid}','${pid}','${emoji}')">${emoji} <span class="reaction-count">${uids.length}</span></span>`;
+}).join('');
+if (chips) reactHTML = `<div class="reactions-row">${chips}</div>`;
 }
 
 row.innerHTML = `${avPart}
-    <div class="bwrap">
-        <div style="display:flex;align-items:flex-start;gap:4px;${mine?'flex-direction:row-reverse;':''}">
-            ${bubble}
-            ${emojiTrigger}
-        </div>
-        ${reactHTML}
-        <div class="msg-meta">
-            ${showName ? senderNameHTML : ''}
-            ${!same ? `<span class="msg-time">${fmtTime(ts)}</span>` : ''}
-            ${replyBtn}
-            ${actionBtn}
-        </div>
-    </div>`;
+<div class="bwrap">
+    <div style="display:flex;align-items:flex-start;gap:4px;${mine?'flex-direction:row-reverse;':''}">
+        ${bubble}
+        ${emojiTrigger}
+    </div>
+    ${reactHTML}
+    <div class="msg-meta">
+        ${showName ? senderNameHTML : ''}
+        ${!same ? `<span class="msg-time">${fmtTime(ts)}</span>` : ''}
+        ${replyBtn}
+        ${actionBtn}
+    </div>
+</div>`;
 
 area.appendChild(row);
 });
@@ -3216,8 +3221,8 @@ const now      = new Date();
 const delHrs   = extra.type==='image' ? 72 : 24*7;
 const deleteAt = new Date(now.getTime() + delHrs * 3600000);
 
-// Use cached Super status — never await a Firestore read on the critical send path
-const isSuper = superCache[me.uid] === true;
+// Use cached Super status — Pro users get the same treatment as Super
+const isSuper = userPlan === 'pro' || superCache[me.uid] === true;
 
 const summary = {
 lastAt:             SV(),
@@ -3248,16 +3253,16 @@ async function delMsg(msgId, msgPath, _storagePath, isAdminDel = false) {
 if (!confirm(isAdminDel ? 'Delete this message as admin?' : 'Delete this message?')) return;
 try {
 if (isAdminDel) {
-    // Replace with deleted placeholder instead of removing entirely
-    await db.collection(msgPath).doc(msgId).update({
-        text:        '',
-        type:        'deleted',
-        deletedBy:   me.uid,
-        deletedByUsername: myUsername || me.displayName,
-        deletedAt:   SV()
-    });
+// Replace with deleted placeholder instead of removing entirely
+await db.collection(msgPath).doc(msgId).update({
+    text:        '',
+    type:        'deleted',
+    deletedBy:   me.uid,
+    deletedByUsername: myUsername || me.displayName,
+    deletedAt:   SV()
+});
 } else {
-    await db.collection(msgPath).doc(msgId).delete();
+await db.collection(msgPath).doc(msgId).delete();
 }
 } catch(e) {
 showToast('Could not delete message.');
@@ -3275,9 +3280,9 @@ if (snap.empty) return;
 const batch = db.batch();
 const dels  = [];
 snap.docs.forEach(doc => {
-    batch.delete(doc.ref);
-    const sp = doc.data().storagePath;
-    if (sp) dels.push(storage.ref(sp).delete().catch(()=>{}));
+batch.delete(doc.ref);
+const sp = doc.data().storagePath;
+if (sp) dels.push(storage.ref(sp).delete().catch(()=>{}));
 });
 await batch.commit();
 await Promise.all(dels);
@@ -3323,8 +3328,8 @@ spamTs.push(now);
 if (type==='text' && SWEAR.test(text)) {
 const until = new Date(Date.now() + 5*60000);
 invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
-    timeoutUntil:  TS.fromDate(until),
-    timeoutReason: 'swearing'
+timeoutUntil:  TS.fromDate(until),
+timeoutReason: 'swearing'
 });
 showToBanner('🤐 Watch the language! Timed out for 5 minutes.', until);
 return false;
@@ -3435,31 +3440,31 @@ hideDM(chatId);
 } else if (chatType === 'group') {
 if (!confirm('Leave this group? You will be removed from the member list.')) return;
 try {
-    const gRef  = db.collection('groups').doc(chatId);
-    const gSnap = await gRef.get();
-    const members = (gSnap.data()?.members || []).filter(uid => uid !== me.uid);
+const gRef  = db.collection('groups').doc(chatId);
+const gSnap = await gRef.get();
+const members = (gSnap.data()?.members || []).filter(uid => uid !== me.uid);
 
-    if (members.length === 0) {
-        // Last person — delete the whole group and messages
-        const msgs  = await db.collection(`groups/${chatId}/messages`).get();
-        const batch = db.batch();
-        const storeDels = [];
-        msgs.docs.forEach(doc => {
-            batch.delete(doc.ref);
-            const sp = doc.data().storagePath;
-            if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
-        });
-        batch.delete(gRef);
-        await batch.commit();
-        await Promise.all(storeDels);
-        showToast('Group deleted (you were the last member).');
-    } else {
-        await gRef.update({ members: firebase.firestore.FieldValue.arrayRemove(me.uid) });
-        showToast('You left the group.');
-    }
-    closeChat();
+if (members.length === 0) {
+    // Last person — delete the whole group and messages
+    const msgs  = await db.collection(`groups/${chatId}/messages`).get();
+    const batch = db.batch();
+    const storeDels = [];
+    msgs.docs.forEach(doc => {
+        batch.delete(doc.ref);
+        const sp = doc.data().storagePath;
+        if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
+    });
+    batch.delete(gRef);
+    await batch.commit();
+    await Promise.all(storeDels);
+    showToast('Group deleted (you were the last member).');
+} else {
+    await gRef.update({ members: firebase.firestore.FieldValue.arrayRemove(me.uid) });
+    showToast('You left the group.');
+}
+closeChat();
 } catch(e) {
-    showToast('Could not leave group: ' + e.message);
+showToast('Could not leave group: ' + e.message);
 }
 }
 }
@@ -3521,8 +3526,8 @@ await me.updateProfile({ photoURL: url });
 
 // Update Firestore
 invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
-    photoURL:   url,
-    pfpChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
+photoURL:   url,
+pfpChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
 });
 
 // Refresh local state
@@ -3605,8 +3610,8 @@ mmsg('displayNameMsg', 'Saving…', 'inf');
 try {
 await me.updateProfile({ displayName: newName });
 invalidateUserCache(me.uid); await db.collection('users').doc(me.uid).update({
-    displayName: newName,
-    nameChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
+displayName: newName,
+nameChanges: firebase.firestore.FieldValue.arrayUnion(TS.now())
 });
 document.getElementById('myName').textContent = newName;
 mmsg('displayNameMsg', `✓ Name changed to "${newName}"! (${nameLog.length+1}/2 this week)`, 'ok');
@@ -3631,12 +3636,12 @@ document.getElementById('delGroupModal').classList.remove('hidden');
 let secsLeft = 15; // 15 seconds
 function tick() {
 if (secsLeft <= 0) {
-    clearInterval(delGroupTimer);
-    document.getElementById('delCountdown').textContent = '0';
-    document.getElementById('delCountSub').textContent  = 'You can now confirm the deletion.';
-    btn.style.opacity = '1';
-    btn.style.pointerEvents = 'auto';
-    return;
+clearInterval(delGroupTimer);
+document.getElementById('delCountdown').textContent = '0';
+document.getElementById('delCountSub').textContent  = 'You can now confirm the deletion.';
+btn.style.opacity = '1';
+btn.style.pointerEvents = 'auto';
+return;
 }
 document.getElementById('delCountdown').textContent = secsLeft;
 document.getElementById('delCountSub').textContent  = 'Please wait before you can confirm…';
@@ -3664,9 +3669,9 @@ const msgs = await db.collection(`groups/${gid}/messages`).get();
 const batch = db.batch();
 const storeDels = [];
 msgs.docs.forEach(doc => {
-    batch.delete(doc.ref);
-    const sp = doc.data().storagePath;
-    if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
+batch.delete(doc.ref);
+const sp = doc.data().storagePath;
+if (sp) storeDels.push(storage.ref(sp).delete().catch(()=>{}));
 });
 await batch.commit();
 await Promise.all(storeDels);
@@ -3732,22 +3737,22 @@ if (!val || val.length < 2) { box.style.display = 'none'; return; }
 clearTimeout(suggestTimer);
 suggestTimer = setTimeout(async () => {
 try {
-    const snap = await db.collection('users')
-        .where('username','>=', val)
-        .where('username','<',  val + '\uf8ff')
-        .limit(6).get();
-    const results = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
-        .filter(u => u.uid !== me.uid && u.username);
-    if (!results.length) { box.style.display = 'none'; return; }
-    box.innerHTML = '';
-    results.forEach(u => {
-        const it = ce('div');
-        it.className = 'suggest-item';
-        it.innerHTML = `${mkAv(u.displayName||'?', u.photoURL||null, 28)}<div><div class="suggest-name">${esc(u.displayName||u.username)}</div><div class="suggest-handle">@${esc(u.username)}</div></div>`;
-        it.onmousedown = (e) => { e.preventDefault(); document.getElementById('addIn').value = u.username; box.style.display = 'none'; };
-        box.appendChild(it);
-    });
-    box.style.display = 'block';
+const snap = await db.collection('users')
+    .where('username','>=', val)
+    .where('username','<',  val + '\uf8ff')
+    .limit(6).get();
+const results = snap.docs.map(d => ({ uid: d.id, ...d.data() }))
+    .filter(u => u.uid !== me.uid && u.username);
+if (!results.length) { box.style.display = 'none'; return; }
+box.innerHTML = '';
+results.forEach(u => {
+    const it = ce('div');
+    it.className = 'suggest-item';
+    it.innerHTML = `${mkAv(u.displayName||'?', u.photoURL||null, 28)}<div><div class="suggest-name">${esc(u.displayName||u.username)}</div><div class="suggest-handle">@${esc(u.username)}</div></div>`;
+    it.onmousedown = (e) => { e.preventDefault(); document.getElementById('addIn').value = u.username; box.style.display = 'none'; };
+    box.appendChild(it);
+});
+box.style.display = 'block';
 } catch(e) { box.style.display = 'none'; }
 }, 280);
 }
@@ -3837,13 +3842,13 @@ const items = event.clipboardData?.items;
 if (!items) return;
 for (const item of items) {
 if (item.type.startsWith('image/')) {
-    event.preventDefault();
-    const file = item.getAsFile();
-    if (!file) return;
-    pastedFile = file;
-    document.getElementById('pasteThumb').src = URL.createObjectURL(file);
-    document.getElementById('pastePreview').classList.add('on');
-    return;
+event.preventDefault();
+const file = item.getAsFile();
+if (!file) return;
+pastedFile = file;
+document.getElementById('pasteThumb').src = URL.createObjectURL(file);
+document.getElementById('pastePreview').classList.add('on');
+return;
 }
 }
 }
@@ -3948,24 +3953,24 @@ if (document.hidden) return;
 friends.forEach(f => {
 if (presenceUnsubs[f.uid]) return;
 presenceUnsubs[f.uid] = db.collection('users').doc(f.uid)
-    .onSnapshot(snap => {
-        const d = snap.data() || {};
-        const ls = d.lastSeen?.toDate?.() || new Date(0);
-        const isOnline = d.online === true && (Date.now() - ls) < 3 * 60000;
-        friendPresence[f.uid] = { online: isOnline, lastSeen: ls };
-        renderFriends();
-        // Update chat header if this is the open DM
-        if (chatType === 'dm' && chatId === dmId(me.uid, f.uid)) {
-            updateChatSubStatus(isOnline, ls);
-        }
-    });
+.onSnapshot(snap => {
+    const d = snap.data() || {};
+    const ls = d.lastSeen?.toDate?.() || new Date(0);
+    const isOnline = d.online === true && (Date.now() - ls) < 3 * 60000;
+    friendPresence[f.uid] = { online: isOnline, lastSeen: ls };
+    renderFriends();
+    // Update chat header if this is the open DM
+    if (chatType === 'dm' && chatId === dmId(me.uid, f.uid)) {
+        updateChatSubStatus(isOnline, ls);
+    }
+});
 });
 // Unsub from removed friends
 Object.keys(presenceUnsubs).forEach(uid => {
 if (!friends.find(f => f.uid === uid)) {
-    presenceUnsubs[uid]();
-    delete presenceUnsubs[uid];
-    delete friendPresence[uid];
+presenceUnsubs[uid]();
+delete presenceUnsubs[uid];
+delete friendPresence[uid];
 }
 });
 }
@@ -4008,16 +4013,16 @@ typingUnsub = db.doc(convPath).onSnapshot(snap => {
 const typing = snap.data()?.typing || {};
 const now    = Date.now();
 const others = Object.entries(typing)
-    .filter(([uid, ts]) => uid !== me.uid && ts && (now - ts.toDate().getTime()) < 5000)
-    .map(([uid]) => {
-        const f = friends.find(x => x.uid === uid);
-        return f ? (getNicknames()[uid] || f.displayName || f.username) : 'Someone';
-    });
+.filter(([uid, ts]) => uid !== me.uid && ts && (now - ts.toDate().getTime()) < 5000)
+.map(([uid]) => {
+    const f = friends.find(x => x.uid === uid);
+    return f ? (getNicknames()[uid] || f.displayName || f.username) : 'Someone';
+});
 const bar = document.getElementById('typingBar');
 if (others.length) {
-    bar.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div> ${esc(others.join(', '))} ${others.length===1?'is':'are'} typing…`;
+bar.innerHTML = `<div class="typing-dots"><span></span><span></span><span></span></div> ${esc(others.join(', '))} ${others.length===1?'is':'are'} typing…`;
 } else {
-    bar.innerHTML = '';
+bar.innerHTML = '';
 }
 });
 }
@@ -4052,9 +4057,9 @@ if (!confirm('Remove this friend? This will hide your DM conversation too.')) re
 try {
 // Find and delete the friendRequest doc
 const q1 = await db.collection('friendRequests')
-    .where('fromUid','==', me.uid).where('toUid','==', friendUid).limit(1).get();
+.where('fromUid','==', me.uid).where('toUid','==', friendUid).limit(1).get();
 const q2 = await db.collection('friendRequests')
-    .where('fromUid','==', friendUid).where('toUid','==', me.uid).limit(1).get();
+.where('fromUid','==', friendUid).where('toUid','==', me.uid).limit(1).get();
 const batch = db.batch();
 [...q1.docs, ...q2.docs].forEach(d => batch.delete(d.ref));
 await batch.commit();
@@ -4131,13 +4136,13 @@ const isMe        = uid === me.uid;
 const row = ce('div');
 row.className = 'admin-row';
 row.innerHTML = `
-    ${mkAv(udata.displayName||'?', udata.photoURL||null, 28)}
-    <div class="admin-info">
-        <div class="admin-name">${esc(udata.displayName||udata.username||'?')}</div>
-        <div class="admin-tag">@${esc(udata.username||'')}</div>
-    </div>
-    ${isThisOwner ? `<span class="owner-badge">Owner</span>` : isThisAdmin ? `<span class="admin-badge">Admin</span>` : ''}
-    ${isOwner && !isThisOwner && !isMe ? `<button class="btn-toggle-admin" onclick="toggleAdmin('${uid}',${isThisAdmin})">${isThisAdmin ? 'Remove Admin' : 'Make Admin'}</button>` : ''}`;
+${mkAv(udata.displayName||'?', udata.photoURL||null, 28)}
+<div class="admin-info">
+    <div class="admin-name">${esc(udata.displayName||udata.username||'?')}</div>
+    <div class="admin-tag">@${esc(udata.username||'')}</div>
+</div>
+${isThisOwner ? `<span class="owner-badge">Owner</span>` : isThisAdmin ? `<span class="admin-badge">Admin</span>` : ''}
+${isOwner && !isThisOwner && !isMe ? `<button class="btn-toggle-admin" onclick="toggleAdmin('${uid}',${isThisAdmin})">${isThisAdmin ? 'Remove Admin' : 'Make Admin'}</button>` : ''}`;
 el.appendChild(row);
 }
 
@@ -4165,12 +4170,12 @@ async function toggleAdmin(uid, currentlyAdmin) {
 if (!manageGroupId) return;
 if (currentlyAdmin) {
 await db.collection('groups').doc(manageGroupId).update({
-    admins: firebase.firestore.FieldValue.arrayRemove(uid)
+admins: firebase.firestore.FieldValue.arrayRemove(uid)
 });
 showToast('Admin removed.');
 } else {
 await db.collection('groups').doc(manageGroupId).update({
-    admins: firebase.firestore.FieldValue.arrayUnion(uid)
+admins: firebase.firestore.FieldValue.arrayUnion(uid)
 });
 showToast('Admin added! ⭐');
 }
@@ -4218,13 +4223,13 @@ if (cIdx !== -1) {
 const afterColon = before.slice(cIdx + 1);
 // Only activate if no space after the colon
 if (!afterColon.includes(' ') && afterColon.length > 0) {
-    colonStart    = cIdx;
-    esearchActive = true;
-    const q = afterColon.toLowerCase();
-    document.getElementById('esearchIn').value = q;
-    searchEmoji(q);
-    box.style.display = 'block';
-    return;
+colonStart    = cIdx;
+esearchActive = true;
+const q = afterColon.toLowerCase();
+document.getElementById('esearchIn').value = q;
+searchEmoji(q);
+box.style.display = 'block';
+return;
 }
 }
 // Close if not active
@@ -4290,13 +4295,13 @@ function getNotifSettings() {
 try {
 const stored = JSON.parse(localStorage.getItem('normsg_notif') || 'null');
 return {
-    push:      false,
-    inApp:     true,
-    sound:     true,
-    tabBadge:  true,
-    groupAll:  true,   // notify for ALL group messages by default
-    mentions:  true,   // always notify for @mentions by default
-    ...stored
+push:      false,
+inApp:     true,
+sound:     true,
+tabBadge:  true,
+groupAll:  true,   // notify for ALL group messages by default
+mentions:  true,   // always notify for @mentions by default
+...stored
 };
 } catch { return { push: false, inApp: true, sound: true, tabBadge: true, groupAll: true, mentions: true }; }
 }
@@ -4323,17 +4328,17 @@ const pushOn = document.getElementById('settingPush').checked;
 // If push just turned on, request browser permission
 if (pushOn) {
 if (Notification.permission === 'denied') {
-    document.getElementById('settingPush').checked = false;
-    mmsg('settingsMsg', '⚠ Notifications are blocked in your browser. Go to browser Settings → Site Settings → Notifications and allow NorMSG.', 'err');
-    return;
+document.getElementById('settingPush').checked = false;
+mmsg('settingsMsg', '⚠ Notifications are blocked in your browser. Go to browser Settings → Site Settings → Notifications and allow NorMSG.', 'err');
+return;
 }
 if (Notification.permission !== 'granted') {
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') {
-        document.getElementById('settingPush').checked = false;
-        mmsg('settingsMsg', '⚠ Permission denied. You can change this in your browser\'s site settings.', 'err');
-        return;
-    }
+const perm = await Notification.requestPermission();
+if (perm !== 'granted') {
+    document.getElementById('settingPush').checked = false;
+    mmsg('settingsMsg', '⚠ Permission denied. You can change this in your browser\'s site settings.', 'err');
+    return;
+}
 }
 mmsg('settingsMsg', '✓ Push notifications enabled!', 'ok');
 } else {
@@ -4421,14 +4426,14 @@ return;
 // Push notification — tab hidden/closed
 if (s.push && !tabVisible && Notification.permission === 'granted') {
 const title = isMention
-    ? `🔔 ${senderName} mentioned you in ${displayName}`
-    : `${senderName} in ${displayName}`;
+? `🔔 ${senderName} mentioned you in ${displayName}`
+: `${senderName} in ${displayName}`;
 const n = new Notification(title, {
-    body:     body || '(image)',
-    icon:     NOTIF_ICON,
-    badge:    NOTIF_ICON,
-    tag:      isMention ? `mention-${displayName}` : displayName,
-    renotify: true
+body:     body || '(image)',
+icon:     NOTIF_ICON,
+badge:    NOTIF_ICON,
+tag:      isMention ? `mention-${displayName}` : displayName,
+renotify: true
 });
 n.onclick = () => { window.focus(); n.close(); };
 }
@@ -4443,10 +4448,10 @@ if (!banner) {
 banner = document.createElement('div');
 banner.id = 'inAppBanner';
 if (!document.getElementById('inAppKF')) {
-    const s = document.createElement('style');
-    s.id = 'inAppKF';
-    s.textContent = `@keyframes slideIn { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }`;
-    document.head.appendChild(s);
+const s = document.createElement('style');
+s.id = 'inAppKF';
+s.textContent = `@keyframes slideIn { from { opacity:0; transform:translateX(60px); } to { opacity:1; transform:translateX(0); } }`;
+document.head.appendChild(s);
 }
 banner.onclick = () => { banner.remove(); if (inAppTimer) clearTimeout(inAppTimer); };
 document.body.appendChild(banner);
@@ -4467,8 +4472,8 @@ cursor:pointer;
 banner.innerHTML = `
 <img src="${NOTIF_ICON}" style="width:32px;height:32px;border-radius:8px;flex-shrink:0;" onerror="this.style.display='none'">
 <div style="min-width:0;flex:1;">
-    <div style="font-size:12px;font-weight:700;color:${isMention?'var(--teal)':'var(--text)'};margin-bottom:2px;">${esc(sender)} · ${esc(convName)}</div>
-    <div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(body)}</div>
+<div style="font-size:12px;font-weight:700;color:${isMention?'var(--teal)':'var(--text)'};margin-bottom:2px;">${esc(sender)} · ${esc(convName)}</div>
+<div style="font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(body)}</div>
 </div>
 <button onclick="event.stopPropagation();document.getElementById('inAppBanner')?.remove();" style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;flex-shrink:0;padding:0 2px;">✕</button>
 `;
@@ -4525,26 +4530,26 @@ allStatuses = {};
 
 // Simple per-uid query — no orderBy so no composite index needed
 await Promise.all(uids.map(async uid => {
-    try {
-        const snap = await db.collection('statuses')
-            .where('uid', '==', uid)
-            .limit(20)
-            .get();
-        const active = snap.docs
-            .map(d => ({ id: d.id, ...d.data() }))
-            .filter(s => {
-                const del = s.deleteAt?.toDate?.();
-                return del && del > now;
-            })
-            .sort((a, b) => {
-                const ta = a.createdAt?.toDate?.()?.getTime() || 0;
-                const tb = b.createdAt?.toDate?.()?.getTime() || 0;
-                return ta - tb;
-            });
-        if (active.length) allStatuses[uid] = active;
-    } catch(e) {
-        console.warn('Status fetch failed for', uid, e.message);
-    }
+try {
+    const snap = await db.collection('statuses')
+        .where('uid', '==', uid)
+        .limit(20)
+        .get();
+    const active = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter(s => {
+            const del = s.deleteAt?.toDate?.();
+            return del && del > now;
+        })
+        .sort((a, b) => {
+            const ta = a.createdAt?.toDate?.()?.getTime() || 0;
+            const tb = b.createdAt?.toDate?.()?.getTime() || 0;
+            return ta - tb;
+        });
+    if (active.length) allStatuses[uid] = active;
+} catch(e) {
+    console.warn('Status fetch failed for', uid, e.message);
+}
 }));
 statusLastLoadedAt = Date.now();
 statusLastFriendKey = friendKey;
@@ -4734,17 +4739,17 @@ await db.collection('statuses').doc(statusId).delete();
 showToast('Status deleted.');
 // Remove from local cache
 if (allStatuses[me.uid]) {
-    allStatuses[me.uid] = allStatuses[me.uid].filter(s => s.id !== statusId);
+allStatuses[me.uid] = allStatuses[me.uid].filter(s => s.id !== statusId);
 }
 // If there are more statuses, advance; otherwise close
 if (statusCurrentUser?.statuses) {
-    statusCurrentUser.statuses = statusCurrentUser.statuses.filter(s => s.id !== statusId);
-    if (statusCurrentUser.statuses.length > 0) {
-        statusCurrentIndex = Math.min(statusCurrentIndex, statusCurrentUser.statuses.length - 1);
-        renderStatusViewerItem();
-    } else {
-        closeStatusViewer();
-    }
+statusCurrentUser.statuses = statusCurrentUser.statuses.filter(s => s.id !== statusId);
+if (statusCurrentUser.statuses.length > 0) {
+    statusCurrentIndex = Math.min(statusCurrentIndex, statusCurrentUser.statuses.length - 1);
+    renderStatusViewerItem();
+} else {
+    closeStatusViewer();
+}
 }
 } catch(e) {
 showToast('Could not delete: ' + e.message);
@@ -4785,10 +4790,10 @@ STATUS_COLORS.forEach((c, i) => {
 const s = ce('div'); s.className = 'swatch' + (i===0?' on':'');
 s.style.background = c;
 s.onclick = () => {
-    stSelectedColor = c;
-    sw.querySelectorAll('.swatch').forEach(el => el.classList.remove('on'));
-    s.classList.add('on');
-    document.getElementById('stPreview').style.background = c;
+stSelectedColor = c;
+sw.querySelectorAll('.swatch').forEach(el => el.classList.remove('on'));
+s.classList.add('on');
+document.getElementById('stPreview').style.background = c;
 };
 sw.appendChild(s);
 });
@@ -4842,26 +4847,26 @@ try {
 const now      = new Date();
 const deleteAt = new Date(now.getTime() + 24 * 3600000);
 let statusData = {
-    uid:       me.uid,
-    displayName: me.displayName || me.email,
-    photoURL:  me.photoURL || null,
-    createdAt: SV(),
-    deleteAt:  TS.fromDate(deleteAt),
-    views:     {}
+uid:       me.uid,
+displayName: me.displayName || me.email,
+photoURL:  me.photoURL || null,
+createdAt: SV(),
+deleteAt:  TS.fromDate(deleteAt),
+views:     {}
 };
 
 if (stType === 'text') {
-    const txt = document.getElementById('stTextIn').value.trim();
-    if (!txt) return mmsg('stMsg','Enter some text.','err');
-    statusData = { ...statusData, type: 'text', content: txt, bgColor: stSelectedColor };
+const txt = document.getElementById('stTextIn').value.trim();
+if (!txt) return mmsg('stMsg','Enter some text.','err');
+statusData = { ...statusData, type: 'text', content: txt, bgColor: stSelectedColor };
 } else {
-    const file = document.getElementById('stMediaIn').files[0];
-    if (!file) return mmsg('stMsg','Select a file first.','err');
-    const maxSize = stType === 'video' ? 100 : 20;
-    if (file.size > maxSize * 1024 * 1024) return mmsg('stMsg', `File too large — max ${maxSize} MB.`, 'err');
-    const resType = stType === 'video' ? 'video' : 'image';
-    const { url } = await uploadToCloudinary(file, resType);
-    statusData = { ...statusData, type: stType, url };
+const file = document.getElementById('stMediaIn').files[0];
+if (!file) return mmsg('stMsg','Select a file first.','err');
+const maxSize = stType === 'video' ? 100 : 20;
+if (file.size > maxSize * 1024 * 1024) return mmsg('stMsg', `File too large — max ${maxSize} MB.`, 'err');
+const resType = stType === 'video' ? 'video' : 'image';
+const { url } = await uploadToCloudinary(file, resType);
+statusData = { ...statusData, type: stType, url };
 }
 
 await db.collection('statuses').add(statusData);
@@ -4895,8 +4900,8 @@ showToast('⚠ AI rate limit reached — please wait a moment.');
 return;
 }
 
-// Check if the sender has NorMSG Super (smarter model)
-const isSuper = await hasSuper(me.uid);
+// Check if the sender has NorMSG Super or Pro (both get the smarter model)
+const isSuper = userPlan === 'pro' || await hasSuper(me.uid);
 const model   = isSuper ? GROQ_MODEL_SUPER : GROQ_MODEL;
 
 // Post a "thinking" placeholder so everyone sees AI is working
@@ -4918,8 +4923,8 @@ const history = ctxSnap.docs
 .reverse()
 .filter(d => d.id !== thinkRef.id && d.data().type === 'text')
 .map(d => ({
-    role:    d.data().senderUid === 'AI' ? 'assistant' : 'user',
-    content: `${d.data().senderUsername || d.data().senderName || 'User'}: ${d.data().text}`
+role:    d.data().senderUid === 'AI' ? 'assistant' : 'user',
+content: `${d.data().senderUsername || d.data().senderName || 'User'}: ${d.data().text}`
 }));
 
 try {
@@ -4930,22 +4935,22 @@ const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}`
 
 const url = isSuper ? NORMAI_PRO_API : NORMAI_FREE_API;
 const res = await fetch(url, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(
-        isSuper
-            ? { prompt: fullPrompt, context: prompt, mode: 'pro' }
-            : { prompt: fullPrompt + `\n\nUser: ${prompt}` }
-    )
+method:  'POST',
+headers: { 'Content-Type': 'application/json' },
+body: JSON.stringify(
+    isSuper
+        ? { prompt: prompt, context: fullPrompt, mode: 'pro' }
+        : { prompt: fullPrompt + `\n\nUser: ${prompt}` }
+)
 });
 
 if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+const err = await res.json().catch(() => ({}));
+throw new Error(err?.error?.message || `HTTP ${res.status}`);
 }
 
 const data   = await res.json();
-const answer = data.reply ?? data.result ?? data.text ?? data.choices?.[0]?.message?.content ?? 'Sorry, I couldn\'t generate a response.';
+const answer = data.reply || data.result || data.text || data.choices?.[0]?.message?.content || 'Sorry, I couldn\'t generate a response.';
 
 await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper === true, timestamp: SV() });
 
@@ -4965,31 +4970,31 @@ const parts = raw.split(/```(\w*)\n?([\s\S]*?)```/g);
 // parts: [text, lang, code, text, lang, code, ...]
 for (let i = 0; i < parts.length; i++) {
 if (i % 3 === 0) {
-    // Plain text segment — escape and render inline code + line breaks
-    let seg = esc(parts[i]);
-    // Bold **text**
-    seg = seg.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // Italic *text*
-    seg = seg.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    // Inline code `code`
-    seg = seg.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
-    // Line breaks
-    seg = seg.replace(/\n/g, '<br>');
-    html += seg;
+// Plain text segment — escape and render inline code + line breaks
+let seg = esc(parts[i]);
+// Bold **text**
+seg = seg.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+// Italic *text*
+seg = seg.replace(/\*(.*?)\*/g, '<em>$1</em>');
+// Inline code `code`
+seg = seg.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
+// Line breaks
+seg = seg.replace(/\n/g, '<br>');
+html += seg;
 } else if (i % 3 === 1) {
-    // Language label — captured by the next iteration
+// Language label — captured by the next iteration
 } else {
-    // Code block
-    const lang    = parts[i-1] || 'code';
-    const code    = parts[i];
-    const id      = `aicopy_${codeId++}`;
-    html += `<div class="ai-code-wrap">
-        <div class="ai-code-bar">
-            <span>${esc(lang)}</span>
-            <button class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
-        </div>
-        <pre>${esc(code)}</pre>
-    </div>`;
+// Code block
+const lang    = parts[i-1] || 'code';
+const code    = parts[i];
+const id      = `aicopy_${codeId++}`;
+html += `<div class="ai-code-wrap">
+    <div class="ai-code-bar">
+        <span>${esc(lang)}</span>
+        <button class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
+    </div>
+    <pre>${esc(code)}</pre>
+</div>`;
 }
 }
 return html;
@@ -5085,15 +5090,15 @@ if (superLoadInFlight) return superLoadInFlight;
 const nextCache = {};
 superLoadInFlight = (async () => {
 for (let i = 0; i < uniqueUids.length; i += 10) {
-    const chunk = uniqueUids.slice(i, i + 10);
-    if (!chunk.length) continue;
-    const snap = await db.collection('users')
-        .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
-        .get();
-    snap.docs.forEach(d => {
-        const until = d.data()?.normsgSuper?.until?.toDate?.();
-        nextCache[d.id] = !!(until && until > new Date());
-    });
+const chunk = uniqueUids.slice(i, i + 10);
+if (!chunk.length) continue;
+const snap = await db.collection('users')
+    .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
+    .get();
+snap.docs.forEach(d => {
+    const until = d.data()?.normsgSuper?.until?.toDate?.();
+    nextCache[d.id] = !!(until && until > new Date());
+});
 }
 uniqueUids.forEach(uid => { superCache[uid] = nextCache[uid] || false; });
 superLastLoadedAt = Date.now();
@@ -5109,7 +5114,7 @@ superLoadInFlight = null;
 // Show Super badge and shimmer on my own profile row
 const myBadge = document.getElementById('mySuperBadge');
 const myHandle = document.getElementById('myHandle');
-if (superCache[me.uid]) {
+if (superCache[me.uid] || userPlan === 'pro') {
 if (myBadge) myBadge.style.display = 'block';
 if (myHandle) myHandle.innerHTML = `<span class="super-name">@${myUsername}</span>`;
 } else {
@@ -5140,19 +5145,19 @@ async function checkWeeklyLeaderboard() {
 try {
 const weekKey = getWeekKey();
 const snap = await db.collection('users')
-    .where('weeklyKey','==', weekKey)
-    .orderBy('weeklyCount','desc')
-    .limit(1).get();
+.where('weeklyKey','==', weekKey)
+.orderBy('weeklyCount','desc')
+.limit(1).get();
 if (snap.empty) return;
 const top = snap.docs[0];
 if (top.id === me.uid) {
-    // I'm the top chatter — auto-grant 1 month Super if not already
-    const current = await hasSuper(me.uid);
-    if (!current) {
-        await grantSuperToUid(me.uid, 30);
-        showToast('🏆 You\'re the top chatter this week! Enjoy 1 month of NorMSG Super! ✦');
-        await refreshSuperCache();
-    }
+// I'm the top chatter — auto-grant 1 month Super if not already
+const current = await hasSuper(me.uid);
+if (!current) {
+    await grantSuperToUid(me.uid, 30);
+    showToast('🏆 You\'re the top chatter this week! Enjoy 1 month of NorMSG Super! ✦');
+    await refreshSuperCache();
+}
 }
 } catch(e) { /* needs weeklyCount index — will work after first message */ }
 }
@@ -5180,10 +5185,10 @@ loadActiveAnnPreview();
 
 // ── ANNOUNCEMENTS ────────────────────────────────────────────
 const ANN_STYLES = {
-    info:    { bg: 'linear-gradient(90deg,#1e40af,#3b82f6)', color: '#fff' },
-    warn:    { bg: 'linear-gradient(90deg,#92400e,#f59e0b)', color: '#fff' },
-    danger:  { bg: 'linear-gradient(90deg,#9f1239,#f43f5e)', color: '#fff' },
-    success: { bg: 'linear-gradient(90deg,#065f46,#34d399)', color: '#fff' },
+info:    { bg: 'linear-gradient(90deg,#1e40af,#3b82f6)', color: '#fff' },
+warn:    { bg: 'linear-gradient(90deg,#92400e,#f59e0b)', color: '#fff' },
+danger:  { bg: 'linear-gradient(90deg,#9f1239,#f43f5e)', color: '#fff' },
+success: { bg: 'linear-gradient(90deg,#065f46,#34d399)', color: '#fff' },
 };
 
 async function postAnnouncement() {
@@ -5194,50 +5199,50 @@ const style = document.getElementById('annStyle').value;
 if (!text) return mmsg('annMsg', 'Enter an announcement message.', 'err');
 mmsg('annMsg', 'Posting…', 'inf');
 try {
-    const expiresAt = new Date(Date.now() + hours * 3600000);
-    await db.collection('siteConfig').doc('announcement').set({
-        text, style, hours,
-        expiresAt: TS.fromDate(expiresAt),
-        postedBy:  me.uid,
-        postedAt:  SV(),
-    });
-    mmsg('annMsg', `✓ Announcement posted for ${hours < 24 ? hours+'h' : (hours/24)+'d'}!`, 'ok');
-    document.getElementById('annTextIn').value = '';
-    loadActiveAnnPreview();
-    checkAnnouncement(); // show it immediately
+const expiresAt = new Date(Date.now() + hours * 3600000);
+await db.collection('siteConfig').doc('announcement').set({
+    text, style, hours,
+    expiresAt: TS.fromDate(expiresAt),
+    postedBy:  me.uid,
+    postedAt:  SV(),
+});
+mmsg('annMsg', `✓ Announcement posted for ${hours < 24 ? hours+'h' : (hours/24)+'d'}!`, 'ok');
+document.getElementById('annTextIn').value = '';
+loadActiveAnnPreview();
+checkAnnouncement(); // show it immediately
 } catch(e) { mmsg('annMsg', 'Error: ' + e.message, 'err'); }
 }
 
 async function cancelAnnouncement() {
 if (!isPlatformAdmin) return;
 try {
-    await db.collection('siteConfig').doc('announcement').delete();
-    document.getElementById('activeAnnPreview').innerHTML = '';
-    hideAnnouncementBanner();
-    mmsg('annMsg', 'Announcement removed.', 'ok');
+await db.collection('siteConfig').doc('announcement').delete();
+document.getElementById('activeAnnPreview').innerHTML = '';
+hideAnnouncementBanner();
+mmsg('annMsg', 'Announcement removed.', 'ok');
 } catch(e) { mmsg('annMsg', 'Error: ' + e.message, 'err'); }
 }
 
 async function loadActiveAnnPreview() {
 const el = document.getElementById('activeAnnPreview');
 try {
-    const snap = await db.collection('siteConfig').doc('announcement').get();
-    if (!snap.exists) { el.innerHTML = ''; return; }
-    const d = snap.data();
-    const expires = d.expiresAt?.toDate?.();
-    if (!expires || expires < new Date()) { el.innerHTML = ''; return; }
-    const s = ANN_STYLES[d.style] || ANN_STYLES.info;
-    const timeLeft = timeUntil(expires);
-    el.innerHTML = `
-        <div style="background:${s.bg};color:${s.color};border-radius:10px;padding:9px 13px;
-            font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <span style="flex:1;font-weight:600;">Active: "${esc(d.text)}"</span>
-            <span style="opacity:0.75;font-size:11px;">Expires in ${timeLeft}</span>
-            <button onclick="cancelAnnouncement()" style="
-                background:rgba(0,0,0,0.25);border:none;color:inherit;border-radius:8px;
-                padding:3px 10px;font-size:11px;cursor:pointer;font-family:'Figtree',sans-serif;
-                font-weight:700;white-space:nowrap;">✕ Remove</button>
-        </div>`;
+const snap = await db.collection('siteConfig').doc('announcement').get();
+if (!snap.exists) { el.innerHTML = ''; return; }
+const d = snap.data();
+const expires = d.expiresAt?.toDate?.();
+if (!expires || expires < new Date()) { el.innerHTML = ''; return; }
+const s = ANN_STYLES[d.style] || ANN_STYLES.info;
+const timeLeft = timeUntil(expires);
+el.innerHTML = `
+    <div style="background:${s.bg};color:${s.color};border-radius:10px;padding:9px 13px;
+        font-size:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span style="flex:1;font-weight:600;">Active: "${esc(d.text)}"</span>
+        <span style="opacity:0.75;font-size:11px;">Expires in ${timeLeft}</span>
+        <button onclick="cancelAnnouncement()" style="
+            background:rgba(0,0,0,0.25);border:none;color:inherit;border-radius:8px;
+            padding:3px 10px;font-size:11px;cursor:pointer;font-family:'Figtree',sans-serif;
+            font-weight:700;white-space:nowrap;">✕ Remove</button>
+    </div>`;
 } catch(e) { el.innerHTML = ''; }
 }
 
@@ -5254,17 +5259,17 @@ return m + 'm';
 async function checkAnnouncement() {
 // Called on login and periodically — shows banner if active announcement exists
 try {
-    const snap = await db.collection('siteConfig').doc('announcement').get();
-    if (!snap.exists) { hideAnnouncementBanner(); return; }
-    const d = snap.data();
-    const expires = d.expiresAt?.toDate?.();
-    if (!expires || expires < new Date()) { hideAnnouncementBanner(); return; }
+const snap = await db.collection('siteConfig').doc('announcement').get();
+if (!snap.exists) { hideAnnouncementBanner(); return; }
+const d = snap.data();
+const expires = d.expiresAt?.toDate?.();
+if (!expires || expires < new Date()) { hideAnnouncementBanner(); return; }
 
-    // Check if user already dismissed this specific announcement
-    const dismissKey = 'normsg_ann_dismissed_' + (d.postedAt?.seconds || '');
-    if (localStorage.getItem(dismissKey)) { hideAnnouncementBanner(); return; }
+// Check if user already dismissed this specific announcement
+const dismissKey = 'normsg_ann_dismissed_' + (d.postedAt?.seconds || '');
+if (localStorage.getItem(dismissKey)) { hideAnnouncementBanner(); return; }
 
-    showAnnouncementBanner(d.text, d.style, dismissKey);
+showAnnouncementBanner(d.text, d.style, dismissKey);
 } catch(e) { /* silently ignore */ }
 }
 
@@ -5289,7 +5294,7 @@ document.body.style.paddingTop = '';
 function dismissAnnouncement() {
 const banner = document.getElementById('annBanner');
 if (banner._dismissKey) {
-    try { localStorage.setItem(banner._dismissKey, '1'); } catch {}
+try { localStorage.setItem(banner._dismissKey, '1'); } catch {}
 }
 hideAnnouncementBanner();
 }
@@ -5299,19 +5304,19 @@ const el = document.getElementById('adminLeaderboard');
 try {
 const weekKey = getWeekKey();
 const snap = await db.collection('users')
-    .where('weeklyKey','==',weekKey)
-    .orderBy('weeklyCount','desc')
-    .limit(5).get();
+.where('weeklyKey','==',weekKey)
+.orderBy('weeklyCount','desc')
+.limit(5).get();
 if (snap.empty) { el.textContent = 'No messages this week yet.'; return; }
 el.innerHTML = snap.docs.map((d,i) => {
-    const data = d.data();
-    const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-    return `<div style="padding:5px 0;display:flex;gap:8px;align-items:center;">
-        <span style="font-size:16px;">${medals[i]}</span>
-        <span style="font-size:12px;font-weight:600;">${esc(data.displayName||data.username||'?')}</span>
-        <span style="font-size:11px;color:var(--muted);">@${esc(data.username||'')}</span>
-        <span style="font-size:11px;color:var(--a2);margin-left:auto;">${data.weeklyCount||0} msgs</span>
-    </div>`;
+const data = d.data();
+const medals = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+return `<div style="padding:5px 0;display:flex;gap:8px;align-items:center;">
+    <span style="font-size:16px;">${medals[i]}</span>
+    <span style="font-size:12px;font-weight:600;">${esc(data.displayName||data.username||'?')}</span>
+    <span style="font-size:11px;color:var(--muted);">@${esc(data.username||'')}</span>
+    <span style="font-size:11px;color:var(--a2);margin-left:auto;">${data.weeklyCount||0} msgs</span>
+</div>`;
 }).join('');
 } catch(e) {
 el.textContent = 'Could not load (may need Firestore index on weeklyCount).';
@@ -5401,9 +5406,9 @@ const chunks = [];
 for (let i = 0; i < uids.length; i+=10) chunks.push(uids.slice(i,i+10));
 mentionMembers = [];
 for (const chunk of chunks) {
-    if (!chunk.length) continue;
-    const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
-    s.docs.forEach(d => mentionMembers.push({ uid: d.id, ...d.data() }));
+if (!chunk.length) continue;
+const s = await db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',chunk).get();
+s.docs.forEach(d => mentionMembers.push({ uid: d.id, ...d.data() }));
 }
 }
 
@@ -5411,8 +5416,8 @@ const filtered = [
 // Always include @AI as first option in groups
 { uid: 'AI', username: 'AI', displayName: '✦ AI Assistant', photoURL: null, isAI: true },
 ...mentionMembers.filter(u =>
-    (u.username||'').toLowerCase().startsWith(mentionSearch) ||
-    (u.displayName||'').toLowerCase().startsWith(mentionSearch)
+(u.username||'').toLowerCase().startsWith(mentionSearch) ||
+(u.displayName||'').toLowerCase().startsWith(mentionSearch)
 )
 ].filter(u => u.isAI
 ? 'ai'.startsWith(mentionSearch)
@@ -5521,11 +5526,11 @@ if (type === 'heading') {
 const lineStart = val.lastIndexOf('\n', start - 1) + 1;
 const lineText  = val.slice(lineStart);
 if (lineText.startsWith('# ')) {
-    // Remove heading
-    inp.value = val.slice(0, lineStart) + lineText.slice(2);
+// Remove heading
+inp.value = val.slice(0, lineStart) + lineText.slice(2);
 } else {
-    inp.value = val.slice(0, lineStart) + '# ' + val.slice(lineStart);
-    inp.setSelectionRange(start + 2, end + 2);
+inp.value = val.slice(0, lineStart) + '# ' + val.slice(lineStart);
+inp.setSelectionRange(start + 2, end + 2);
 }
 inp.focus();
 autoGrow(inp);
@@ -5563,13 +5568,13 @@ if (!targetUid) { btn.textContent = '✗ Not found'; return; }
 const alreadyFriend = friends.some(f => f.uid === targetUid);
 if (alreadyFriend) { btn.textContent = '✓ Friends'; btn.disabled = true; return; }
 const dup = await db.collection('friendRequests')
-    .where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending').limit(1).get();
+.where('fromUid','==',me.uid).where('toUid','==',targetUid).where('status','==','pending').limit(1).get();
 if (!dup.empty) { btn.textContent = '✓ Sent'; return; }
 const updata = await getCachedProfile(targetUid) || {};
 await db.collection('friendRequests').add({
-    fromUid: me.uid, fromName: me.displayName||me.email, fromUsername: myUsername, fromPhoto: me.photoURL||null,
-    toUid: targetUid, toName: updata.displayName||updata.email, toUsername: updata.username||'', toPhoto: updata.photoURL||null,
-    status: 'pending', createdAt: SV()
+fromUid: me.uid, fromName: me.displayName||me.email, fromUsername: myUsername, fromPhoto: me.photoURL||null,
+toUid: targetUid, toName: updata.displayName||updata.email, toUsername: updata.username||'', toPhoto: updata.photoURL||null,
+status: 'pending', createdAt: SV()
 });
 btn.textContent = '✓ Sent';
 showToast(`Request sent! 🎉`);
@@ -5628,59 +5633,59 @@ const discovered = {};
 
 // Degree-2: friends of my friends
 for (const f of friends.slice(0, 12)) {
-    const [q1, q2] = await Promise.all([
-        db.collection('friendRequests')
-            .where('fromUid','==',f.uid).where('status','==','accepted').limit(20).get(),
-        db.collection('friendRequests')
-            .where('toUid','==',f.uid).where('status','==','accepted').limit(20).get()
-    ]);
-    const fof = new Set();
-    q1.docs.forEach(d => fof.add(d.data().toUid));
-    q2.docs.forEach(d => fof.add(d.data().fromUid));
-    fof.forEach(uid => {
-        if (myFriendUids.has(uid)) return;
-        if (!discovered[uid]) discovered[uid] = { degree: 2, via: [] };
-        const name = f.displayName || f.username || '?';
-        if (!discovered[uid].via.includes(name)) discovered[uid].via.push(name);
-    });
+const [q1, q2] = await Promise.all([
+    db.collection('friendRequests')
+        .where('fromUid','==',f.uid).where('status','==','accepted').limit(20).get(),
+    db.collection('friendRequests')
+        .where('toUid','==',f.uid).where('status','==','accepted').limit(20).get()
+]);
+const fof = new Set();
+q1.docs.forEach(d => fof.add(d.data().toUid));
+q2.docs.forEach(d => fof.add(d.data().fromUid));
+fof.forEach(uid => {
+    if (myFriendUids.has(uid)) return;
+    if (!discovered[uid]) discovered[uid] = { degree: 2, via: [] };
+    const name = f.displayName || f.username || '?';
+    if (!discovered[uid].via.includes(name)) discovered[uid].via.push(name);
+});
 }
 
 // Degree-3: friends of degree-2 (capped at 5 to avoid too many reads)
 const fofKeys = Object.keys(discovered).slice(0, 5);
 for (const fofUid of fofKeys) {
-    const [q1, q2] = await Promise.all([
-        db.collection('friendRequests')
-            .where('fromUid','==',fofUid).where('status','==','accepted').limit(10).get(),
-        db.collection('friendRequests')
-            .where('toUid','==',fofUid).where('status','==','accepted').limit(10).get()
-    ]);
-    const fof2 = new Set();
-    q1.docs.forEach(d => fof2.add(d.data().toUid));
-    q2.docs.forEach(d => fof2.add(d.data().fromUid));
-    fof2.forEach(uid => {
-        if (myFriendUids.has(uid) || discovered[uid]) return;
-        const viaName = discovered[fofUid]?.via?.[0] || '?';
-        discovered[uid] = { degree: 3, via: [viaName] };
-    });
+const [q1, q2] = await Promise.all([
+    db.collection('friendRequests')
+        .where('fromUid','==',fofUid).where('status','==','accepted').limit(10).get(),
+    db.collection('friendRequests')
+        .where('toUid','==',fofUid).where('status','==','accepted').limit(10).get()
+]);
+const fof2 = new Set();
+q1.docs.forEach(d => fof2.add(d.data().toUid));
+q2.docs.forEach(d => fof2.add(d.data().fromUid));
+fof2.forEach(uid => {
+    if (myFriendUids.has(uid) || discovered[uid]) return;
+    const viaName = discovered[fofUid]?.via?.[0] || '?';
+    discovered[uid] = { degree: 3, via: [viaName] };
+});
 }
 
 const allUids = Object.keys(discovered);
 if (!allUids.length) {
-    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
-    return;
+el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+return;
 }
 
 // Batch-fetch user profiles (10 per query)
 const profiles = {};
 for (let i = 0; i < allUids.length; i += 10) {
-    const chunk = allUids.slice(i, i + 10);
-    if (!chunk.length) continue;
-    const snap = await db.collection('users')
-        .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
-    snap.docs.forEach(d => {
-        const data = d.data();
-        if (data.username) profiles[d.id] = { uid: d.id, ...data };
-    });
+const chunk = allUids.slice(i, i + 10);
+if (!chunk.length) continue;
+const snap = await db.collection('users')
+    .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
+snap.docs.forEach(d => {
+    const data = d.data();
+    if (data.username) profiles[d.id] = { uid: d.id, ...data };
+});
 }
 
 el.innerHTML = '';
@@ -5689,27 +5694,27 @@ const deg2 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 2
 const deg3 = allUids.filter(uid => profiles[uid] && discovered[uid].degree === 3);
 
 if (deg2.length) {
-    const sec = ce('div'); sec.className = 'people-section';
-    sec.innerHTML = `<span class="people-sec-label">👥 Friends of Friends</span>`;
-    deg2.slice(0, 15).forEach(uid => {
-        const via = discovered[uid].via.slice(0, 2).join(' & ');
-        sec.appendChild(buildPersonCard(profiles[uid], via ? `via ${via}` : ''));
-    });
-    el.appendChild(sec);
+const sec = ce('div'); sec.className = 'people-section';
+sec.innerHTML = `<span class="people-sec-label">👥 Friends of Friends</span>`;
+deg2.slice(0, 15).forEach(uid => {
+    const via = discovered[uid].via.slice(0, 2).join(' & ');
+    sec.appendChild(buildPersonCard(profiles[uid], via ? `via ${via}` : ''));
+});
+el.appendChild(sec);
 }
 
 if (deg3.length) {
-    const sec = ce('div'); sec.className = 'people-section';
-    sec.innerHTML = `<span class="people-sec-label">🌐 Extended Network</span>`;
-    deg3.slice(0, 8).forEach(uid => {
-        const via = discovered[uid].via[0] || '';
-        sec.appendChild(buildPersonCard(profiles[uid], via ? `3° via ${via}` : '3°'));
-    });
-    el.appendChild(sec);
+const sec = ce('div'); sec.className = 'people-section';
+sec.innerHTML = `<span class="people-sec-label">🌐 Extended Network</span>`;
+deg3.slice(0, 8).forEach(uid => {
+    const via = discovered[uid].via[0] || '';
+    sec.appendChild(buildPersonCard(profiles[uid], via ? `3° via ${via}` : '3°'));
+});
+el.appendChild(sec);
 }
 
 if (!deg2.length && !deg3.length) {
-    el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
+el.innerHTML = `<div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">No suggestions yet — add more friends to grow your network! 🌱</div>`;
 }
 
 } catch(e) {
@@ -5724,12 +5729,12 @@ const card = ce('div'); card.className = 'people-card';
 card.innerHTML = `
 ${mkAv(u.displayName||'?', u.photoURL||null, 36)}
 <div class="people-card-info">
-    <div class="people-card-name">${esc(u.displayName||u.username||'?')}</div>
-    <div class="people-card-tag">@${esc(u.username||'')}</div>
-    ${via ? `<div class="people-via">${esc(via)}</div>` : ''}
+<div class="people-card-name">${esc(u.displayName||u.username||'?')}</div>
+<div class="people-card-tag">@${esc(u.username||'')}</div>
+${via ? `<div class="people-via">${esc(via)}</div>` : ''}
 </div>
 <button class="btn-add-person" ${alreadyFriend?'disabled':''} onclick="sendFriendReqTo('${esc(u.username||'')}',this)">
-    ${alreadyFriend ? '✓ Friends' : '+ Add'}
+${alreadyFriend ? '✓ Friends' : '+ Add'}
 </button>`;
 return card;
 }
