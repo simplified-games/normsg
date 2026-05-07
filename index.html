@@ -4995,15 +4995,11 @@ const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content
 const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown code blocks with the language specified. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
 const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
 
-const url = isSuper ? NORMAI_PRO_API : NORMAI_FREE_API;
-const res = await fetch(url, {
+// Always use Free API format for @AI — the Pro endpoint doesn't support this call shape
+const res = await fetch(NORMAI_FREE_API, {
 method:  'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify(
-    isSuper
-        ? { prompt: prompt, context: fullPrompt, mode: 'pro' }
-        : { prompt: fullPrompt + `\n\nUser: ${prompt}` }
-)
+body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}` })
 });
 
 if (!res.ok) {
