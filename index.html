@@ -2521,7 +2521,26 @@ function markRead(id)          { try { localStorage.setItem('normsg_read_'+id, D
 function isUnread(id, lastAt)  { if (!lastAt) return false; return lastAt.getTime() > getLastRead(id); }
 
 // ── AUTH ───────────────────────────────────────────────────
-function login()  { auth.signInWithPopup(gProv).catch(e => showToast('Sign-in failed: ' + e.message)); }
+let _googleSignInPending = false;
+function login() {
+    if (_googleSignInPending) return;
+    _googleSignInPending = true;
+    const btn = document.querySelector('.btn-primary');
+    if (btn) { btn.disabled = true; btn.textContent = '🔒   Redirecting…'; }
+    auth.signInWithRedirect(gProv)
+        .catch(e => {
+            showToast('Sign-in failed: ' + e.message);
+            _googleSignInPending = false;
+            if (btn) { btn.disabled = false; btn.innerHTML = '🔒 &nbsp; Continue with Google'; }
+        });
+}
+
+// Handle redirect result on page load
+auth.getRedirectResult().catch(e => {
+    if (e.code && e.code !== 'auth/cancelled-popup-request') {
+        showToast('Sign-in failed: ' + e.message);
+    }
+});
 
 function openLoginModal() {
 document.getElementById('loginUsernameIn').value = '';
