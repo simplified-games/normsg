@@ -653,6 +653,7 @@ exports.handler = async (event) => {
         #messagesArea {
             flex: 1; overflow-y: auto; padding: 18px 16px;
             display: flex; flex-direction: column; gap: 2px;
+            justify-content: flex-end;
         }
         #messagesArea::-webkit-scrollbar { width: 4px; }
         #messagesArea::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
@@ -3337,7 +3338,7 @@ clearToBanner();
 }
 
 // ── MESSAGES ───────────────────────────────────────────────
-const MSG_PAGE = 100;  // reads per page — change to load more
+const MSG_PAGE = 65;  // reads per page — change to load more
 
 function subMessages(path) {
 if (msgUnsub) { msgUnsub(); msgUnsub = null; }
@@ -3380,6 +3381,10 @@ const avPart = mine ? '' :
 `<div class="msg-av ${same?'inv':''}">` +
 (msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
 `</div>`;
+
+const sp   = (msg.storagePath||'').replace(/'/g,"\\'");
+const pid  = (msg._path||'').replace(/'/g,"\\'");
+const mid  = msg.id;
 
 let bubble = '';
 if (msg.type === 'deleted') {
@@ -3438,10 +3443,6 @@ const senderIsSuper = msg.senderSuper === true;
 const senderNameHTML = senderIsSuper
 ? `<span class="msg-sender-name super-name">@${esc(msg.senderUsername||msg.senderName||'')} <span class="super-badge">✦ SUPER</span></span>`
 : `<span class="msg-sender-name">@${esc(msg.senderUsername||msg.senderName||'')}</span>`;
-const sp   = (msg.storagePath||'').replace(/'/g,"\\'");
-const pid  = (msg._path||'').replace(/'/g,"\\'");
-const mid  = msg.id;
-
 // Check if current user is group admin
 const isGroupAdmin = chatType === 'group' && (() => {
 const grp = myGroups.find(g => g.id === chatId);
@@ -3495,7 +3496,7 @@ row.innerHTML = `${avPart}
 area.appendChild(row);
 });
 
-area.scrollTop = area.scrollHeight;
+requestAnimationFrame(() => { area.scrollTop = area.scrollHeight; });
 }
 
 // ── REPLY STATE ────────────────────────────────────────────
