@@ -3550,6 +3550,11 @@ const mid  = msg.id;
 row.className = 'msg-row' + (mine ? ' sent' : '');
 row.dataset.mid = mid;
 
+const avPart = mine ? '' :
+`<div class="msg-av ${same?'inv':''}">` +
+(msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
+`</div>`;
+
 let bubble = '';
 if (msg.type === 'sticker') {
 bubble = `<div class="sticker-bubble" data-mid="${mid}">
@@ -3720,12 +3725,47 @@ triggerAIResponse(text);
 }
 }
 
-// ── IMAGE/VIDEO UPLOAD — CLOUDINARY (no compression) ──────
+// ── IMAGE/VIDEO UPLOAD — CLOUDINARY ───────────────────────
 const CLOUDINARY_CLOUD  = 'dc6349v8c';
 const CLOUDINARY_PRESET = 'NorMSG';
 let uploadAbortController = null;
 
-// Upload a raw File or Blob directly — Cloudinary handles resizing/transcoding
+// Compress an image file to a JPEG blob before uploading
+// Skips compression for GIFs (would break animation) and small files
+async function compressImage(file, maxSizeMB = 1.5) {
+if (file.type === 'image/gif' || file.size < 300 * 1024) return file; // skip small/gif
+return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width, height } = img;
+        // Scale down if > 1920px on longest side
+        const maxDim = 1920;
+        if (width > maxDim || height > maxDim) {
+            const scale = maxDim / Math.max(width, height);
+            width  = Math.round(width  * scale);
+            height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width  = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        // Try quality 0.82 first, drop to 0.65 if still too big
+        canvas.toBlob(blob => {
+            if (blob && blob.size > maxSizeMB * 1024 * 1024) {
+                canvas.toBlob(b2 => resolve(b2 || blob), 'image/jpeg', 0.65);
+            } else {
+                resolve(blob || file);
+            }
+        }, 'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+});
+}
+
+// Upload a File or Blob to Cloudinary
 async function uploadToCloudinary(fileOrBlob, resourceType = 'image') {
 uploadAbortController = new AbortController();
 const fd = new FormData();
@@ -3776,7 +3816,8 @@ if (!await checkSend('image','')) return;
 
 document.getElementById('upInd').classList.add('on');
 try {
-const { url, publicId } = await uploadToCloudinary(file);
+const compressed = await compressImage(file);
+const { url, publicId } = await uploadToCloudinary(compressed);
 const rt = replyTo ? { ...replyTo } : null;
 clearReply();
 await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
@@ -4436,7 +4477,8 @@ clearPaste();
 if (!await checkSend('image','')) return;
 document.getElementById('upInd').classList.add('on');
 try {
-const { url, publicId } = await uploadToCloudinary(f);
+const compressed = await compressImage(f);
+const { url, publicId } = await uploadToCloudinary(compressed);
 const rt = replyTo ? { ...replyTo } : null;
 clearReply();
 await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
