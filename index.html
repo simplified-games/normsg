@@ -3542,17 +3542,13 @@ area.appendChild(div);
 }
 
 const row = ce('div');
-row.className = 'msg-row' + (mine ? ' sent' : '');
-row.dataset.mid = mid;
-
-const avPart = mine ? '' :
-`<div class="msg-av ${same?'inv':''}">` +
-(msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
-`</div>`;
 
 const sp   = (msg.storagePath||'').replace(/'/g,"\\'");
 const pid  = (msg._path||'').replace(/'/g,"\\'");
 const mid  = msg.id;
+
+row.className = 'msg-row' + (mine ? ' sent' : '');
+row.dataset.mid = mid;
 
 let bubble = '';
 if (msg.type === 'sticker') {
