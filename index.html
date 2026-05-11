@@ -1524,6 +1524,116 @@ exports.handler = async (event) => {
         .ai-empty-ico  { font-size:38px;margin-bottom:4px; }
         .ai-empty-title{ font-family:'Syne',sans-serif;font-size:16px;font-weight:700;color:var(--text); }
         .ai-empty-sub  { font-size:12px;color:var(--muted);line-height:1.5; }
+
+        /* ── COMPACT MODE ─────────────────────────────────── */
+        body.compact .bubble { padding: 7px 10px !important; font-size: 12.5px !important; }
+        body.compact .msg-row { gap: 4px !important; }
+        body.compact #messagesArea { gap: 1px !important; padding: 10px 12px !important; }
+        body.compact .bwrap { gap: 1px !important; }
+
+        /* ── FONT SIZE ─────────────────────────────────────── */
+        body { font-size: var(--fs, 14px); }
+        .bubble { font-size: var(--fs, 14px) !important; }
+
+        /* ── PINNED BANNER ─────────────────────────────────── */
+        #pinnedBanner {
+            display: none; align-items: center; gap: 10px;
+            padding: 7px 16px; background: rgba(124,92,252,0.10);
+            border-bottom: 1px solid rgba(124,92,252,0.2);
+            font-size: 12px; color: var(--a2); cursor: pointer;
+        }
+        #pinnedBanner.on { display: flex; }
+        #pinnedBanner .pin-ico { font-size: 14px; flex-shrink: 0; }
+        #pinnedBanner .pin-text { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color: var(--text); opacity:.7; }
+        #pinnedBanner .pin-unpin { background: none; border: none; color: var(--muted); font-size: 13px; cursor: pointer; padding: 0 4px; flex-shrink:0; }
+        #pinnedBanner .pin-unpin:hover { color: var(--danger); }
+
+        /* ── STICKER MESSAGE ───────────────────────────────── */
+        .sticker-bubble { font-size: 64px; line-height: 1.1; background: none !important;
+            border: none !important; padding: 4px 0 !important; box-shadow: none !important; cursor: default; }
+        .sticker-bubble:hover { transform: scale(1.08); transition: transform 0.15s; }
+
+        /* ── STICKER PICKER ────────────────────────────────── */
+        #stickerPicker {
+            display: none; position: absolute; bottom: calc(100% + 8px); left: 0;
+            background: var(--panel); border: 1px solid var(--border2);
+            border-radius: 18px; padding: 12px; width: 300px; z-index: 500;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+        }
+        #stickerPicker.on { display: block; }
+        .sticker-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+        .sticker-tab { background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+            padding: 4px 10px; font-size: 11px; cursor: pointer; color: var(--muted); }
+        .sticker-tab.active { background: rgba(124,92,252,0.2); border-color: rgba(124,92,252,0.4); color: var(--a2); }
+        .sticker-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+        .sticker-item { font-size: 28px; cursor: pointer; border-radius: 8px; padding: 4px;
+            text-align: center; transition: background 0.12s, transform 0.1s; }
+        .sticker-item:hover { background: var(--card); transform: scale(1.15); }
+
+        /* ── SCHEDULE PICKER ───────────────────────────────── */
+        #schedulePicker {
+            display: none; position: absolute; bottom: calc(100% + 8px); left: 0;
+            background: var(--panel); border: 1px solid var(--border2); border-radius: 16px;
+            padding: 14px 16px; z-index: 500; box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+            min-width: 240px;
+        }
+        #schedulePicker.on { display: block; }
+        #schedulePicker .sch-title { font-size: 12px; font-weight: 700; color: var(--a2);
+            font-family: 'Syne', sans-serif; margin-bottom: 10px; }
+        #schedulePicker input[type="datetime-local"] {
+            width: 100%; background: var(--card); border: 1px solid var(--border2);
+            border-radius: 10px; padding: 8px 10px; color: var(--text); font-family: 'Figtree',sans-serif;
+            font-size: 13px; margin-bottom: 10px; color-scheme: dark;
+        }
+        #schPendingList { font-size: 11px; color: var(--muted); max-height: 80px; overflow-y: auto; }
+        .sch-item { display: flex; align-items: center; gap: 6px; padding: 3px 0;
+            border-bottom: 1px solid var(--border); }
+        .sch-item-text { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .sch-item-del { background:none; border:none; color:var(--danger); cursor:pointer; font-size:13px; }
+
+        /* ── AI SUGGESTED REPLIES ─────────────────────────── */
+        #aiSuggestBar {
+            display: none; padding: 6px 12px; gap: 6px; flex-wrap: wrap;
+            border-top: 1px solid var(--border);
+        }
+        #aiSuggestBar.on { display: flex; }
+        .suggest-chip {
+            background: rgba(124,92,252,0.12); border: 1px solid rgba(124,92,252,0.3);
+            border-radius: 20px; padding: 5px 12px; font-size: 12px; color: var(--a2);
+            cursor: pointer; transition: background 0.15s; white-space: nowrap;
+            max-width: 200px; overflow: hidden; text-overflow: ellipsis;
+        }
+        .suggest-chip:hover { background: rgba(124,92,252,0.22); }
+        .suggest-chip.loading { opacity: 0.5; pointer-events: none; }
+        #suggestBtn { font-size: 13px; padding: 3px 7px; }
+
+        /* ── GROUP ROLES ───────────────────────────────────── */
+        .role-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            padding: 1px 7px; border-radius: 20px; font-size: 10px; font-weight: 700;
+            margin-left: 4px; vertical-align: middle; flex-shrink: 0;
+        }
+        .roles-section { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
+        .roles-section-title { font-size: 11px; font-weight: 700; color: var(--a2);
+            font-family: 'Syne',sans-serif; margin-bottom: 8px; }
+        .role-row { display: flex; align-items: center; gap: 8px; padding: 5px 0;
+            border-bottom: 1px solid var(--border); }
+        .role-row:last-child { border-bottom: none; }
+        .role-color-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+        .role-name-input { background: var(--card); border: 1px solid var(--border2);
+            border-radius: 7px; padding: 3px 8px; color: var(--text); font-size: 12px;
+            font-family: 'Figtree',sans-serif; width: 90px; }
+        .role-color-input { width: 28px; height: 24px; border: none; border-radius: 5px;
+            cursor: pointer; background: none; padding: 0; }
+
+        /* ── ACCENT COLOR PICKER ───────────────────────────── */
+        .accent-swatches { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+        .accent-swatch {
+            width: 24px; height: 24px; border-radius: 50%; cursor: pointer;
+            border: 2px solid transparent; transition: border 0.15s, transform 0.1s;
+        }
+        .accent-swatch.active { border-color: white; transform: scale(1.15); }
+        .accent-swatch:hover { transform: scale(1.1); }
     </style>
 </head>
 <body>
@@ -1883,6 +1993,56 @@ exports.handler = async (event) => {
             </div>
         </div>
 
+        <!-- Compact Mode -->
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">📐 Compact Mode</div>
+                <div class="settings-desc">Smaller message bubbles and tighter spacing — fits more messages on screen.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingCompact" onchange="applyAppearance()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Font Size -->
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🔡 Font Size</div>
+                <div class="settings-desc">Adjust the size of message text.</div>
+            </div>
+            <div style="display:flex;gap:6px;margin-left:auto;">
+                <button class="btn-sec" id="fsSmall"  style="padding:4px 10px;font-size:11px;" onclick="setFontSize('13px')">Small</button>
+                <button class="btn-sec" id="fsNormal" style="padding:4px 10px;font-size:11px;" onclick="setFontSize('14px')">Normal</button>
+                <button class="btn-sec" id="fsLarge"  style="padding:4px 10px;font-size:11px;" onclick="setFontSize('16px')">Large</button>
+            </div>
+        </div>
+
+        <!-- Accent Color -->
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+            <div class="settings-info">
+                <div class="settings-label">🎨 Accent Colour</div>
+                <div class="settings-desc">Change NorMSG's main highlight colour.</div>
+            </div>
+            <div class="accent-swatches" id="accentSwatches"></div>
+        </div>
+
+        <!-- Send sound -->
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🔔 Message Sounds</div>
+                <div class="settings-desc">Play a sound when sending and receiving messages.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingMsgSounds" onchange="applyAppearance()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
         <div class="m-msg" id="settingsMsg" style="margin-top:10px;"></div>
 
         <div class="modal-row" style="margin-top:14px;">
@@ -2000,7 +2160,19 @@ exports.handler = async (event) => {
         <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:6px 0 7px;">Members &amp; Admins</div>
         <div id="manageAdminList" style="margin-bottom:14px;"></div>
 
-        <div class="modal-row">
+        <!-- Group Roles -->
+        <div class="roles-section" id="rolesSection">
+            <div class="roles-section-title">🏷 Group Roles</div>
+            <div id="rolesList"></div>
+            <div style="display:flex;gap:8px;margin-top:8px;" id="rolesAdminControls">
+                <input id="newRoleName" class="m-in" placeholder="Role name" style="flex:1;font-size:12px;padding:6px 10px;">
+                <input type="color" id="newRoleColor" value="#7c5cfc" style="width:34px;height:34px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0;">
+                <button class="btn-sec" style="padding:5px 12px;font-size:12px;" onclick="addGroupRole()">+ Add</button>
+            </div>
+            <div class="m-msg" id="rolesMsg" style="margin-top:4px;"></div>
+        </div>
+
+        <div class="modal-row" style="margin-top:14px;">
             <button class="btn-sec" onclick="closeModal('manageGroupModal')">Close</button>
         </div>
     </div>
@@ -2184,6 +2356,13 @@ exports.handler = async (event) => {
                 <span>⏱</span><span id="toMsg">—</span>
             </div>
 
+            <!-- Pinned message banner -->
+            <div id="pinnedBanner">
+                <span class="pin-ico">📌</span>
+                <span class="pin-text" id="pinnedText">—</span>
+                <button class="pin-unpin" id="pinUnpinBtn" title="Unpin">✕</button>
+            </div>
+
             <div id="messagesArea"></div>
 
             <div id="chatInputArea">
@@ -2213,11 +2392,35 @@ exports.handler = async (event) => {
                     <div style="width:1px;height:16px;background:var(--border);margin:0 2px;"></div>
                     <span style="font-size:9px;color:var(--muted);padding:0 4px;">**bold** _italic_ #heading `code`</span>
                 </div>
+                <!-- AI Suggested Replies Bar -->
+                <div id="aiSuggestBar">
+                    <button class="img-btn" id="suggestBtn" onclick="loadAISuggestions()" title="AI suggested replies (Pro)" style="font-size:12px;color:var(--a2);padding:3px 8px;font-weight:700;">✦ Suggest</button>
+                    <span id="suggestChips"></span>
+                </div>
                 <div class="in-row" style="position:relative;">
                     <div id="mentionBox"></div>
                     <div id="emojiSearchBox">
                         <input class="esearch-in" id="esearchIn" placeholder="Search emoji…" oninput="searchEmoji(this.value)" onkeydown="onEsearchKey(event)">
                         <div class="esearch-results" id="esearchResults"></div>
+                    </div>
+                    <!-- Sticker picker -->
+                    <div id="stickerPickerWrap" style="position:relative;">
+                        <button class="img-btn" id="stickerBtn" onclick="toggleStickerPicker()" title="Send a NormSticker">🎭</button>
+                        <div id="stickerPicker">
+                            <div class="sticker-tabs" id="stickerTabs"></div>
+                            <div class="sticker-grid" id="stickerGrid"></div>
+                        </div>
+                    </div>
+                    <!-- Schedule picker -->
+                    <div id="schedulePickerWrap" style="position:relative;">
+                        <button class="img-btn" id="scheduleBtn" onclick="toggleSchedulePicker()" title="Schedule message">🕐</button>
+                        <div id="schedulePicker">
+                            <div class="sch-title">🕐 Schedule Message</div>
+                            <input type="datetime-local" id="schDateTime">
+                            <button class="btn-pri" style="width:100%;font-size:12px;padding:7px;" onclick="scheduleCurrentMsg()">Schedule Send</button>
+                            <div style="font-size:10px;color:var(--muted);margin:6px 0 4px;">Pending in this chat:</div>
+                            <div id="schPendingList"></div>
+                        </div>
                     </div>
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
                     <button class="img-btn" id="pollBtn" onclick="openPollModal()" title="Create a poll (group chats only)">📊</button>
@@ -3377,6 +3580,7 @@ area.appendChild(div);
 
 const row = ce('div');
 row.className = 'msg-row' + (mine ? ' sent' : '');
+row.dataset.mid = mid;
 
 const avPart = mine ? '' :
 `<div class="msg-av ${same?'inv':''}">` +
@@ -3388,7 +3592,9 @@ const pid  = (msg._path||'').replace(/'/g,"\\'");
 const mid  = msg.id;
 
 let bubble = '';
-if (msg.type === 'deleted') {
+if (msg.type === 'sticker') {
+bubble = `<div class="sticker-bubble" data-mid="${mid}">${msg.emoji||'❓'}</div>`;
+} else if (msg.type === 'deleted') {
 bubble = `<div class="bubble ${mine?'sent':'recv'}" style="opacity:0.45;font-style:italic;font-size:12px;">
     🗑 Message deleted by @${esc(msg.deletedByUsername||'admin')}
 </div>`;
@@ -3454,9 +3660,11 @@ const isAIMsg   = msg.type === 'ai' || msg.type === 'ai-thinking';
 const isPollMsg = msg.type === 'poll';
 
 const actionBtn = (msg.type === 'deleted' || isAIMsg || isPollMsg) ? '' : (mine
-? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>`
+? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>
+   ${chatType==='group' ? `<button class="msg-del" style="color:var(--a2);" onclick="pinMessage('${mid}','${pid}','${replySnip.replace(/'/g,"\\'")}')">📌</button>` : ''}`
 : isGroupAdmin
-    ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>`
+    ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',true)" style="color:var(--warn);">🛡 Del</button>
+       <button class="msg-del" style="color:var(--a2);" onclick="pinMessage('${mid}','${pid}','${replySnip.replace(/'/g,"\\'")}')">📌</button>`
     : `<button class="msg-del" onclick="hideForMe('${mid}')" style="color:var(--muted);">Hide</button>`);
 
 const replySnip = msg.type === 'image' ? '[Image]' : msg.type === 'poll' ? '[Poll]' : (msg.text||'').slice(0,60);
@@ -6442,6 +6650,528 @@ async function votePoll(msgId, msgPath, optionIdx) {
 // ── Init AI chats when user logs in ───────────────────────
 function initAIChats() {
     if (currentSidebarTab === 'ai') renderAIChats();
+}
+
+// ═══════════════════════════════════════════════════════════
+// ✦ NORMSTICKERS
+// ═══════════════════════════════════════════════════════════
+const STICKER_PACKS = {
+  'NorMSG': ['✨','💫','⚡','🔥','💜','🎉','🚀','🌟','💎','👑','🎊','🎶','🎵','💥','🌈','🫶'],
+  'Emotions': ['😭','😂','🥰','😎','🤯','🥺','😤','🤩','😱','🫡','😏','🤦','🤷','🙄','😬','🥲'],
+  'Animals':  ['🐱','🐶','🦊','🐸','🦆','🐨','🐼','🦁','🐧','🐻','🦋','🐙','🦈','🦜','🐺','🦊'],
+  'Vibes':    ['💯','👀','🤝','💪','🙏','👏','✅','🔥','❤️','💔','🌊','🏆','🎯','🫧','🍕','💀'],
+};
+let activeStickerPack = 'NorMSG';
+let stickerPickerOpen = false;
+
+function toggleStickerPicker() {
+  stickerPickerOpen = !stickerPickerOpen;
+  const el = document.getElementById('stickerPicker');
+  el.classList.toggle('on', stickerPickerOpen);
+  if (stickerPickerOpen) renderStickerPicker();
+}
+
+function renderStickerPicker() {
+  const tabs = document.getElementById('stickerTabs');
+  const grid = document.getElementById('stickerGrid');
+  tabs.innerHTML = Object.keys(STICKER_PACKS).map(p =>
+    `<button class="sticker-tab${p===activeStickerPack?' active':''}" onclick="setStickerPack('${p}')">${p}</button>`
+  ).join('');
+  grid.innerHTML = (STICKER_PACKS[activeStickerPack]||[]).map(e =>
+    `<div class="sticker-item" onclick="sendSticker('${e}')">${e}</div>`
+  ).join('');
+}
+
+function setStickerPack(pack) {
+  activeStickerPack = pack;
+  renderStickerPicker();
+}
+
+async function sendSticker(emoji) {
+  if (!chatId) return;
+  document.getElementById('stickerPicker').classList.remove('on');
+  stickerPickerOpen = false;
+  await pushMsg({ type: 'sticker', emoji, text: '' });
+}
+
+// Close sticker picker on outside click
+document.addEventListener('click', e => {
+  if (stickerPickerOpen && !e.target.closest('#stickerPickerWrap')) {
+    document.getElementById('stickerPicker').classList.remove('on');
+    stickerPickerOpen = false;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// ✦ MESSAGE SCHEDULING
+// ═══════════════════════════════════════════════════════════
+const SCHED_KEY = 'normsg_sched_v2';
+let schedPickerOpen = false;
+
+function getScheduled() {
+  try { return JSON.parse(localStorage.getItem(SCHED_KEY) || '[]'); } catch { return []; }
+}
+function saveScheduled(arr) {
+  try { localStorage.setItem(SCHED_KEY, JSON.stringify(arr)); } catch {}
+}
+
+function toggleSchedulePicker() {
+  schedPickerOpen = !schedPickerOpen;
+  const el = document.getElementById('schedulePicker');
+  el.classList.toggle('on', schedPickerOpen);
+  if (schedPickerOpen) {
+    // Default to 10 minutes from now
+    const d = new Date(Date.now() + 10*60000);
+    const local = new Date(d - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    document.getElementById('schDateTime').value = local;
+    renderSchPending();
+  }
+}
+
+function renderSchPending() {
+  const list = document.getElementById('schPendingList');
+  const all  = getScheduled().filter(s => s.chatId === chatId);
+  if (!all.length) { list.innerHTML = '<span style="color:var(--muted);font-size:11px;">None</span>'; return; }
+  list.innerHTML = all.map((s,i) => {
+    const t = new Date(s.sendAt).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    return `<div class="sch-item">
+      <span class="sch-item-text">${esc((s.text||'').slice(0,30)||'[message]')}</span>
+      <span style="color:var(--muted);font-size:10px;white-space:nowrap;">${t}</span>
+      <button class="sch-item-del" onclick="deleteScheduled(${s.id})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function deleteScheduled(id) {
+  saveScheduled(getScheduled().filter(s => s.id !== id));
+  renderSchPending();
+}
+
+function scheduleCurrentMsg() {
+  const inp  = document.getElementById('msgInput');
+  const text = inp.value.trim();
+  if (!text) { showToast('Type a message first!'); return; }
+  const dtVal = document.getElementById('schDateTime').value;
+  if (!dtVal) { showToast('Pick a date & time.'); return; }
+  const sendAt = new Date(dtVal).getTime();
+  if (sendAt <= Date.now()) { showToast('Pick a time in the future.'); return; }
+
+  const all = getScheduled();
+  all.push({ id: Date.now(), chatId, chatType, text, sendAt,
+    replyTo: replyTo ? {...replyTo} : null });
+  saveScheduled(all);
+  inp.value = ''; inp.style.height = '';
+  clearReply();
+  document.getElementById('schedulePicker').classList.remove('on');
+  schedPickerOpen = false;
+  showToast('⏱ Message scheduled!');
+}
+
+// Check scheduled messages every 15 seconds
+setInterval(async () => {
+  if (!me) return;
+  const now  = Date.now();
+  const all  = getScheduled();
+  const due  = all.filter(s => s.sendAt <= now);
+  const rest = all.filter(s => s.sendAt > now);
+  if (!due.length) return;
+  saveScheduled(rest);
+  for (const s of due) {
+    const savedChat = chatId, savedType = chatType;
+    chatId = s.chatId; chatType = s.chatType;
+    if (s.replyTo) replyTo = s.replyTo;
+    await pushMsg({ type:'text', text: s.text, ...(s.replyTo ? { replyTo: s.replyTo } : {}) });
+    chatId = savedChat; chatType = savedType; replyTo = null;
+  }
+  showToast(`⏱ ${due.length} scheduled message${due.length>1?'s':''} sent!`);
+}, 15000);
+
+// Close schedule picker on outside click
+document.addEventListener('click', e => {
+  if (schedPickerOpen && !e.target.closest('#schedulePickerWrap')) {
+    document.getElementById('schedulePicker').classList.remove('on');
+    schedPickerOpen = false;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+// ✦ MESSAGE PINNING
+// ═══════════════════════════════════════════════════════════
+async function pinMessage(mid, pid, text) {
+  if (!chatId) return;
+  const col  = chatType === 'dm' ? 'conversations' : 'groups';
+  const snap = text ? null : await db.collection(col).doc(chatId).get();
+  // Toggle: if same msg pinned, unpin
+  const cur  = snap?.data()?.pinnedMsgId;
+  if (cur === mid) { await unpinMessage(); return; }
+  await db.collection(col).doc(chatId).set({
+    pinnedMsgId: mid, pinnedText: (text||'').slice(0,100),
+  }, { merge: true });
+  showToast('📌 Message pinned!');
+}
+
+async function unpinMessage() {
+  if (!chatId) return;
+  const col = chatType === 'dm' ? 'conversations' : 'groups';
+  await db.collection(col).doc(chatId).update({
+    pinnedMsgId: firebase.firestore.FieldValue.delete(),
+    pinnedText:  firebase.firestore.FieldValue.delete(),
+  });
+  document.getElementById('pinnedBanner').classList.remove('on');
+  showToast('📌 Unpinned.');
+}
+
+function showPinnedBanner(text, mid) {
+  const b = document.getElementById('pinnedBanner');
+  if (!text) { b.classList.remove('on'); return; }
+  document.getElementById('pinnedText').textContent = '📌 ' + text;
+  document.getElementById('pinUnpinBtn').onclick = unpinMessage;
+  b.onclick = (e) => {
+    if (e.target === document.getElementById('pinUnpinBtn')) return;
+    const el = document.querySelector(`[data-mid="${mid}"]`);
+    if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' });
+      el.style.transition = 'background 0.3s';
+      el.style.background = 'rgba(124,92,252,0.18)';
+      setTimeout(() => el.style.background = '', 1200); }
+  };
+  b.classList.add('on');
+}
+
+// Subscribe to pinned message for current chat
+let pinnedUnsub = null;
+function subscribePinned() {
+  if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
+  if (!chatId) return;
+  const col = chatType === 'dm' ? 'conversations' : 'groups';
+  pinnedUnsub = db.collection(col).doc(chatId).onSnapshot(snap => {
+    const d = snap.data() || {};
+    showPinnedBanner(d.pinnedText || '', d.pinnedMsgId || '');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// ✦ GROUP ROLES
+// ═══════════════════════════════════════════════════════════
+async function loadGroupRoles(groupId) {
+  try {
+    const snap = await db.collection('groups').doc(groupId).get();
+    return snap.data()?.customRoles || [];
+  } catch { return []; }
+}
+
+async function getMemberRole(groupId, uid) {
+  try {
+    const snap = await db.collection('groups').doc(groupId).get();
+    const roles   = snap.data()?.customRoles || [];
+    const roleMap = snap.data()?.memberRoles || {};
+    const rid     = roleMap[uid];
+    return rid ? roles.find(r => r.id === rid) : null;
+  } catch { return null; }
+}
+
+async function renderRolesSection(groupId) {
+  const snap    = await db.collection('groups').doc(groupId).get();
+  const gdata   = snap.data() || {};
+  const roles   = gdata.customRoles || [];
+  const roleMap = gdata.memberRoles || {};
+  const isOwner = gdata.createdBy === me.uid;
+  const isAdmin = (gdata.admins||[]).includes(me.uid) || isOwner;
+
+  const list = document.getElementById('rolesList');
+  if (!roles.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:4px 0;">No custom roles yet.</div>';
+  } else {
+    list.innerHTML = roles.map(r => `
+      <div class="role-row">
+        <span class="role-color-dot" style="background:${r.color};"></span>
+        <span style="flex:1;font-size:12px;">${esc(r.name)}</span>
+        ${isAdmin ? `<button class="btn-sec" style="font-size:10px;padding:2px 8px;" onclick="openAssignRole('${r.id}','${esc(r.name)}','${r.color}')">Assign</button>` : ''}
+        ${isOwner ? `<button style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:13px;" onclick="deleteGroupRole('${r.id}')">✕</button>` : ''}
+      </div>`).join('');
+  }
+  document.getElementById('rolesAdminControls').style.display = isOwner ? 'flex' : 'none';
+}
+
+async function addGroupRole() {
+  const name  = document.getElementById('newRoleName').value.trim();
+  const color = document.getElementById('newRoleColor').value;
+  if (!name) { mmsg('rolesMsg','Enter a role name.','err'); return; }
+  const snap  = await db.collection('groups').doc(manageGroupId).get();
+  const roles = snap.data()?.customRoles || [];
+  if (roles.length >= 8) { mmsg('rolesMsg','Max 8 custom roles.','err'); return; }
+  roles.push({ id: Date.now().toString(), name, color });
+  await db.collection('groups').doc(manageGroupId).update({ customRoles: roles });
+  document.getElementById('newRoleName').value = '';
+  mmsg('rolesMsg','✓ Role added!','ok');
+  renderRolesSection(manageGroupId);
+}
+
+async function deleteGroupRole(roleId) {
+  const snap    = await db.collection('groups').doc(manageGroupId).get();
+  const roles   = (snap.data()?.customRoles||[]).filter(r => r.id !== roleId);
+  // Also remove from all member assignments
+  const roleMap = snap.data()?.memberRoles || {};
+  Object.keys(roleMap).forEach(uid => { if (roleMap[uid] === roleId) delete roleMap[uid]; });
+  await db.collection('groups').doc(manageGroupId).update({ customRoles: roles, memberRoles: roleMap });
+  renderRolesSection(manageGroupId);
+}
+
+function openAssignRole(roleId, roleName, roleColor) {
+  const snap_promise = db.collection('groups').doc(manageGroupId).get();
+  snap_promise.then(snap => {
+    const members = snap.data()?.members || [];
+    const profiles_promise = members.length
+      ? db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',members.slice(0,10)).get()
+      : Promise.resolve({ docs: [] });
+    profiles_promise.then(s => {
+      const names = {};
+      s.docs.forEach(d => names[d.id] = d.data().displayName || d.data().username || d.id);
+      const opts = members.map(uid => `<option value="${uid}">${esc(names[uid]||uid)}</option>`).join('');
+      const sel  = `<select id="assignRoleSel" style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Figtree',sans-serif;font-size:13px;margin-bottom:10px;">${opts}</select>`;
+      if (!confirm(`Assign role "${roleName}" — pick a member in the next step. OK to continue?`)) return;
+      // Simple prompt-based for now
+      const uid = prompt(`Assign "${roleName}" to user UID or username:\n${members.map(u => names[u]).join(', ')}`);
+      if (!uid) return;
+      const match = members.find(u => u === uid || names[u] === uid);
+      if (!match) { showToast('Member not found.'); return; }
+      snap.ref.update({ [`memberRoles.${match}`]: roleId });
+      showToast(`✓ Role "${roleName}" assigned!`);
+      renderRolesSection(manageGroupId);
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// ✦ AI SUGGESTED REPLIES (Pro only)
+// ═══════════════════════════════════════════════════════════
+let suggestionsLoading = false;
+
+function showAISuggestBar() {
+  if (chatType === 'ai') return; // not in AI chats
+  document.getElementById('aiSuggestBar').classList.add('on');
+}
+
+function hideAISuggestBar() {
+  document.getElementById('aiSuggestBar').classList.remove('on');
+  document.getElementById('suggestChips').innerHTML = '';
+}
+
+async function loadAISuggestions() {
+  if (userPlan !== 'pro') { showToast('✦ AI Suggested Replies is a Pro feature.'); return; }
+  if (!chatId || suggestionsLoading) return;
+  suggestionsLoading = true;
+  const btn = document.getElementById('suggestBtn');
+  btn.textContent = '✦ Loading…';
+  btn.classList.add('loading');
+  document.getElementById('suggestChips').innerHTML = '';
+
+  try {
+    // Get last 8 messages for context
+    const msgPath = chatType === 'dm'
+      ? `conversations/${chatId}/messages`
+      : `groups/${chatId}/messages`;
+    const snap = await db.collection(msgPath).orderBy('timestamp','desc').limit(8).get();
+    const history = snap.docs.reverse()
+      .filter(d => d.data().type === 'text')
+      .map(d => `${d.data().senderUsername||d.data().senderName||'?'}: ${d.data().text||''}`).join('\n');
+
+    const prompt = `You are helping someone reply in a chat. Based on the last few messages, suggest exactly 3 short reply options. Return ONLY a JSON array of 3 strings, nothing else. Each reply max 12 words, natural and conversational.\n\nChat:\n${history}`;
+
+    const res  = await fetch(getAIEndpoint(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, mode: 'suggest' })
+    });
+    const data = await res.json();
+    let raw = '';
+    if (data?.choices?.[0]?.message?.content) raw = data.choices[0].message.content;
+    else if (data?.reply) raw = data.reply;
+    // Parse JSON array
+    const m = raw.match(/\[[\s\S]*\]/);
+    const suggestions = m ? JSON.parse(m[0]) : [];
+
+    const chips = document.getElementById('suggestChips');
+    chips.innerHTML = suggestions.slice(0,3).map(s =>
+      `<button class="suggest-chip" onclick="useSuggestion(${JSON.stringify(s)})">${esc(s)}</button>`
+    ).join('');
+    if (!suggestions.length) showToast('No suggestions generated.');
+  } catch(e) {
+    showToast('Could not load suggestions.');
+  } finally {
+    suggestionsLoading = false;
+    btn.textContent = '✦ Suggest';
+    btn.classList.remove('loading');
+  }
+}
+
+function useSuggestion(text) {
+  const inp = document.getElementById('msgInput');
+  inp.value = text;
+  inp.focus();
+  autoGrow(inp);
+  document.getElementById('suggestChips').innerHTML = '';
+}
+
+// ═══════════════════════════════════════════════════════════
+// ✦ APPEARANCE — compact mode, font size, accent colour, sounds
+// ═══════════════════════════════════════════════════════════
+const ACCENT_PRESETS = [
+  { color: '#7c5cfc', sent: '#4338ca', name: 'Purple' },
+  { color: '#3b82f6', sent: '#1d4ed8', name: 'Blue'   },
+  { color: '#10b981', sent: '#059669', name: 'Green'  },
+  { color: '#f43f5e', sent: '#be123c', name: 'Red'    },
+  { color: '#f59e0b', sent: '#b45309', name: 'Amber'  },
+  { color: '#ec4899', sent: '#be185d', name: 'Pink'   },
+  { color: '#06b6d4', sent: '#0e7490', name: 'Cyan'   },
+  { color: '#8b5cf6', sent: '#6d28d9', name: 'Violet' },
+];
+
+function buildAccentSwatches() {
+  const wrap = document.getElementById('accentSwatches');
+  if (!wrap) return;
+  const cur = localStorage.getItem('normsg_accent') || '#7c5cfc';
+  wrap.innerHTML = ACCENT_PRESETS.map(p =>
+    `<div class="accent-swatch${p.color===cur?' active':''}" style="background:${p.color};"
+      title="${p.name}" onclick="setAccent('${p.color}','${p.sent}')"></div>`
+  ).join('');
+}
+
+function setAccent(color, sent) {
+  document.documentElement.style.setProperty('--accent', color);
+  document.documentElement.style.setProperty('--a2', color + 'cc');
+  document.documentElement.style.setProperty('--sent', sent);
+  localStorage.setItem('normsg_accent', color);
+  localStorage.setItem('normsg_sent', sent);
+  buildAccentSwatches();
+}
+
+function setFontSize(size) {
+  document.documentElement.style.setProperty('--fs', size);
+  localStorage.setItem('normsg_fs', size);
+  ['fsSmall','fsNormal','fsLarge'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.background = '';
+  });
+  const map = { '13px':'fsSmall','14px':'fsNormal','16px':'fsLarge' };
+  const active = document.getElementById(map[size]);
+  if (active) active.style.background = 'rgba(124,92,252,0.2)';
+}
+
+function applyAppearance() {
+  // Compact mode
+  const compact = document.getElementById('settingCompact')?.checked;
+  document.body.classList.toggle('compact', !!compact);
+  try { localStorage.setItem('normsg_compact', compact ? '1' : '0'); } catch {}
+
+  // Message sounds
+  const sounds = document.getElementById('settingMsgSounds')?.checked;
+  try { localStorage.setItem('normsg_msgsounds', sounds ? '1' : '0'); } catch {}
+}
+
+function loadAppearance() {
+  // Accent
+  const accent = localStorage.getItem('normsg_accent');
+  const sent   = localStorage.getItem('normsg_sent');
+  if (accent) { document.documentElement.style.setProperty('--accent', accent);
+    document.documentElement.style.setProperty('--a2', accent + 'cc'); }
+  if (sent) document.documentElement.style.setProperty('--sent', sent);
+
+  // Font size
+  const fs = localStorage.getItem('normsg_fs');
+  if (fs) setFontSize(fs);
+
+  // Compact
+  const compact = localStorage.getItem('normsg_compact') === '1';
+  document.body.classList.toggle('compact', compact);
+  const cb = document.getElementById('settingCompact');
+  if (cb) cb.checked = compact;
+
+  // Message sounds
+  const msgsounds = localStorage.getItem('normsg_msgsounds') !== '0';
+  const msb = document.getElementById('settingMsgSounds');
+  if (msb) msb.checked = msgsounds;
+}
+
+// ── Send / receive tones ──────────────────────────────────
+function playMsgSound(type = 'receive') {
+  const msgsounds = localStorage.getItem('normsg_msgsounds');
+  if (msgsounds === '0') return;
+  try {
+    const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+    const osc  = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    if (type === 'send') {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1100, ctx.currentTime + 0.06);
+      gain.gain.setValueAtTime(0.08, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+      osc.start(); osc.stop(ctx.currentTime + 0.12);
+    } else {
+      osc.frequency.setValueAtTime(600, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.06, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+      osc.start(); osc.stop(ctx.currentTime + 0.14);
+    }
+  } catch {}
+}
+
+// ── Init all appearance on load ───────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadAppearance();
+  buildAccentSwatches();
+  // Set min datetime for schedule picker
+  const dti = document.getElementById('schDateTime');
+  if (dti) {
+    const now = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+    dti.min = now;
+  }
+});
+
+// ── Hook pinned + suggest bar into chat open ──────────────
+const _origActivateChat = activateChat;
+function activateChat() {
+  _origActivateChat();
+  subscribePinned();
+  if (userPlan === 'pro' && chatType !== 'ai') showAISuggestBar();
+  else hideAISuggestBar();
+}
+
+// ── Hook pinned into openAIChat too ──────────────────────
+const _origOpenAIChat = openAIChat;
+function openAIChat(id) {
+  _origOpenAIChat(id);
+  if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
+  document.getElementById('pinnedBanner').classList.remove('on');
+  hideAISuggestBar();
+}
+
+// ── Hook manage group to load roles section ───────────────
+const _origOpenManageGroup = openManageGroup;
+async function openManageGroup() {
+  await _origOpenManageGroup();
+  if (manageGroupId) renderRolesSection(manageGroupId);
+}
+
+// ── Hook send sound into pushMsg ─────────────────────────
+const _origPushMsg = pushMsg;
+async function pushMsg(extra) {
+  const result = await _origPushMsg(extra);
+  playMsgSound('send');
+  return result;
+}
+
+// ── Hook receive sound into renderMsgs ───────────────────
+const _origRenderMsgs = renderMsgs;
+function renderMsgs(msgs) {
+  const prevCount = document.querySelectorAll('#messagesArea .msg-row').length;
+  _origRenderMsgs(msgs);
+  const newCount = document.querySelectorAll('#messagesArea .msg-row').length;
+  if (newCount > prevCount) {
+    const lastMsg = msgs[msgs.length - 1];
+    if (lastMsg && lastMsg.senderUid !== me?.uid) playMsgSound('receive');
+  }
 }
 
 </script>
