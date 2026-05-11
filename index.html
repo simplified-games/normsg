@@ -1882,7 +1882,7 @@ exports.handler = async (event) => {
 
 <!-- ═══════════════ SETTINGS MODAL ════════════════ -->
 <div id="settingsModal" class="modal-overlay hidden">
-    <div class="modal-card">
+    <div class="modal-card" style="max-height:88vh;overflow-y:auto;">
         <div class="modal-title">⚙ Settings</div>
         <div class="modal-sub">Manage your NorMSG preferences.</div>
 
@@ -2188,7 +2188,7 @@ exports.handler = async (event) => {
 </div>
 
 <!-- Hidden file input -->
-<input type="file" id="imgFileIn" accept="image/*" style="display:none" onchange="handleImg(event)">
+<input type="file" id="imgFileIn" accept="image/*,video/*" style="display:none" onchange="handleImg(event)">
 
 <!-- ═══════════════ MAIN APP ════════════════ -->
 <div id="mainApp" class="hidden">
@@ -2369,9 +2369,16 @@ exports.handler = async (event) => {
                         <input class="esearch-in" id="esearchIn" placeholder="Search emoji…" oninput="searchEmoji(this.value)" onkeydown="onEsearchKey(event)">
                         <div class="esearch-results" id="esearchResults"></div>
                     </div>
-                    <!-- NormSticker photo upload -->
+                    <!-- NormSticker picker with saved stickers -->
                     <input type="file" id="stickerFileIn" accept="image/*" style="display:none;" onchange="handleStickerUpload(event)">
-                    <button class="img-btn" id="stickerBtn" onclick="document.getElementById('stickerFileIn').click()" title="Send a NormSticker (upload a photo)">🎭</button>
+                    <div id="stickerPickerWrap" style="position:relative;">
+                        <button class="img-btn" id="stickerBtn" onclick="toggleStickerPicker()" title="NormStickers">🎭</button>
+                        <div id="stickerPicker" style="display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:var(--panel);border:1px solid var(--border2);border-radius:18px;padding:12px;width:260px;z-index:500;box-shadow:0 16px 48px rgba(0,0,0,.6);">
+                            <div style="font-size:11px;font-weight:700;color:var(--a2);font-family:'Syne',sans-serif;margin-bottom:8px;">🎭 NormStickers</div>
+                            <div id="savedStickerGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;max-height:160px;overflow-y:auto;margin-bottom:8px;"></div>
+                            <button class="btn-sec" style="width:100%;font-size:12px;padding:7px;" onclick="document.getElementById('stickerFileIn').click();document.getElementById('stickerPicker').style.display='none';">+ Upload New Sticker</button>
+                        </div>
+                    </div>
                     <!-- Schedule picker -->
                     <div id="schedulePickerWrap" style="position:relative;">
                         <button class="img-btn" id="scheduleBtn" onclick="toggleSchedulePicker()" title="Schedule message">🕐</button>
@@ -2383,7 +2390,7 @@ exports.handler = async (event) => {
                             <div id="schPendingList"></div>
                         </div>
                     </div>
-                    <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image">🖼</button>
+                    <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image (Pro: also video up to 150 MB)">🖼</button>
                     <button class="img-btn" id="pollBtn" onclick="openPollModal()" title="Create a poll (group chats only)">📊</button>
                     <button class="img-btn" id="normAIBtn" onclick="openSmartReply()" title="NorMAI — smart reply suggestions" style="font-size:15px;color:var(--a2);">✦</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
@@ -3577,12 +3584,16 @@ bubble = `<div class="bubble ai">
     <div class="ai-thinking"><div class="typing-dots"><span></span><span></span><span></span></div> Thinking…</div>
 </div>`;
 } else if (msg.type === 'image') {
-const exp = expLabel(ts, 72);
 bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
     ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
     <img class="msg-img" src="${esc(msg.imageUrl)}" loading="lazy"
         onclick="openLB('${esc(msg.imageUrl)}')">
-    ${exp ? `<div class="img-exp">⏱ ${exp}</div>` : ''}
+</div>`;
+} else if (msg.type === 'video') {
+bubble = `<div class="bubble ${mine?'sent':'recv'} img-bub">
+    ${msg.replyTo ? renderQuote(msg.replyTo, mine) : ''}
+    <video class="msg-img" src="${esc(msg.videoUrl)}" controls preload="metadata"
+        style="max-width:280px;max-height:220px;border-radius:10px;display:block;"></video>
 </div>`;
 } else if (msg.type === 'poll') {
 const votes   = msg.votes || {};
@@ -3626,7 +3637,7 @@ return grp && ((grp.admins||[]).includes(me.uid) || grp.createdBy === me.uid);
 const isAIMsg   = msg.type === 'ai' || msg.type === 'ai-thinking';
 const isPollMsg = msg.type === 'poll';
 
-const replySnip = msg.type === 'image' ? '[Image]' : msg.type === 'poll' ? '[Poll]' : msg.type === 'sticker' ? '[Sticker]' : (msg.text||'').slice(0,60);
+const replySnip = msg.type === 'image' ? '[Image]' : msg.type === 'video' ? '[Video]' : msg.type === 'poll' ? '[Poll]' : msg.type === 'sticker' ? '[Sticker]' : (msg.text||'').slice(0,60);
 
 const actionBtn = (msg.type === 'deleted' || isAIMsg || isPollMsg) ? '' : (mine
 ? `<button class="msg-del" onclick="delMsg('${mid}','${pid}','${sp}',false)">Delete</button>
@@ -3809,33 +3820,44 @@ async function handleImg(event) {
 const file = event.target.files[0];
 event.target.value = '';
 if (!file || !chatId) return;
-if (!file.type.startsWith('image/')) return showToast('Please select an image file.');
-const maxImgMB = userPlan === 'pro' ? 100 : 25;
-if (file.size > maxImgMB*1024*1024) return showToast(`Image too large — max ${maxImgMB} MB${userPlan!=='pro'?' (upgrade to Pro for 100 MB)':''}.`);
+
+const isVideo = file.type.startsWith('video/');
+const isImage = file.type.startsWith('image/');
+
+if (!isImage && !isVideo) return showToast('Please select an image or video file.');
+if (isVideo && userPlan !== 'pro') return showToast('🎥 Video uploads are a Pro feature.');
+
+const maxMB = isVideo ? 150 : (userPlan === 'pro' ? 100 : 25);
+if (file.size > maxMB*1024*1024) return showToast(`File too large — max ${maxMB} MB${!isVideo && userPlan!=='pro' ? ' (Pro gets 100 MB)' : ''}.`);
 if (!await checkSend('image','')) return;
 
 document.getElementById('upInd').classList.add('on');
+document.querySelector('#upInd span:last-child').textContent = isVideo ? 'Uploading video…' : 'Uploading image…';
 try {
-const compressed = await compressImage(file);
-const { url, publicId } = await uploadToCloudinary(compressed);
-const rt = replyTo ? { ...replyTo } : null;
-clearReply();
-await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
+  if (isVideo) {
+    const { url, publicId } = await uploadToCloudinary(file, 'video');
+    const rt = replyTo ? { ...replyTo } : null;
+    clearReply();
+    await pushMsg({ type:'video', videoUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
+  } else {
+    const compressed = await compressImage(file);
+    const { url, publicId } = await uploadToCloudinary(compressed);
+    const rt = replyTo ? { ...replyTo } : null;
+    clearReply();
+    await pushMsg({ type:'image', imageUrl: url, storagePath: publicId, text:'', ...(rt ? { replyTo: rt } : {}) });
+  }
 } catch(e) {
 if (e?.name === 'AbortError') showToast('Upload cancelled.');
 else { showToast('Upload failed: ' + e.message); console.error('handleImg:', e); }
 } finally {
 document.getElementById('upInd').classList.remove('on');
+document.querySelector('#upInd span:last-child').textContent = 'Uploading image…';
 }
 }
 
 async function pushMsg(extra) {
 const msgPath    = chatType==='dm' ? `conversations/${chatId}/messages` : `groups/${chatId}/messages`;
 const parentPath = chatType==='dm' ? `conversations/${chatId}`          : `groups/${chatId}`;
-
-const now      = new Date();
-const delHrs   = extra.type==='image' ? 72 : 24*7;
-const deleteAt = new Date(now.getTime() + delHrs * 3600000);
 
 // Use cached Super status — Pro users get the same treatment as Super
 const isSuper = userPlan === 'pro' || superCache[me.uid] === true;
@@ -3856,7 +3878,6 @@ senderUsername: myUsername,
 senderPhoto:    me.photoURL || null,
 senderSuper:    isSuper,
 timestamp:      SV(),
-deleteAt:       TS.fromDate(deleteAt),
 ...extra
 });
 
@@ -6671,6 +6692,53 @@ function initAIChats() {
 // ═══════════════════════════════════════════════════════════
 // ✦ NORMSTICKERS — photo upload
 // ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════
+// ✦ NORMSTICKERS — upload + save + reuse
+// ═══════════════════════════════════════════════════════════
+const STICKER_STORE_KEY = 'normsg_stickers_v1';
+
+function getSavedStickers() {
+  try { return JSON.parse(localStorage.getItem(STICKER_STORE_KEY) || '[]'); } catch { return []; }
+}
+function saveSticker(url) {
+  const list = getSavedStickers();
+  if (!list.includes(url)) {
+    list.unshift(url); // newest first
+    if (list.length > 40) list.length = 40; // cap at 40
+    localStorage.setItem(STICKER_STORE_KEY, JSON.stringify(list));
+  }
+}
+
+let stickerPickerOpen = false;
+
+function toggleStickerPicker() {
+  const el = document.getElementById('stickerPicker');
+  stickerPickerOpen = !stickerPickerOpen;
+  el.style.display = stickerPickerOpen ? 'block' : 'none';
+  if (stickerPickerOpen) renderSavedStickers();
+}
+
+function renderSavedStickers() {
+  const grid = document.getElementById('savedStickerGrid');
+  const list = getSavedStickers();
+  if (!list.length) {
+    grid.innerHTML = '<div style="font-size:11px;color:var(--muted);grid-column:1/-1;padding:8px 0;text-align:center;">No stickers yet — upload one!</div>';
+    return;
+  }
+  grid.innerHTML = list.map(url => `
+    <div style="position:relative;cursor:pointer;border-radius:10px;overflow:hidden;aspect-ratio:1;background:var(--card);" onclick="sendSavedSticker('${url.replace(/'/g,"\\'")}')">
+      <img src="${url}" style="width:100%;height:100%;object-fit:cover;" loading="lazy">
+    </div>`).join('');
+}
+
+async function sendSavedSticker(url) {
+  document.getElementById('stickerPicker').style.display = 'none';
+  stickerPickerOpen = false;
+  if (!chatId) return;
+  if (!await checkSend('image','')) return;
+  await pushMsg({ type: 'sticker', imageUrl: url, text: '' });
+}
+
 async function handleStickerUpload(event) {
   const file = event.target.files[0];
   event.target.value = '';
@@ -6682,7 +6750,9 @@ async function handleStickerUpload(event) {
   document.getElementById('upInd').classList.add('on');
   try {
     const { url } = await uploadToCloudinary(file);
+    saveSticker(url); // save for reuse
     await pushMsg({ type: 'sticker', imageUrl: url, text: '' });
+    showToast('🎭 Sticker saved to your collection!');
   } catch(e) {
     if (e?.name === 'AbortError') showToast('Upload cancelled.');
     else showToast('Sticker upload failed: ' + e.message);
@@ -6690,6 +6760,14 @@ async function handleStickerUpload(event) {
     document.getElementById('upInd').classList.remove('on');
   }
 }
+
+// Close sticker picker when clicking outside
+document.addEventListener('click', e => {
+  if (stickerPickerOpen && !e.target.closest('#stickerPickerWrap')) {
+    document.getElementById('stickerPicker').style.display = 'none';
+    stickerPickerOpen = false;
+  }
+});
 
 // ═══════════════════════════════════════════════════════════
 // ✦ MESSAGE SCHEDULING
