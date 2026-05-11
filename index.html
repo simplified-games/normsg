@@ -653,8 +653,9 @@ exports.handler = async (event) => {
         #messagesArea {
             flex: 1; overflow-y: auto; padding: 18px 16px;
             display: flex; flex-direction: column; gap: 2px;
-            justify-content: flex-end;
         }
+        /* Spacer pushes messages to the bottom when few; shrinks to 0 when overflowing so scrolling works normally */
+        #messagesArea::before { content: ''; flex: 1; }
         #messagesArea::-webkit-scrollbar { width: 4px; }
         #messagesArea::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
 
@@ -6215,7 +6216,10 @@ function openAIChat(chatId) {
 
     // Switch to chat panel
     document.getElementById('emptyState').style.display = 'none';
-    document.getElementById('activeChat').style.display = 'flex';
+    document.getElementById('emptyState').classList.add('hidden');
+    const ac = document.getElementById('activeChat');
+    ac.classList.remove('hidden');
+    ac.style.display = 'flex';
 
     const chats = getAIChats();
     const chat  = chats.find(c => c.id === chatId);
