@@ -3539,6 +3539,10 @@ ac.classList.remove('hidden');
 ac.style.display = 'flex';
 document.getElementById('msgInput').focus();
 clearToBanner();
+// Pinned banner + AI suggest bar
+subscribePinned();
+if (userPlan === 'pro' && chatType !== 'ai') showAISuggestBar();
+else hideAISuggestBar();
 }
 
 // ── MESSAGES ───────────────────────────────────────────────
@@ -3706,6 +3710,11 @@ area.appendChild(row);
 });
 
 requestAnimationFrame(() => { area.scrollTop = area.scrollHeight; });
+// Play receive sound if last message is not from me
+if (msgs.length > 0) {
+const last = msgs[msgs.length - 1];
+if (last && last.senderUid && last.senderUid !== me?.uid) playMsgSound('receive');
+}
 }
 
 // ── REPLY STATE ────────────────────────────────────────────
@@ -3853,6 +3862,7 @@ deleteAt:       TS.fromDate(deleteAt),
 
 // Fire-and-forget — never block message send on this
 incrementWeeklyCount();
+playMsgSound('send');
 }
 
 // ── DELETE ─────────────────────────────────────────────────
@@ -4707,6 +4717,8 @@ el.appendChild(row);
 }
 
 document.getElementById('manageGroupModal').classList.remove('hidden');
+// Load group roles section
+if (manageGroupId) renderRolesSection(manageGroupId);
 }
 
 async function renameGroup() {
@@ -6440,6 +6452,10 @@ function openAIChat(chatId) {
     document.getElementById('renameChatBtn').classList.add('hidden');
     document.getElementById('leaveBtn').style.display = 'none';
     document.getElementById('timeoutBanner').classList.add('hidden');
+    // Hide pinned banner + AI suggest bar in AI chats
+    if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
+    document.getElementById('pinnedBanner').classList.remove('on');
+    hideAISuggestBar();
 
     // Render messages
     renderAIChatMessages(chatId);
@@ -7129,50 +7145,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// ── Hook pinned + suggest bar into chat open ──────────────
-const _origActivateChat = activateChat;
-function activateChat() {
-  _origActivateChat();
-  subscribePinned();
-  if (userPlan === 'pro' && chatType !== 'ai') showAISuggestBar();
-  else hideAISuggestBar();
-}
-
-// ── Hook pinned into openAIChat too ──────────────────────
-const _origOpenAIChat = openAIChat;
-function openAIChat(id) {
-  _origOpenAIChat(id);
-  if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
-  document.getElementById('pinnedBanner').classList.remove('on');
-  hideAISuggestBar();
-}
-
-// ── Hook manage group to load roles section ───────────────
-const _origOpenManageGroup = openManageGroup;
-async function openManageGroup() {
-  await _origOpenManageGroup();
-  if (manageGroupId) renderRolesSection(manageGroupId);
-}
-
-// ── Hook send sound into pushMsg ─────────────────────────
-const _origPushMsg = pushMsg;
-async function pushMsg(extra) {
-  const result = await _origPushMsg(extra);
-  playMsgSound('send');
-  return result;
-}
-
-// ── Hook receive sound into renderMsgs ───────────────────
-const _origRenderMsgs = renderMsgs;
-function renderMsgs(msgs) {
-  const prevCount = document.querySelectorAll('#messagesArea .msg-row').length;
-  _origRenderMsgs(msgs);
-  const newCount = document.querySelectorAll('#messagesArea .msg-row').length;
-  if (newCount > prevCount) {
-    const lastMsg = msgs[msgs.length - 1];
-    if (lastMsg && lastMsg.senderUid !== me?.uid) playMsgSound('receive');
-  }
-}
 
 </script>
 </body>
