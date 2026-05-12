@@ -7560,11 +7560,20 @@ function renderTTTOnline(data) {
     else if (draw)   status = '🤝 Draw!';
     else             status = myTurn ? '✅ Your turn!' : "⏳ Opponent's turn…";
 
+    const waitingCodeHTML = (data.status==='waiting' && tttOnlineMySymbol==='X' && data.code) ? `
+        <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:center;margin-top:10px;">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Share this code with a friend:</div>
+            <div style="font-size:32px;font-weight:800;color:var(--a2);letter-spacing:7px;font-family:monospace;">${data.code}</div>
+            <button class="game-mode-btn" style="margin-top:12px;max-width:180px;" onclick="navigator.clipboard.writeText('${data.code}');showToast('✅ Code copied!')">📋 Copy code</button>
+        </div>
+        <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelTTTOnline()">✕ Cancel</button>` : '';
+
     gc().innerHTML = `
         <div style="text-align:center;margin-bottom:4px;font-size:11px;color:var(--muted);">You are <b>${tttOnlineMySymbol==='X'?'❌':'⭕'} ${tttOnlineMySymbol}</b></div>
         <div class="game-status">${status}</div>
-        <div class="ttt-board" id="tttBoard" style="grid-template-columns:repeat(${sz},1fr);"></div>
-        ${(winner||draw) ? `<button class="game-mode-btn" style="max-width:200px;margin:10px auto;" onclick="cancelTTTOnline()">← Back</button>` : ''}`;
+        ${waitingCodeHTML}
+        <div class="ttt-board" id="tttBoard" style="grid-template-columns:repeat(${sz},1fr);${data.status==='waiting'?'display:none;':''}"></div>
+        ${(winner||draw) ? `<button class="game-mode-btn" style="max-width:200px;margin:10px auto;" onclick="cancelTTTOnline()">← Back</button>` : ''}` ;
 
     const board = document.getElementById('tttBoard');
     data.board.forEach((cell, i) => {
@@ -7942,7 +7951,7 @@ function chessDoAI() {
     let best=-Infinity, bestMove=ordered[0];
     for (const [fr,fc,tr,tc] of ordered) {
         const nb = chessApplyMove(fr,fc,tr,tc,chessBoard);
-        const s  = chessMinimax(nb,4,-Infinity,Infinity,false);
+        const s  = chessMinimax(nb,2,-Infinity,Infinity,false);
         if (s>best) { best=s; bestMove=[fr,fc,tr,tc]; }
     }
     chessApplyMove(...bestMove);
