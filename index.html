@@ -7608,6 +7608,7 @@ function cancelTTTOnline() {
 // CHESS
 // ══════════════════════════════════════════════════════════════
 let chessBoard, chessMode, chessTurn, chessSelected, chessValidMoves, chessLastMove, chessAITimer, chessGameOver;
+let chessSkillLevel = 5, sfWorker = null;
 
 const CHESS_PIECES = {
     'wK':'♔','wQ':'♕','wR':'♖','wB':'♗','wN':'♘','wP':'♙',
@@ -7634,7 +7635,7 @@ function renderChessModeSelect() {
     gc().innerHTML = `
         <div style="margin-bottom:6px;color:var(--muted);font-size:12px;text-align:center;">Choose mode</div>
         <button class="game-mode-btn" onclick="startChess('pvp')">👤 vs Player (local)</button>
-        <button class="game-mode-btn" onclick="startChess('ai')">🤖 vs AI (you play White)</button>
+        <button class="game-mode-btn" onclick="startChessAISelect()">🤖 vs AI (you play White)</button>
         <button class="game-mode-btn" onclick="startChessOnline('host')">🌐 Online — Host game</button>
         <button class="game-mode-btn" onclick="startChessOnline('join')">🔗 Online — Join with code</button>`;
 }
@@ -7943,18 +7944,83 @@ function chessMinimax(board, depth, alpha, beta, maximizing) {
     return maximizing?alpha:beta;
 }
 
-function chessDoAI() {
-    if (chessGameOver || chessTurn!=='b') return;
-    const moves = chessAllMoves(chessBoard,'b');
-    if (!moves.length) { renderChess(); return; }
-    const ordered = chessOrderMoves(chessBoard,moves);
-    let best=-Infinity, bestMove=ordered[0];
-    for (const [fr,fc,tr,tc] of ordered) {
-        const nb = chessApplyMove(fr,fc,tr,tc,chessBoard);
-        const s  = chessMinimax(nb,2,-Infinity,Infinity,false);
-        if (s>best) { best=s; bestMove=[fr,fc,tr,tc]; }
+// -- Difficulty picker --
+function startChessAISelect() {
+    const levels = [
+        { label: 'Beginner',  elo: '~600',  val: 0  },
+        { label: 'Easy',      elo: '~1000', val: 5  },
+        { label: 'Medium',    elo: '~1500', val: 10 },
+        { label: 'Hard',      elo: '~2000', val: 15 },
+        { label: 'Master',    elo: '~2400', val: 20 },
+    ];
+    gc().innerHTML = `
+        <div style="margin-bottom:8px;color:var(--muted);font-size:12px;text-align:center;">Choose difficulty</div>
+        ${levels.map(l => `
+            <button class="game-mode-btn" onclick="chessStartAI(${l.val})" style="display:flex;justify-content:space-between;align-items:center;padding:10px 18px;">
+                <span>${l.label}</span>
+                <span style="font-size:11px;color:var(--muted);">ELO ${l.elo}</span>
+            </button>`).join('')}
+        <button class="game-mode-btn" style="margin-top:4px;background:none;border-color:var(--border);" onclick="renderChessModeSelect()">Back</button>`;
+}
+
+function chessStartAI(skillLevel) {
+    chessSkillLevel = skillLevel;
+    if (sfWorker) { try { sfWorker.terminate(); } catch(e){} }
+    sfWorker = new Worker('stockfish.js');
+    sfWorker.postMessage('uci');
+    sfWorker.postMessage('setoption name Skill Level value ' + chessSkillLevel);
+    sfWorker.postMessage('isready');
+    startChess('ai');
+}
+
+// -- Board to FEN --
+function boardToFEN() {
+    const pieceMap = {
+        wK:'K',wQ:'Q',wR:'R',wB:'B',wN:'N',wP:'P',
+        bK:'k',bQ:'q',bR:'r',bB:'b',bN:'n',bP:'p'
+    };
+    let fen = '';
+    for (let r = 0; r < 8; r++) {
+        let empty = 0;
+        for (let c = 0; c < 8; c++) {
+            const p = chessBoard[r][c];
+            if (p) { if (empty) { fen += empty; empty = 0; } fen += pieceMap[p]; }
+            else empty++;
+        }
+        if (empty) fen += empty;
+        if (r < 7) fen += '/';
     }
-    chessApplyMove(...bestMove);
+    fen += ' b - - 0 1';
+    return fen;
+}
+
+// -- UCI move to board coords --
+function uciToCoords(uci) {
+    const col = c => c.charCodeAt(0) - 97;
+    const row = r => 8 - parseInt(r);
+    return [row(uci[1]), col(uci[0]), row(uci[3]), col(uci[2])];
+}
+
+// -- Stockfish AI move --
+function chessDoAI() {
+    if (chessGameOver || chessTurn !== 'b') return;
+    if (!sfWorker) {
+        showToast('Start game from the difficulty picker to use Stockfish');
+        return;
+    }
+    const statusEl = document.getElementById('chessStatus');
+    if (statusEl) statusEl.textContent = 'AI thinking...';
+
+    sfWorker.onmessage = function(e) {
+        const line = e.data;
+        if (!line.startsWith('bestmove')) return;
+        const moveStr = line.split(' ')[1];
+        if (!moveStr || moveStr === '(none)') { renderChess(); return; }
+        const [fr, fc, tr, tc] = uciToCoords(moveStr);
+        chessApplyMove(fr, fc, tr, tc);
+    };
+    sfWorker.postMessage('position fen ' + boardToFEN());
+    sfWorker.postMessage('go movetime 600');
 }
 
 // ── Chess Online ──────────────────────────────────────────────
@@ -7968,7 +8034,7 @@ async function startChessOnline(role) {
         try {
             const ref = await db.collection('normgames').add({
                 type: 'chess', code,
-                board: initChessBoard(),
+                board: initChessBoard().flat(),
                 turn: 'w', status: 'waiting',
                 players: { w: me.uid },
                 lastMove: null,
@@ -8012,11 +8078,15 @@ async function startChessOnline(role) {
     }
 }
 
+function unflatBoard(f){const b=[];for(let i=0;i<8;i++)b.push(f.slice(i*8,i*8+8));return b;}
+
 function subscribeChessOnline(gameId) {
     if (chessOnlineUnsub) chessOnlineUnsub();
     chessOnlineUnsub = db.collection('normgames').doc(gameId).onSnapshot(snap => {
         const data = snap.data(); if (!data) return;
-        chessBoard      = data.board;
+        const board2d = Array.isArray(data.board[0]) ? data.board : unflatBoard(data.board);
+        data.board = board2d;
+        chessBoard      = board2d;
         chessTurn       = data.turn;
         chessLastMove   = data.lastMove;
         chessMode       = 'online';
@@ -8084,7 +8154,7 @@ function chessClickOnline(r, c, data) {
             const nextTurn = chessOnlineMyColor==='w'?'b':'w';
             const allNext  = chessAllMoves(newBoard, nextTurn);
             db.collection('normgames').doc(chessOnlineGameId).update({
-                board: newBoard, turn: nextTurn,
+                board: newBoard.flat(), turn: nextTurn,
                 lastMove: [chessSelected[0],chessSelected[1],r,c],
                 status: allNext.length===0 ? 'done' : 'playing'
             });
