@@ -624,6 +624,14 @@ exports.handler = async (event) => {
             display: flex; align-items: center; justify-content: center; gap: 6px;
         }
         .btn-new-grp:hover { color: var(--a2); border-color: var(--accent); background: rgba(124,92,252,0.05); }
+        .btn-norm-games {
+            width: 100%; background: none; border: 1px dashed rgba(45,212,191,0.4);
+            border-radius: 11px; padding: 10px; color: #4dd9c8;
+            font-family: 'Figtree', sans-serif; font-size: 12px; font-weight: 600;
+            cursor: pointer; transition: all 0.15s;
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+        }
+        .btn-norm-games:hover { color: #2dd4bf; border-color: #2dd4bf; background: rgba(45,212,191,0.06); }
 
         .no-items { padding: 22px 10px; text-align: center; }
         .no-ico  { font-size: 28px; margin-bottom: 8px; opacity: 0.35; }
@@ -1640,12 +1648,12 @@ exports.handler = async (event) => {
 
         /* ── Tic-Tac-Toe ── */
         .ttt-board {
-            display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
-            margin:14px auto;max-width:280px;
+            display:grid;gap:6px;
+            margin:14px auto;width:min(320px,100%);
         }
         .ttt-cell {
             aspect-ratio:1;background:var(--panel);border:2px solid var(--border2);
-            border-radius:14px;font-size:42px;display:flex;align-items:center;
+            border-radius:12px;font-size:clamp(18px,8vw,40px);display:flex;align-items:center;
             justify-content:center;cursor:pointer;transition:all 0.15s;user-select:none;
         }
         .ttt-cell:hover:not(.taken) { border-color:var(--a2);background:rgba(167,139,250,0.08); }
@@ -1657,11 +1665,12 @@ exports.handler = async (event) => {
         .chess-board {
             display:grid;grid-template-columns:repeat(8,1fr);
             border:2px solid var(--border2);border-radius:10px;overflow:hidden;
-            width:100%;max-width:360px;aspect-ratio:1;
+            width:min(360px,100%);
         }
         .chess-sq {
             display:flex;align-items:center;justify-content:center;
-            font-size:clamp(18px,4vw,34px);cursor:pointer;transition:background 0.1s;
+            aspect-ratio:1;
+            font-size:clamp(16px,3.8vw,32px);cursor:pointer;transition:background 0.1s;
             user-select:none;position:relative;
         }
         .chess-sq.light { background:#2a2a3d; }
@@ -1674,7 +1683,7 @@ exports.handler = async (event) => {
         }
         .chess-sq.last  { background:rgba(167,139,250,0.15) !important; }
         .chess-sq.check { background:rgba(239,68,68,0.35) !important; }
-        .chess-labels { display:flex;justify-content:space-around;width:100%;max-width:360px;padding:0 2px; }
+        .chess-labels { display:flex;justify-content:space-around;width:min(360px,100%);padding:0 2px; }
         .chess-label  { font-size:10px;color:var(--muted);text-align:center;flex:1; }
         .chess-taken  { font-size:12px;color:var(--muted);min-height:18px;text-align:center;letter-spacing:1px; }
 
@@ -2342,8 +2351,8 @@ exports.handler = async (event) => {
         <div class="tabs">
             <button class="tab on" id="tabDMs"     onclick="switchTab('dms')">DMs <span id="reqBadge" class="badge hidden">0</span></button>
             <button class="tab"    id="tabGroups"  onclick="switchTab('groups')">Groups</button>
+            <button class="tab"    id="tabGames"   onclick="switchTab('games')">Games</button>
             <button class="tab"    id="tabAI"      onclick="switchTab('ai')"><span class="ai-tab-icon">✦ AI</span></button>
-            <button class="tab"    id="tabGames"   onclick="switchTab('games')">🎮</button>
         </div>
 
         <!-- DMs panel -->
@@ -2389,8 +2398,9 @@ exports.handler = async (event) => {
             <div class="scr" id="groupsList">
                 <div class="no-items"><div class="no-ico">💬</div><div class="no-txt">No groups yet.<br>Create one below!</div></div>
             </div>
-            <div class="btm-bar">
+            <div class="btm-bar" style="flex-direction:column;gap:6px;">
                 <button class="btn-new-grp" onclick="openGroupModal()">＋ &nbsp;New Group Chat</button>
+                <button class="btn-norm-games" onclick="switchTab('games')">🎮 &nbsp;NormGames</button>
             </div>
         </div>
 
@@ -7307,48 +7317,81 @@ function gc() { return document.getElementById('gameContent'); }
 // ══════════════════════════════════════════════════════════════
 // TIC-TAC-TOE
 // ══════════════════════════════════════════════════════════════
-let tttBoard, tttTurn, tttMode, tttDone;
+let tttBoard, tttTurn, tttMode, tttDone, tttSize;
 
 function renderTTTModeSelect() {
     gc().innerHTML = `
+        <div style="margin-bottom:10px;color:var(--muted);font-size:12px;text-align:center;">Choose board size</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+            <button id="tttSz3" class="game-mode-btn${(!tttSize||tttSize===3)?' sel':''}" style="flex:1;padding:9px 4px;font-size:13px;margin:0;" onclick="tttSetSize(3)">3×3</button>
+            <button id="tttSz4" class="game-mode-btn${tttSize===4?' sel':''}" style="flex:1;padding:9px 4px;font-size:13px;margin:0;" onclick="tttSetSize(4)">4×4</button>
+            <button id="tttSz5" class="game-mode-btn${tttSize===5?' sel':''}" style="flex:1;padding:9px 4px;font-size:13px;margin:0;" onclick="tttSetSize(5)">5×5</button>
+        </div>
         <div style="margin-bottom:6px;color:var(--muted);font-size:12px;text-align:center;">Choose mode</div>
         <button class="game-mode-btn" onclick="startTTT('pvp')">👤 vs Player (local)</button>
-        <button class="game-mode-btn" onclick="startTTT('ai')">🤖 vs AI</button>`;
+        <button class="game-mode-btn" onclick="startTTT('ai')">🤖 vs AI</button>
+        <button class="game-mode-btn" onclick="startTTTOnline()">🌐 Online — Host game</button>
+        <button class="game-mode-btn" onclick="joinTTTOnline()">🔗 Online — Join with code</button>`;
+    if (!tttSize) tttSize = 3;
+}
+
+function tttSetSize(n) {
+    tttSize = n;
+    renderTTTModeSelect();
 }
 
 function startTTT(mode) {
-    tttBoard = Array(9).fill('');
+    const sz = tttSize || 3;
+    tttBoard = Array(sz*sz).fill('');
     tttTurn  = 'X';
     tttMode  = mode;
     tttDone  = false;
     renderTTT();
 }
 
+function tttGetWins(sz) {
+    const wins = [];
+    // Rows
+    for (let r=0; r<sz; r++) { const row=[]; for(let c=0;c<sz;c++) row.push(r*sz+c); wins.push(row); }
+    // Cols
+    for (let c=0; c<sz; c++) { const col=[]; for(let r=0;r<sz;r++) col.push(r*sz+c); wins.push(col); }
+    // Diags
+    const d1=[], d2=[];
+    for (let i=0;i<sz;i++) { d1.push(i*sz+i); d2.push(i*sz+(sz-1-i)); }
+    wins.push(d1); wins.push(d2);
+    return wins;
+}
+
 function renderTTT() {
-    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    const winLine = wins.find(l => tttBoard[l[0]] && tttBoard[l[0]]===tttBoard[l[1]] && tttBoard[l[1]]===tttBoard[l[2]]);
+    const sz   = tttSize || 3;
+    const wins = tttGetWins(sz);
+    const winLine = wins.find(l => tttBoard[l[0]] && l.every(i => tttBoard[i]===tttBoard[l[0]]));
     const winner  = winLine ? tttBoard[winLine[0]] : null;
     const draw    = !winner && tttBoard.every(c => c);
     const aiTurn  = tttMode === 'ai' && tttTurn === 'O' && !winner && !draw;
     let status = '';
-    if (winner)     status = `${winner === 'X' ? '❌' : '⭕'} ${winner} wins!`;
-    else if (draw)  status = '🤝 Draw!';
-    else if (aiTurn)status = '🤖 AI is thinking…';
-    else            status = `${tttTurn === 'X' ? '❌' : '⭕'} ${tttTurn}'s turn`;
+    if (winner)      status = `${winner==='X'?'❌':'⭕'} ${winner} wins!`;
+    else if (draw)   status = '🤝 Draw!';
+    else if (aiTurn) status = '🤖 AI is thinking…';
+    else             status = `${tttTurn==='X'?'❌':'⭕'} ${tttTurn}'s turn`;
+
+    // Shrink emoji for bigger grids
+    const emojiSize = sz===3 ? '36px' : sz===4 ? '26px' : '20px';
 
     gc().innerHTML = `
         <div style="text-align:center;margin-bottom:6px;">
             <button class="game-mode-btn" style="display:inline-flex;width:auto;padding:7px 18px;font-size:12px;margin:0;" onclick="renderTTTModeSelect()">← Change mode</button>
         </div>
         <div class="game-status">${status}</div>
-        <div class="ttt-board" id="tttBoard"></div>
+        <div class="ttt-board" id="tttBoard" style="grid-template-columns:repeat(${sz},1fr);"></div>
         ${(winner||draw) ? `<button class="game-mode-btn" style="max-width:200px;margin:10px auto;" onclick="startTTT('${tttMode}')">▶ Play again</button>` : ''}`;
 
     const board = document.getElementById('tttBoard');
     tttBoard.forEach((cell, i) => {
         const sq = document.createElement('div');
-        sq.className = 'ttt-cell' + (cell ? ' taken' : '') + (winLine && winLine.includes(i) ? ' win' : '');
-        sq.textContent = cell === 'X' ? '❌' : cell === 'O' ? '⭕' : '';
+        sq.className = 'ttt-cell' + (cell?' taken':'') + (winLine&&winLine.includes(i)?' win':'');
+        sq.style.fontSize = emojiSize;
+        sq.textContent = cell==='X' ? '❌' : cell==='O' ? '⭕' : '';
         sq.onclick = () => tttClick(i);
         board.appendChild(sq);
     });
@@ -7360,39 +7403,175 @@ function tttClick(i) {
     if (tttDone || tttBoard[i]) return;
     if (tttMode === 'ai' && tttTurn === 'O') return;
     tttBoard[i] = tttTurn;
-    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    const won  = wins.some(l => tttBoard[l[0]] && tttBoard[l[0]]===tttBoard[l[1]] && tttBoard[l[1]]===tttBoard[l[2]]);
+    const sz  = tttSize || 3;
+    const wins = tttGetWins(sz);
+    const won  = wins.some(l => tttBoard[l[0]] && l.every(i => tttBoard[i]===tttBoard[l[0]]));
     const draw = !won && tttBoard.every(c => c);
     if (won || draw) tttDone = true;
-    else tttTurn = tttTurn === 'X' ? 'O' : 'X';
+    else tttTurn = tttTurn==='X' ? 'O' : 'X';
     renderTTT();
 }
 
 function tttAIMove() {
-    const best = tttMinimax(tttBoard, 'O');
-    tttBoard[best.idx] = 'O';
-    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    const won  = wins.some(l => tttBoard[l[0]] && tttBoard[l[0]]===tttBoard[l[1]] && tttBoard[l[1]]===tttBoard[l[2]]);
+    const sz = tttSize || 3;
+    if (sz === 3) {
+        const best = tttMinimax3(tttBoard, 'O');
+        tttBoard[best.idx] = 'O';
+    } else {
+        // For 4×4 / 5×5 use heuristic (minimax too slow)
+        tttBoard[tttHeuristic(tttBoard, sz)] = 'O';
+    }
+    const wins = tttGetWins(sz);
+    const won  = wins.some(l => tttBoard[l[0]] && l.every(i => tttBoard[i]===tttBoard[l[0]]));
     const draw = !won && tttBoard.every(c => c);
     if (won || draw) tttDone = true;
     else tttTurn = 'X';
     renderTTT();
 }
 
-function tttMinimax(board, player) {
-    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    const check = p => wins.some(l => board[l[0]]===p && board[l[1]]===p && board[l[2]]===p);
+function tttMinimax3(board, player) {
+    const wins = tttGetWins(3);
+    const check = p => wins.some(l => l.every(i => board[i]===p));
     if (check('O')) return { score: 10 };
     if (check('X')) return { score: -10 };
     const empty = board.map((v,i)=>v?-1:i).filter(i=>i>=0);
     if (!empty.length) return { score: 0 };
     const moves = empty.map(i => {
         const b = [...board]; b[i] = player;
-        const s = tttMinimax(b, player === 'O' ? 'X' : 'O').score;
+        const s = tttMinimax3(b, player==='O'?'X':'O').score;
         return { idx: i, score: s };
     });
-    return moves.reduce((a, b) => player === 'O' ? (b.score > a.score ? b : a) : (b.score < a.score ? b : a));
+    return moves.reduce((a,b) => player==='O' ? (b.score>a.score?b:a) : (b.score<a.score?b:a));
 }
+
+function tttHeuristic(board, sz) {
+    const wins = tttGetWins(sz);
+    const score = (player, b) => {
+        let s = 0;
+        wins.forEach(line => {
+            const mine = line.filter(i=>b[i]===player).length;
+            const opp  = line.filter(i=>b[i]===(player==='O'?'X':'O')).length;
+            if (opp===0) s += Math.pow(10, mine);
+            if (mine===0) s -= Math.pow(10, opp);
+        });
+        return s;
+    };
+    const empty = board.map((v,i)=>v?-1:i).filter(i=>i>=0);
+    // Block winning move first
+    for (const i of empty) {
+        const b=[...board]; b[i]='X';
+        if (tttGetWins(sz).some(l=>l.every(j=>b[j]==='X'))) return i;
+    }
+    // Pick best heuristic
+    return empty.reduce((best, i) => {
+        const b=[...board]; b[i]='O';
+        return score('O',b) > score('O',[...board].map((v,j)=>j===best?'O':v)) ? i : best;
+    }, empty[0]);
+}
+
+// ── TTT Online ──────────────────────────────────────────────
+let tttOnlineUnsub = null, tttOnlineGameId = null, tttOnlineMySymbol = null;
+
+async function startTTTOnline() {
+    if (!me) { showToast('Sign in to play online!'); return; }
+    const sz = tttSize || 3;
+    const gameRef = await db.collection('normgames').add({
+        type: 'ttt', size: sz,
+        board: Array(sz*sz).fill(''),
+        turn: 'X', status: 'waiting',
+        players: { X: me.uid }, createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    tttOnlineGameId  = gameRef.id;
+    tttOnlineMySymbol = 'X';
+    gc().innerHTML = `
+        <div class="game-status">Waiting for opponent…</div>
+        <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;margin-top:10px;">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share this invite code with a friend:</div>
+            <div style="font-size:22px;font-weight:800;color:var(--a2);letter-spacing:4px;">${gameRef.id.slice(-6).toUpperCase()}</div>
+            <button class="game-mode-btn" style="margin-top:10px;max-width:180px;" onclick="navigator.clipboard.writeText('${gameRef.id.slice(-6).toUpperCase()}');showToast('Code copied!')">📋 Copy code</button>
+        </div>
+        <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelTTTOnline()">✕ Cancel</button>`;
+    subscribeTTTOnline(gameRef.id);
+}
+
+async function joinTTTOnline() {
+    if (!me) { showToast('Sign in to play online!'); return; }
+    const code = prompt('Enter invite code:');
+    if (!code) return;
+    const snap = await db.collection('normgames').where(firebase.firestore.FieldPath.documentId(), '>=', '')
+        .get(); // get all and find by suffix
+    const doc = snap.docs.find(d => d.id.slice(-6).toUpperCase() === code.trim().toUpperCase());
+    if (!doc) { showToast('Game not found!'); return; }
+    if (doc.data().status !== 'waiting') { showToast('Game already started!'); return; }
+    await doc.ref.update({ 'players.O': me.uid, status: 'playing' });
+    tttOnlineGameId  = doc.id;
+    tttOnlineMySymbol = 'O';
+    tttSize = doc.data().size || 3;
+    subscribeTTTOnline(doc.id);
+}
+
+function subscribeTTTOnline(gameId) {
+    if (tttOnlineUnsub) tttOnlineUnsub();
+    tttOnlineUnsub = db.collection('normgames').doc(gameId).onSnapshot(snap => {
+        const data = snap.data(); if (!data) return;
+        tttSize  = data.size || 3;
+        tttBoard = data.board;
+        tttTurn  = data.turn;
+        tttMode  = 'online';
+        tttDone  = data.status === 'done';
+        // Override render for online
+        renderTTTOnline(data);
+    });
+}
+
+function renderTTTOnline(data) {
+    const sz   = data.size || 3;
+    const wins = tttGetWins(sz);
+    const winLine = wins.find(l => data.board[l[0]] && l.every(i=>data.board[i]===data.board[l[0]]));
+    const winner  = winLine ? data.board[winLine[0]] : null;
+    const draw    = !winner && data.board.every(c=>c);
+    const myTurn  = data.turn === tttOnlineMySymbol && !winner && !draw;
+    const emojiSize = sz===3?'36px':sz===4?'26px':'20px';
+    let status = '';
+    if (data.status==='waiting') status = 'Waiting for opponent…';
+    else if (winner) status = winner===tttOnlineMySymbol ? '🎉 You win!' : '😢 You lose!';
+    else if (draw)   status = '🤝 Draw!';
+    else             status = myTurn ? '✅ Your turn!' : "⏳ Opponent's turn…";
+
+    gc().innerHTML = `
+        <div style="text-align:center;margin-bottom:4px;font-size:11px;color:var(--muted);">You are <b>${tttOnlineMySymbol==='X'?'❌':'⭕'} ${tttOnlineMySymbol}</b></div>
+        <div class="game-status">${status}</div>
+        <div class="ttt-board" id="tttBoard" style="grid-template-columns:repeat(${sz},1fr);"></div>
+        ${(winner||draw) ? `<button class="game-mode-btn" style="max-width:200px;margin:10px auto;" onclick="cancelTTTOnline()">← Back</button>` : ''}`;
+
+    const board = document.getElementById('tttBoard');
+    data.board.forEach((cell, i) => {
+        const sq = document.createElement('div');
+        sq.className = 'ttt-cell'+(cell?' taken':'')+(winLine&&winLine.includes(i)?' win':'');
+        sq.style.fontSize = emojiSize;
+        sq.textContent = cell==='X'?'❌':cell==='O'?'⭕':'';
+        sq.onclick = () => { if (myTurn && !cell) tttClickOnline(i, sz, data); };
+        board.appendChild(sq);
+    });
+}
+
+async function tttClickOnline(i, sz, data) {
+    const newBoard = [...data.board]; newBoard[i] = tttOnlineMySymbol;
+    const wins = tttGetWins(sz);
+    const won  = wins.some(l=>newBoard[l[0]]&&l.every(j=>newBoard[j]===newBoard[l[0]]));
+    const draw = !won && newBoard.every(c=>c);
+    await db.collection('normgames').doc(tttOnlineGameId).update({
+        board: newBoard, turn: tttOnlineMySymbol==='X'?'O':'X',
+        status: (won||draw)?'done':'playing'
+    });
+}
+
+function cancelTTTOnline() {
+    if (tttOnlineUnsub) { tttOnlineUnsub(); tttOnlineUnsub=null; }
+    if (tttOnlineGameId) { db.collection('normgames').doc(tttOnlineGameId).delete().catch(()=>{}); tttOnlineGameId=null; }
+    renderTTTModeSelect();
+}
+
 
 // ══════════════════════════════════════════════════════════════
 // CHESS
@@ -7424,7 +7603,9 @@ function renderChessModeSelect() {
     gc().innerHTML = `
         <div style="margin-bottom:6px;color:var(--muted);font-size:12px;text-align:center;">Choose mode</div>
         <button class="game-mode-btn" onclick="startChess('pvp')">👤 vs Player (local)</button>
-        <button class="game-mode-btn" onclick="startChess('ai')">🤖 vs AI (you play White)</button>`;
+        <button class="game-mode-btn" onclick="startChess('ai')">🤖 vs AI (you play White)</button>
+        <button class="game-mode-btn" onclick="startChessOnline('host')">🌐 Online — Host game</button>
+        <button class="game-mode-btn" onclick="startChessOnline('join')">🔗 Online — Join with code</button>`;
 }
 
 function startChess(mode) {
@@ -7680,6 +7861,139 @@ function chessDoAI() {
     chessApplyMove(...bestMove);
 }
 
+// ── Chess Online ──────────────────────────────────────────────
+let chessOnlineUnsub = null, chessOnlineGameId = null, chessOnlineMyColor = null;
+
+async function startChessOnline(role) {
+    if (!me) { showToast('Sign in to play online!'); return; }
+    if (role === 'host') {
+        const ref = await db.collection('normgames').add({
+            type: 'chess',
+            board: initChessBoard(),
+            turn: 'w', status: 'waiting',
+            players: { w: me.uid },
+            lastMove: null,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        chessOnlineGameId  = ref.id;
+        chessOnlineMyColor = 'w';
+        gc().innerHTML = `
+            <div class="game-status">Waiting for opponent…</div>
+            <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;margin-top:10px;">
+                <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share this invite code:</div>
+                <div style="font-size:22px;font-weight:800;color:var(--a2);letter-spacing:4px;">${ref.id.slice(-6).toUpperCase()}</div>
+                <button class="game-mode-btn" style="margin-top:10px;max-width:180px;" onclick="navigator.clipboard.writeText('${ref.id.slice(-6).toUpperCase()}');showToast('Code copied!')">📋 Copy code</button>
+            </div>
+            <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelChessOnline()">✕ Cancel</button>`;
+        subscribeChessOnline(ref.id);
+    } else {
+        const code = prompt('Enter invite code:');
+        if (!code) return;
+        const snap = await db.collection('normgames').where('type','==','chess').where('status','==','waiting').get();
+        const doc  = snap.docs.find(d => d.id.slice(-6).toUpperCase() === code.trim().toUpperCase());
+        if (!doc) { showToast('Game not found!'); return; }
+        await doc.ref.update({ 'players.b': me.uid, status: 'playing' });
+        chessOnlineGameId  = doc.id;
+        chessOnlineMyColor = 'b';
+        subscribeChessOnline(doc.id);
+    }
+}
+
+function subscribeChessOnline(gameId) {
+    if (chessOnlineUnsub) chessOnlineUnsub();
+    chessOnlineUnsub = db.collection('normgames').doc(gameId).onSnapshot(snap => {
+        const data = snap.data(); if (!data) return;
+        chessBoard      = data.board;
+        chessTurn       = data.turn;
+        chessLastMove   = data.lastMove;
+        chessMode       = 'online';
+        chessSelected   = null;
+        chessValidMoves = [];
+        chessGameOver   = data.status === 'done';
+        renderChessOnline(data);
+    });
+}
+
+function renderChessOnline(data) {
+    const myTurn = data.turn === chessOnlineMyColor && data.status === 'playing';
+    const allMoves = chessAllMoves(data.board, data.turn);
+    const inCheck  = chessKingInCheck(data.board, data.turn);
+    let statusMsg = '';
+    if (data.status === 'waiting') statusMsg = 'Waiting for opponent…';
+    else if (data.status === 'done') {
+        const winner = data.turn === 'w' ? 'Black' : 'White';
+        statusMsg = inCheck ? `♟ Checkmate! ${winner} wins!` : '🤝 Stalemate!';
+    }
+    else statusMsg = myTurn ? '✅ Your turn!' : "⏳ Opponent's turn…";
+
+    const captured = [];
+    const allPieces=['wQ','wR','wR','wB','wB','wN','wN','wP','wP','wP','wP','wP','wP','wP','wP','bQ','bR','bR','bB','bB','bN','bN','bP','bP','bP','bP','bP','bP','bP','bP'];
+    const onBoard = data.board.flat().filter(Boolean);
+    const remaining=[...allPieces];
+    onBoard.forEach(p=>{const i=remaining.indexOf(p);if(i!==-1)remaining.splice(i,1);});
+    const wCap=remaining.filter(p=>p[0]==='w').map(p=>CHESS_PIECES[p]).join('');
+    const bCap=remaining.filter(p=>p[0]==='b').map(p=>CHESS_PIECES[p]).join('');
+
+    gc().innerHTML = `
+        <div style="text-align:center;margin-bottom:4px;font-size:11px;color:var(--muted);">You are <b>${chessOnlineMyColor==='w'?'⬜ White':'⬛ Black'}</b></div>
+        <div class="chess-wrap">
+            <div class="chess-taken">${bCap||'&nbsp;'}</div>
+            <div class="game-status">${statusMsg}</div>
+            <div class="chess-board" id="chessBoard"></div>
+            <div class="chess-labels"><span class="chess-label">a</span><span class="chess-label">b</span><span class="chess-label">c</span><span class="chess-label">d</span><span class="chess-label">e</span><span class="chess-label">f</span><span class="chess-label">g</span><span class="chess-label">h</span></div>
+            <div class="chess-taken">${wCap||'&nbsp;'}</div>
+            ${data.status==='done' ? `<button class="game-mode-btn" style="max-width:200px;margin:4px auto;" onclick="cancelChessOnline()">← Back</button>` : ''}
+        </div>`;
+
+    const boardEl = document.getElementById('chessBoard');
+    const kingPos = findKing(data.board, data.turn);
+    for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+        const sq = document.createElement('div');
+        const isLight = (r+c)%2===0;
+        let cls = 'chess-sq '+(isLight?'light':'dark');
+        if (chessSelected&&chessSelected[0]===r&&chessSelected[1]===c) cls+=' sel';
+        else if (chessValidMoves.some(m=>m[0]===r&&m[1]===c)) cls+=' hint';
+        else if (chessLastMove&&((chessLastMove[0]===r&&chessLastMove[1]===c)||(chessLastMove[2]===r&&chessLastMove[3]===c))) cls+=' last';
+        if (inCheck&&kingPos&&kingPos[0]===r&&kingPos[1]===c) cls+=' check';
+        sq.className=cls;
+        sq.textContent=data.board[r][c]?CHESS_PIECES[data.board[r][c]]:'';
+        sq.onclick=()=>{ if(!myTurn||data.status!=='playing') return; chessClickOnline(r,c,data); };
+        boardEl.appendChild(sq);
+    }
+}
+
+function chessClickOnline(r, c, data) {
+    const piece = data.board[r][c];
+    if (chessSelected) {
+        const isMove = chessValidMoves.some(m=>m[0]===r&&m[1]===c);
+        if (isMove) {
+            const newBoard = chessApplyMove(chessSelected[0],chessSelected[1],r,c,data.board);
+            const nextTurn = chessOnlineMyColor==='w'?'b':'w';
+            const allNext  = chessAllMoves(newBoard, nextTurn);
+            db.collection('normgames').doc(chessOnlineGameId).update({
+                board: newBoard, turn: nextTurn,
+                lastMove: [chessSelected[0],chessSelected[1],r,c],
+                status: allNext.length===0 ? 'done' : 'playing'
+            });
+            chessSelected=null; chessValidMoves=[];
+            return;
+        }
+    }
+    if (piece && piece[0]===chessOnlineMyColor) {
+        chessSelected   = [r,c];
+        chessValidMoves = chessGetValidMoves(data.board,r,c,chessOnlineMyColor);
+    } else {
+        chessSelected=null; chessValidMoves=[];
+    }
+    renderChessOnline(data);
+}
+
+function cancelChessOnline() {
+    if (chessOnlineUnsub) { chessOnlineUnsub(); chessOnlineUnsub=null; }
+    chessOnlineGameId=null; chessOnlineMyColor=null;
+    renderChessModeSelect();
+}
+
 // ══════════════════════════════════════════════════════════════
 // WORDLE
 // ══════════════════════════════════════════════════════════════
@@ -7689,9 +8003,7 @@ const WORDLE_ANSWERS = ['crane','slate','trace','raise','stare','share','score',
 let wordleAnswer, wordleGuesses, wordleCurrent, wordleDone;
 
 function initWordle() {
-    const today = new Date();
-    const seed  = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
-    wordleAnswer  = WORDLE_ANSWERS[seed % WORDLE_ANSWERS.length];
+    wordleAnswer  = WORDLE_ANSWERS[Math.floor(Math.random() * WORDLE_ANSWERS.length)];
     wordleGuesses = [];
     wordleCurrent = '';
     wordleDone    = false;
@@ -7769,7 +8081,9 @@ function renderWordle() {
     gc().innerHTML = `
         <div class="game-status">${status}</div>
         ${gridHTML}
-        ${!wordleDone ? kbdHTML : `<button class="game-mode-btn" style="max-width:200px;margin:14px auto;" onclick="initWordle()">▶ New game</button>`}`;
+        ${wordleDone
+            ? `<button class="game-mode-btn" style="max-width:220px;margin:14px auto;" onclick="initWordle()">▶ Play again (new word)</button>`
+            : kbdHTML}`;
 
     if (lastGuess === wordleAnswer || wordleGuesses.length >= maxGuesses) wordleDone = true;
 }
