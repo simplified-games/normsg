@@ -7474,40 +7474,56 @@ let tttOnlineUnsub = null, tttOnlineGameId = null, tttOnlineMySymbol = null;
 
 async function startTTTOnline() {
     if (!me) { showToast('Sign in to play online!'); return; }
-    const sz = tttSize || 3;
-    const gameRef = await db.collection('normgames').add({
-        type: 'ttt', size: sz,
-        board: Array(sz*sz).fill(''),
-        turn: 'X', status: 'waiting',
-        players: { X: me.uid }, createdAt: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    tttOnlineGameId  = gameRef.id;
-    tttOnlineMySymbol = 'X';
-    gc().innerHTML = `
-        <div class="game-status">Waiting for opponent…</div>
-        <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;margin-top:10px;">
-            <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share this invite code with a friend:</div>
-            <div style="font-size:22px;font-weight:800;color:var(--a2);letter-spacing:4px;">${gameRef.id.slice(-6).toUpperCase()}</div>
-            <button class="game-mode-btn" style="margin-top:10px;max-width:180px;" onclick="navigator.clipboard.writeText('${gameRef.id.slice(-6).toUpperCase()}');showToast('Code copied!')">📋 Copy code</button>
-        </div>
-        <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelTTTOnline()">✕ Cancel</button>`;
-    subscribeTTTOnline(gameRef.id);
+    const sz   = tttSize || 3;
+    const code = Math.random().toString(36).slice(2,8).toUpperCase();
+    gc().innerHTML = `<div class="game-status">Creating game…</div>`;
+    try {
+        const gameRef = await db.collection('normgames').add({
+            type: 'ttt', size: sz, code,
+            board: Array(sz*sz).fill(''),
+            turn: 'X', status: 'waiting',
+            players: { X: me.uid },
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        tttOnlineGameId   = gameRef.id;
+        tttOnlineMySymbol = 'X';
+        gc().innerHTML = `
+            <div class="game-status">Waiting for opponent…</div>
+            <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:center;margin-top:10px;">
+                <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Share this code with a friend:</div>
+                <div style="font-size:32px;font-weight:800;color:var(--a2);letter-spacing:7px;font-family:monospace;">${code}</div>
+                <button class="game-mode-btn" style="margin-top:12px;max-width:180px;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
+            </div>
+            <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelTTTOnline()">✕ Cancel</button>`;
+        subscribeTTTOnline(gameRef.id);
+    } catch(e) {
+        showToast('Could not create game: ' + (e.message || e.code));
+        renderTTTModeSelect();
+    }
 }
 
 async function joinTTTOnline() {
     if (!me) { showToast('Sign in to play online!'); return; }
-    const code = prompt('Enter invite code:');
+    const code = prompt('Enter 6-letter invite code:');
     if (!code) return;
-    const snap = await db.collection('normgames').where(firebase.firestore.FieldPath.documentId(), '>=', '')
-        .get(); // get all and find by suffix
-    const doc = snap.docs.find(d => d.id.slice(-6).toUpperCase() === code.trim().toUpperCase());
-    if (!doc) { showToast('Game not found!'); return; }
-    if (doc.data().status !== 'waiting') { showToast('Game already started!'); return; }
-    await doc.ref.update({ 'players.O': me.uid, status: 'playing' });
-    tttOnlineGameId  = doc.id;
-    tttOnlineMySymbol = 'O';
-    tttSize = doc.data().size || 3;
-    subscribeTTTOnline(doc.id);
+    gc().innerHTML = `<div class="game-status">Finding game…</div>`;
+    try {
+        const snap = await db.collection('normgames')
+            .where('code', '==', code.trim().toUpperCase())
+            .where('type', '==', 'ttt')
+            .limit(1).get();
+        if (snap.empty) { showToast('Game not found! Check the code.'); renderTTTModeSelect(); return; }
+        const doc = snap.docs[0];
+        if (doc.data().status !== 'waiting') { showToast('Game already started!'); renderTTTModeSelect(); return; }
+        await doc.ref.update({ 'players.O': me.uid, status: 'playing' });
+        tttOnlineGameId   = doc.id;
+        tttOnlineMySymbol = 'O';
+        tttSize = doc.data().size || 3;
+        subscribeTTTOnline(doc.id);
+    } catch(e) {
+        showToast('Could not join game: ' + (e.message || e.code));
+        renderTTTModeSelect();
+    }
 }
 
 function subscribeTTTOnline(gameId) {
@@ -7932,35 +7948,52 @@ let chessOnlineUnsub = null, chessOnlineGameId = null, chessOnlineMyColor = null
 async function startChessOnline(role) {
     if (!me) { showToast('Sign in to play online!'); return; }
     if (role === 'host') {
-        const ref = await db.collection('normgames').add({
-            type: 'chess',
-            board: initChessBoard(),
-            turn: 'w', status: 'waiting',
-            players: { w: me.uid },
-            lastMove: null,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-        chessOnlineGameId  = ref.id;
-        chessOnlineMyColor = 'w';
-        gc().innerHTML = `
-            <div class="game-status">Waiting for opponent…</div>
-            <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;margin-top:10px;">
-                <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Share this invite code:</div>
-                <div style="font-size:22px;font-weight:800;color:var(--a2);letter-spacing:4px;">${ref.id.slice(-6).toUpperCase()}</div>
-                <button class="game-mode-btn" style="margin-top:10px;max-width:180px;" onclick="navigator.clipboard.writeText('${ref.id.slice(-6).toUpperCase()}');showToast('Code copied!')">📋 Copy code</button>
-            </div>
-            <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelChessOnline()">✕ Cancel</button>`;
-        subscribeChessOnline(ref.id);
+        const code = Math.random().toString(36).slice(2,8).toUpperCase();
+        gc().innerHTML = `<div class="game-status">Creating game…</div>`;
+        try {
+            const ref = await db.collection('normgames').add({
+                type: 'chess', code,
+                board: initChessBoard(),
+                turn: 'w', status: 'waiting',
+                players: { w: me.uid },
+                lastMove: null,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            chessOnlineGameId  = ref.id;
+            chessOnlineMyColor = 'w';
+            gc().innerHTML = `
+                <div class="game-status">Waiting for opponent…</div>
+                <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:center;margin-top:10px;">
+                    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Share this code with a friend:</div>
+                    <div style="font-size:32px;font-weight:800;color:var(--a2);letter-spacing:7px;font-family:monospace;">${code}</div>
+                    <button class="game-mode-btn" style="margin-top:12px;max-width:180px;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
+                </div>
+                <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelChessOnline()">✕ Cancel</button>`;
+            subscribeChessOnline(ref.id);
+        } catch(e) {
+            showToast('Could not create game: ' + (e.message || e.code));
+            renderChessModeSelect();
+        }
     } else {
-        const code = prompt('Enter invite code:');
+        const code = prompt('Enter 6-letter invite code:');
         if (!code) return;
-        const snap = await db.collection('normgames').where('type','==','chess').where('status','==','waiting').get();
-        const doc  = snap.docs.find(d => d.id.slice(-6).toUpperCase() === code.trim().toUpperCase());
-        if (!doc) { showToast('Game not found!'); return; }
-        await doc.ref.update({ 'players.b': me.uid, status: 'playing' });
-        chessOnlineGameId  = doc.id;
-        chessOnlineMyColor = 'b';
-        subscribeChessOnline(doc.id);
+        gc().innerHTML = `<div class="game-status">Finding game…</div>`;
+        try {
+            const snap = await db.collection('normgames')
+                .where('code', '==', code.trim().toUpperCase())
+                .where('type', '==', 'chess')
+                .limit(1).get();
+            if (snap.empty) { showToast('Game not found! Check the code.'); renderChessModeSelect(); return; }
+            const doc = snap.docs[0];
+            if (doc.data().status !== 'waiting') { showToast('Game already started!'); renderChessModeSelect(); return; }
+            await doc.ref.update({ 'players.b': me.uid, status: 'playing' });
+            chessOnlineGameId  = doc.id;
+            chessOnlineMyColor = 'b';
+            subscribeChessOnline(doc.id);
+        } catch(e) {
+            showToast('Could not join game: ' + (e.message || e.code));
+            renderChessModeSelect();
+        }
     }
 }
 
