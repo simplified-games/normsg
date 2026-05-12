@@ -1137,13 +1137,20 @@ exports.handler = async (event) => {
 
         /* Ping highlight in bubble */
         .ping-highlight {
-            background: rgba(167,139,250,0.25);
-            color: var(--a2); font-weight: 700;
-            border-radius: 4px; padding: 0 3px;
+            display: inline-block;
+            background: rgba(124,92,252,0.28);
+            color: #c4b5fd;
+            font-weight: 700;
+            border-radius: 6px;
+            padding: 1px 6px;
+            font-size: 0.92em;
+            letter-spacing: 0.01em;
+            border: 1px solid rgba(124,92,252,0.4);
         }
         .ping-highlight.me {
-            background: rgba(45,212,191,0.25);
-            color: var(--teal);
+            background: rgba(45,212,191,0.22);
+            color: #5eead4;
+            border-color: rgba(45,212,191,0.45);
         }
 
         /* ── SETTINGS MODAL ──────────────────────────────── */
@@ -6867,7 +6874,7 @@ document.addEventListener('click', e => {
 async function pinMessage(mid, pid, text) {
   if (!chatId) return;
   const col  = chatType === 'dm' ? 'conversations' : 'groups';
-  const snap = text ? null : await db.collection(col).doc(chatId).get();
+  const snap = await db.collection(col).doc(chatId).get();
   // Toggle: if same msg pinned, unpin
   const cur  = snap?.data()?.pinnedMsgId;
   if (cur === mid) { await unpinMessage(); return; }
