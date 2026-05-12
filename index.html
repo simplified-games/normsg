@@ -1612,6 +1612,102 @@ exports.handler = async (event) => {
         }
         .accent-swatch.active { border-color: white; transform: scale(1.15); }
         .accent-swatch:hover { transform: scale(1.1); }
+        /* ── NormGames ───────────────────────────────────────── */
+        .game-hub-card {
+            display:flex;align-items:center;gap:12px;
+            background:var(--panel);border:1px solid var(--border2);border-radius:14px;
+            padding:13px 15px;margin-bottom:9px;cursor:pointer;transition:all 0.18s;
+        }
+        .game-hub-card:hover { border-color:var(--a2);background:rgba(167,139,250,0.07); }
+        .game-hub-ico { font-size:26px;width:36px;text-align:center;flex-shrink:0; }
+        .game-hub-title { font-size:14px;font-weight:700;color:var(--text); }
+        .game-hub-sub   { font-size:11px;color:var(--muted);margin-top:2px; }
+
+        /* Game mode select */
+        .game-mode-btn {
+            display:flex;align-items:center;justify-content:center;gap:8px;
+            width:100%;padding:13px;border:1px solid var(--border2);border-radius:12px;
+            background:var(--panel);color:var(--text);font-family:'Figtree',sans-serif;
+            font-size:14px;font-weight:700;cursor:pointer;transition:all 0.18s;margin-bottom:10px;
+        }
+        .game-mode-btn:hover { border-color:var(--a2);background:rgba(167,139,250,0.09); }
+
+        /* Status badge */
+        .game-status {
+            text-align:center;font-size:14px;font-weight:700;color:var(--a2);
+            margin:10px 0;min-height:22px;
+        }
+
+        /* ── Tic-Tac-Toe ── */
+        .ttt-board {
+            display:grid;grid-template-columns:repeat(3,1fr);gap:8px;
+            margin:14px auto;max-width:280px;
+        }
+        .ttt-cell {
+            aspect-ratio:1;background:var(--panel);border:2px solid var(--border2);
+            border-radius:14px;font-size:42px;display:flex;align-items:center;
+            justify-content:center;cursor:pointer;transition:all 0.15s;user-select:none;
+        }
+        .ttt-cell:hover:not(.taken) { border-color:var(--a2);background:rgba(167,139,250,0.08); }
+        .ttt-cell.taken { cursor:default; }
+        .ttt-cell.win  { border-color:var(--teal);background:rgba(45,212,191,0.12); }
+
+        /* ── Chess ── */
+        .chess-wrap { display:flex;flex-direction:column;align-items:center;gap:10px; }
+        .chess-board {
+            display:grid;grid-template-columns:repeat(8,1fr);
+            border:2px solid var(--border2);border-radius:10px;overflow:hidden;
+            width:100%;max-width:360px;aspect-ratio:1;
+        }
+        .chess-sq {
+            display:flex;align-items:center;justify-content:center;
+            font-size:clamp(18px,4vw,34px);cursor:pointer;transition:background 0.1s;
+            user-select:none;position:relative;
+        }
+        .chess-sq.light { background:#2a2a3d; }
+        .chess-sq.dark  { background:#1a1a2c; }
+        .chess-sq.sel   { background:rgba(167,139,250,0.35) !important; }
+        .chess-sq.hint  { background:rgba(45,212,191,0.22) !important; }
+        .chess-sq.hint::after {
+            content:'';position:absolute;width:30%;height:30%;
+            background:rgba(45,212,191,0.55);border-radius:50%;
+        }
+        .chess-sq.last  { background:rgba(167,139,250,0.15) !important; }
+        .chess-sq.check { background:rgba(239,68,68,0.35) !important; }
+        .chess-labels { display:flex;justify-content:space-around;width:100%;max-width:360px;padding:0 2px; }
+        .chess-label  { font-size:10px;color:var(--muted);text-align:center;flex:1; }
+        .chess-taken  { font-size:12px;color:var(--muted);min-height:18px;text-align:center;letter-spacing:1px; }
+
+        /* ── Wordle ── */
+        .wordle-grid {
+            display:flex;flex-direction:column;gap:5px;align-items:center;margin:12px auto;
+        }
+        .wordle-row { display:flex;gap:5px; }
+        .wordle-tile {
+            width:52px;height:52px;border:2px solid var(--border2);border-radius:8px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:22px;font-weight:800;text-transform:uppercase;color:var(--text);
+            transition:background 0.3s,border-color 0.3s;
+        }
+        .wordle-tile.filled  { border-color:var(--border2); }
+        .wordle-tile.correct { background:#538d4e;border-color:#538d4e;color:#fff; }
+        .wordle-tile.present { background:#b59f3b;border-color:#b59f3b;color:#fff; }
+        .wordle-tile.absent  { background:#3a3a4c;border-color:#3a3a4c;color:#888; }
+        .wordle-kbd {
+            display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:14px;
+        }
+        .wordle-kbd-row { display:flex;gap:5px; }
+        .wordle-key {
+            background:var(--panel);border:1px solid var(--border2);border-radius:7px;
+            color:var(--text);font-family:'Figtree',sans-serif;font-size:12px;font-weight:700;
+            padding:10px 7px;min-width:28px;cursor:pointer;transition:all 0.15s;
+            text-transform:uppercase;
+        }
+        .wordle-key:hover { border-color:var(--a2); }
+        .wordle-key.correct { background:#538d4e;border-color:#538d4e;color:#fff; }
+        .wordle-key.present { background:#b59f3b;border-color:#b59f3b;color:#fff; }
+        .wordle-key.absent  { background:#3a3a4c;border-color:#3a3a4c;color:#555; }
+        .wordle-key.wide    { padding:10px 12px; }
     </style>
 </head>
 <body>
@@ -1619,6 +1715,17 @@ exports.handler = async (event) => {
 <div class="glow-a"></div>
 <div class="glow-b"></div>
 <div id="toast"></div>
+
+<!-- ── NORMGAMES OVERLAY ── -->
+<div id="gameOverlay" style="display:none;position:fixed;inset:0;z-index:800;background:var(--bg);flex-direction:column;align-items:center;overflow-y:auto;">
+    <div style="width:100%;max-width:560px;padding:16px 16px 40px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+            <button onclick="closeGame()" style="background:var(--panel);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit;">← Back</button>
+            <div id="gameTitle" style="font-size:17px;font-weight:800;color:var(--text);flex:1;"></div>
+        </div>
+        <div id="gameContent"></div>
+    </div>
+</div>
 <div id="annBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99998;
     display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;
     padding:12px 20px;font-family:'Figtree',sans-serif;font-size:13px;
@@ -2236,6 +2343,7 @@ exports.handler = async (event) => {
             <button class="tab on" id="tabDMs"     onclick="switchTab('dms')">DMs <span id="reqBadge" class="badge hidden">0</span></button>
             <button class="tab"    id="tabGroups"  onclick="switchTab('groups')">Groups</button>
             <button class="tab"    id="tabAI"      onclick="switchTab('ai')"><span class="ai-tab-icon">✦ AI</span></button>
+            <button class="tab"    id="tabGames"   onclick="switchTab('games')">🎮</button>
         </div>
 
         <!-- DMs panel -->
@@ -2292,6 +2400,36 @@ exports.handler = async (event) => {
             <div class="btm-bar" style="padding:10px 12px;gap:6px;">
                 <button class="ai-new-btn" id="aiNewBtn" onclick="createAIChat()">✦ New AI Chat</button>
                 <div class="ai-rate-bar" id="aiRateBar" style="padding:4px 2px 0;justify-content:center;"></div>
+            </div>
+        </div>
+
+        <!-- NormGames panel -->
+        <div id="gamesPanel" style="display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0;">
+            <div class="scr" style="flex:1;padding:14px 12px 10px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">NormGames</div>
+                <div id="gameHubCards">
+                    <div class="game-hub-card" onclick="openGame('ttt')">
+                        <div class="game-hub-ico">⬜</div>
+                        <div class="game-hub-info">
+                            <div class="game-hub-title">Tic-Tac-Toe</div>
+                            <div class="game-hub-sub">vs Player or AI</div>
+                        </div>
+                    </div>
+                    <div class="game-hub-card" onclick="openGame('chess')">
+                        <div class="game-hub-ico">♟</div>
+                        <div class="game-hub-info">
+                            <div class="game-hub-title">Chess</div>
+                            <div class="game-hub-sub">vs Player or AI</div>
+                        </div>
+                    </div>
+                    <div class="game-hub-card" onclick="openGame('wordle')">
+                        <div class="game-hub-ico">🟩</div>
+                        <div class="game-hub-info">
+                            <div class="game-hub-title">Wordle</div>
+                            <div class="game-hub-sub">Guess the 5-letter word</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -3345,14 +3483,16 @@ el.appendChild(d);
 
 // ── TABS ───────────────────────────────────────────────────
 function switchTab(t) {
-const dms = t==='dms', grp = t==='groups', ai = t==='ai';
+const dms = t==='dms', grp = t==='groups', ai = t==='ai', gms = t==='games';
 currentSidebarTab = t;
 document.getElementById('tabDMs').classList.toggle('on', dms);
 document.getElementById('tabGroups').classList.toggle('on', grp);
 document.getElementById('tabAI').classList.toggle('on', ai);
+document.getElementById('tabGames').classList.toggle('on', gms);
 document.getElementById('dmsPanel').style.display    = dms ? 'flex' : 'none';
 document.getElementById('groupsPanel').style.display = grp ? 'flex' : 'none';
 document.getElementById('aiPanel').style.display     = ai  ? 'flex' : 'none';
+document.getElementById('gamesPanel').style.display  = gms ? 'flex' : 'none';
 if (dms) scheduleStatusesRefresh();
 if (ai) { renderAIChats(); updateAIRateBar(); }
 }
@@ -7136,7 +7276,528 @@ function playMsgSound(type = 'receive') {
   } catch {}
 }
 
-// ── Init all appearance on load ───────────────────────────
+
+// ══════════════════════════════════════════════════════════════
+// ── NORMGAMES ─────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+
+let activeGame = null;
+
+function openGame(game) {
+    activeGame = game;
+    const overlay = document.getElementById('gameOverlay');
+    overlay.style.display = 'flex';
+    const titles = { ttt:'Tic-Tac-Toe', chess:'Chess', wordle:'Wordle' };
+    document.getElementById('gameTitle').textContent = titles[game] || game;
+    if (game === 'ttt')    renderTTTModeSelect();
+    if (game === 'chess')  renderChessModeSelect();
+    if (game === 'wordle') initWordle();
+}
+
+function closeGame() {
+    document.getElementById('gameOverlay').style.display = 'none';
+    document.getElementById('gameContent').innerHTML = '';
+    activeGame = null;
+    if (chessAITimer) { clearTimeout(chessAITimer); chessAITimer = null; }
+}
+
+// ── Shared helpers ────────────────────────────────────────────
+function gc() { return document.getElementById('gameContent'); }
+
+// ══════════════════════════════════════════════════════════════
+// TIC-TAC-TOE
+// ══════════════════════════════════════════════════════════════
+let tttBoard, tttTurn, tttMode, tttDone;
+
+function renderTTTModeSelect() {
+    gc().innerHTML = `
+        <div style="margin-bottom:6px;color:var(--muted);font-size:12px;text-align:center;">Choose mode</div>
+        <button class="game-mode-btn" onclick="startTTT('pvp')">👤 vs Player (local)</button>
+        <button class="game-mode-btn" onclick="startTTT('ai')">🤖 vs AI</button>`;
+}
+
+function startTTT(mode) {
+    tttBoard = Array(9).fill('');
+    tttTurn  = 'X';
+    tttMode  = mode;
+    tttDone  = false;
+    renderTTT();
+}
+
+function renderTTT() {
+    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    const winLine = wins.find(l => tttBoard[l[0]] && tttBoard[l[0]]===tttBoard[l[1]] && tttBoard[l[1]]===tttBoard[l[2]]);
+    const winner  = winLine ? tttBoard[winLine[0]] : null;
+    const draw    = !winner && tttBoard.every(c => c);
+    const aiTurn  = tttMode === 'ai' && tttTurn === 'O' && !winner && !draw;
+    let status = '';
+    if (winner)     status = `${winner === 'X' ? '❌' : '⭕'} ${winner} wins!`;
+    else if (draw)  status = '🤝 Draw!';
+    else if (aiTurn)status = '🤖 AI is thinking…';
+    else            status = `${tttTurn === 'X' ? '❌' : '⭕'} ${tttTurn}'s turn`;
+
+    gc().innerHTML = `
+        <div style="text-align:center;margin-bottom:6px;">
+            <button class="game-mode-btn" style="display:inline-flex;width:auto;padding:7px 18px;font-size:12px;margin:0;" onclick="renderTTTModeSelect()">← Change mode</button>
+        </div>
+        <div class="game-status">${status}</div>
+        <div class="ttt-board" id="tttBoard"></div>
+        ${(winner||draw) ? `<button class="game-mode-btn" style="max-width:200px;margin:10px auto;" onclick="startTTT('${tttMode}')">▶ Play again</button>` : ''}`;
+
+    const board = document.getElementById('tttBoard');
+    tttBoard.forEach((cell, i) => {
+        const sq = document.createElement('div');
+        sq.className = 'ttt-cell' + (cell ? ' taken' : '') + (winLine && winLine.includes(i) ? ' win' : '');
+        sq.textContent = cell === 'X' ? '❌' : cell === 'O' ? '⭕' : '';
+        sq.onclick = () => tttClick(i);
+        board.appendChild(sq);
+    });
+
+    if (aiTurn) setTimeout(tttAIMove, 400);
+}
+
+function tttClick(i) {
+    if (tttDone || tttBoard[i]) return;
+    if (tttMode === 'ai' && tttTurn === 'O') return;
+    tttBoard[i] = tttTurn;
+    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    const won  = wins.some(l => tttBoard[l[0]] && tttBoard[l[0]]===tttBoard[l[1]] && tttBoard[l[1]]===tttBoard[l[2]]);
+    const draw = !won && tttBoard.every(c => c);
+    if (won || draw) tttDone = true;
+    else tttTurn = tttTurn === 'X' ? 'O' : 'X';
+    renderTTT();
+}
+
+function tttAIMove() {
+    const best = tttMinimax(tttBoard, 'O');
+    tttBoard[best.idx] = 'O';
+    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    const won  = wins.some(l => tttBoard[l[0]] && tttBoard[l[0]]===tttBoard[l[1]] && tttBoard[l[1]]===tttBoard[l[2]]);
+    const draw = !won && tttBoard.every(c => c);
+    if (won || draw) tttDone = true;
+    else tttTurn = 'X';
+    renderTTT();
+}
+
+function tttMinimax(board, player) {
+    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    const check = p => wins.some(l => board[l[0]]===p && board[l[1]]===p && board[l[2]]===p);
+    if (check('O')) return { score: 10 };
+    if (check('X')) return { score: -10 };
+    const empty = board.map((v,i)=>v?-1:i).filter(i=>i>=0);
+    if (!empty.length) return { score: 0 };
+    const moves = empty.map(i => {
+        const b = [...board]; b[i] = player;
+        const s = tttMinimax(b, player === 'O' ? 'X' : 'O').score;
+        return { idx: i, score: s };
+    });
+    return moves.reduce((a, b) => player === 'O' ? (b.score > a.score ? b : a) : (b.score < a.score ? b : a));
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHESS
+// ══════════════════════════════════════════════════════════════
+let chessBoard, chessMode, chessTurn, chessSelected, chessValidMoves, chessLastMove, chessAITimer, chessGameOver;
+
+const CHESS_PIECES = {
+    'wK':'♔','wQ':'♕','wR':'♖','wB':'♗','wN':'♘','wP':'♙',
+    'bK':'♚','bQ':'♛','bR':'♜','bB':'♝','bN':'♞','bP':'♟'
+};
+
+function initChessBoard() {
+    const back = ['R','N','B','Q','K','B','N','R'];
+    const b = [];
+    for (let r=0; r<8; r++) {
+        b.push([]);
+        for (let c=0; c<8; c++) {
+            if (r===0) b[r].push('b'+back[c]);
+            else if (r===1) b[r].push('bP');
+            else if (r===6) b[r].push('wP');
+            else if (r===7) b[r].push('w'+back[c]);
+            else b[r].push(null);
+        }
+    }
+    return b;
+}
+
+function renderChessModeSelect() {
+    gc().innerHTML = `
+        <div style="margin-bottom:6px;color:var(--muted);font-size:12px;text-align:center;">Choose mode</div>
+        <button class="game-mode-btn" onclick="startChess('pvp')">👤 vs Player (local)</button>
+        <button class="game-mode-btn" onclick="startChess('ai')">🤖 vs AI (you play White)</button>`;
+}
+
+function startChess(mode) {
+    chessBoard     = initChessBoard();
+    chessMode      = mode;
+    chessTurn      = 'w';
+    chessSelected  = null;
+    chessValidMoves= [];
+    chessLastMove  = null;
+    chessGameOver  = false;
+    if (chessAITimer) clearTimeout(chessAITimer);
+    renderChess();
+}
+
+function renderChess() {
+    const isAIThinking = chessMode === 'ai' && chessTurn === 'b' && !chessGameOver;
+    const turnLabel = chessGameOver ? '' : (chessTurn === 'w' ? '⬜ White' : '⬛ Black') + (chessMode==='ai' && chessTurn==='b' ? ' (AI)' : '') + "'s turn";
+
+    // Captured pieces display
+    const allPieces = ['wQ','wR','wR','wB','wB','wN','wN','wP','wP','wP','wP','wP','wP','wP','wP',
+                       'bQ','bR','bR','bB','bB','bN','bN','bP','bP','bP','bP','bP','bP','bP','bP'];
+    const onBoard = chessBoard.flat().filter(Boolean);
+    const captured = [...allPieces];
+    onBoard.forEach(p => { const idx = captured.indexOf(p); if (idx !== -1) captured.splice(idx,1); });
+    const wCap = captured.filter(p=>p[0]==='w').map(p=>CHESS_PIECES[p]).join('');
+    const bCap = captured.filter(p=>p[0]==='b').map(p=>CHESS_PIECES[p]).join('');
+
+    gc().innerHTML = `
+        <div style="text-align:center;margin-bottom:6px;">
+            <button class="game-mode-btn" style="display:inline-flex;width:auto;padding:7px 18px;font-size:12px;margin:0;" onclick="renderChessModeSelect()">← Change mode</button>
+        </div>
+        <div class="chess-wrap">
+            <div class="chess-taken">${bCap || '&nbsp;'}</div>
+            <div class="game-status" id="chessStatus">${turnLabel}</div>
+            <div class="chess-board" id="chessBoard"></div>
+            <div class="chess-labels"><span class="chess-label">a</span><span class="chess-label">b</span><span class="chess-label">c</span><span class="chess-label">d</span><span class="chess-label">e</span><span class="chess-label">f</span><span class="chess-label">g</span><span class="chess-label">h</span></div>
+            <div class="chess-taken">${wCap || '&nbsp;'}</div>
+            ${chessGameOver ? `<button class="game-mode-btn" style="max-width:200px;margin:4px auto;" onclick="startChess('${chessMode}')">▶ Play again</button>` : ''}
+        </div>`;
+
+    const boardEl = document.getElementById('chessBoard');
+    const inCheck = chessKingInCheck(chessBoard, chessTurn);
+    const kingPos = findKing(chessBoard, chessTurn);
+
+    for (let r=0; r<8; r++) {
+        for (let c=0; c<8; c++) {
+            const sq = document.createElement('div');
+            const isLight = (r+c)%2===0;
+            let cls = 'chess-sq ' + (isLight ? 'light' : 'dark');
+            if (chessSelected && chessSelected[0]===r && chessSelected[1]===c) cls += ' sel';
+            else if (chessValidMoves.some(m=>m[0]===r&&m[1]===c)) cls += ' hint';
+            else if (chessLastMove && ((chessLastMove[0]===r&&chessLastMove[1]===c)||(chessLastMove[2]===r&&chessLastMove[3]===c))) cls += ' last';
+            if (inCheck && kingPos && kingPos[0]===r && kingPos[1]===c) cls += ' check';
+            sq.className = cls;
+            const piece = chessBoard[r][c];
+            sq.textContent = piece ? CHESS_PIECES[piece] : '';
+            sq.onclick = () => chessClick(r, c);
+            boardEl.appendChild(sq);
+        }
+    }
+
+    if (isAIThinking && !chessGameOver) {
+        chessAITimer = setTimeout(chessDoAI, 300);
+    }
+}
+
+function chessClick(r, c) {
+    if (chessGameOver) return;
+    if (chessMode === 'ai' && chessTurn === 'b') return;
+    const piece = chessBoard[r][c];
+
+    if (chessSelected) {
+        const isMove = chessValidMoves.some(m=>m[0]===r&&m[1]===c);
+        if (isMove) {
+            chessApplyMove(chessSelected[0], chessSelected[1], r, c);
+            return;
+        }
+    }
+
+    if (piece && piece[0] === chessTurn) {
+        chessSelected   = [r, c];
+        chessValidMoves = chessGetValidMoves(chessBoard, r, c, chessTurn);
+    } else {
+        chessSelected   = null;
+        chessValidMoves = [];
+    }
+    renderChess();
+}
+
+function chessApplyMove(fr, fc, tr, tc, board) {
+    const b = board || chessBoard;
+    const piece = b[fr][fc];
+    const newBoard = b.map(row=>[...row]);
+    // Pawn promotion
+    if (piece === 'wP' && tr === 0) newBoard[tr][tc] = 'wQ';
+    else if (piece === 'bP' && tr === 7) newBoard[tr][tc] = 'bQ';
+    else newBoard[tr][tc] = piece;
+    newBoard[fr][fc] = null;
+    if (board) return newBoard;
+    chessBoard    = newBoard;
+    chessLastMove = [fr, fc, tr, tc];
+    chessSelected  = null;
+    chessValidMoves = [];
+    // Check for checkmate/stalemate
+    const nextTurn = chessTurn === 'w' ? 'b' : 'w';
+    chessTurn = nextTurn;
+    const allMoves = chessAllMoves(chessBoard, nextTurn);
+    if (!allMoves.length) {
+        const inCheck = chessKingInCheck(chessBoard, nextTurn);
+        const statusEl = document.getElementById('chessStatus');
+        chessGameOver = true;
+        if (inCheck) {
+            const winner = nextTurn === 'w' ? 'Black' : 'White';
+            if (statusEl) statusEl.textContent = `♟ Checkmate! ${winner} wins!`;
+        } else {
+            if (statusEl) statusEl.textContent = '🤝 Stalemate! Draw.';
+        }
+    }
+    renderChess();
+}
+
+function chessGetValidMoves(board, r, c, color) {
+    const piece = board[r][c];
+    if (!piece || piece[0] !== color) return [];
+    const raw = chessRawMoves(board, r, c);
+    // Filter moves that leave own king in check
+    return raw.filter(([tr, tc]) => {
+        const nb = chessApplyMove(r, c, tr, tc, board);
+        return !chessKingInCheck(nb, color);
+    });
+}
+
+function chessRawMoves(board, r, c) {
+    const piece = board[r][c]; if (!piece) return [];
+    const color = piece[0], type = piece[1];
+    const moves = [];
+    const inBounds = (r,c) => r>=0&&r<8&&c>=0&&c<8;
+    const enemy    = (r,c) => inBounds(r,c) && board[r][c] && board[r][c][0]!==color;
+    const empty    = (r,c) => inBounds(r,c) && !board[r][c];
+    const free     = (r,c) => empty(r,c) || enemy(r,c);
+
+    const slide = (dirs) => dirs.forEach(([dr,dc]) => {
+        let nr=r+dr, nc=c+dc;
+        while(inBounds(nr,nc)) {
+            if (board[nr][nc]) { if (board[nr][nc][0]!==color) moves.push([nr,nc]); break; }
+            moves.push([nr,nc]); nr+=dr; nc+=dc;
+        }
+    });
+
+    if (type==='P') {
+        const dir = color==='w' ? -1 : 1;
+        const start = color==='w' ? 6 : 1;
+        if (empty(r+dir,c))   { moves.push([r+dir,c]); if (r===start && empty(r+2*dir,c)) moves.push([r+2*dir,c]); }
+        if (enemy(r+dir,c-1)) moves.push([r+dir,c-1]);
+        if (enemy(r+dir,c+1)) moves.push([r+dir,c+1]);
+    } else if (type==='N') {
+        [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(([dr,dc]) => { if (free(r+dr,c+dc)) moves.push([r+dr,c+dc]); });
+    } else if (type==='B') {
+        slide([[-1,-1],[-1,1],[1,-1],[1,1]]);
+    } else if (type==='R') {
+        slide([[-1,0],[1,0],[0,-1],[0,1]]);
+    } else if (type==='Q') {
+        slide([[-1,-1],[-1,1],[1,-1],[1,1],[-1,0],[1,0],[0,-1],[0,1]]);
+    } else if (type==='K') {
+        [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]].forEach(([dr,dc]) => { if (free(r+dr,c+dc)) moves.push([r+dr,c+dc]); });
+    }
+    return moves;
+}
+
+function findKing(board, color) {
+    for (let r=0; r<8; r++) for (let c=0; c<8; c++) if (board[r][c]===color+'K') return [r,c];
+    return null;
+}
+
+function chessKingInCheck(board, color) {
+    const king = findKing(board, color);
+    if (!king) return false;
+    const opp = color==='w' ? 'b' : 'w';
+    for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
+        if (board[r][c]?.[0]===opp) {
+            if (chessRawMoves(board,r,c).some(([tr,tc])=>tr===king[0]&&tc===king[1])) return true;
+        }
+    }
+    return false;
+}
+
+function chessAllMoves(board, color) {
+    const moves = [];
+    for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
+        if (board[r][c]?.[0]===color) {
+            chessGetValidMoves(board,r,c,color).forEach(([tr,tc]) => moves.push([r,c,tr,tc]));
+        }
+    }
+    return moves;
+}
+
+// Simple piece-value eval for AI
+const CHESS_VALUES = { P:100, N:320, B:330, R:500, Q:900, K:20000 };
+const CHESS_PST = { // Piece-square tables (pawn, knight encouragements)
+    P: [0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10, 5,5,10,25,25,10,5,5, 0,0,0,20,20,0,0,0, 5,-5,-10,0,0,-10,-5,5, 5,10,10,-20,-20,10,10,5, 0,0,0,0,0,0,0,0],
+    N: [-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,0,0,0,-20,-40,-30,0,10,15,15,10,0,-30,-30,5,15,20,20,15,5,-30,-30,0,15,20,20,15,0,-30,-30,5,10,15,15,10,5,-30,-40,-20,0,5,5,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50],
+};
+
+function chessEval(board) {
+    let score = 0;
+    for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
+        const p = board[r][c]; if (!p) continue;
+        const color=p[0], type=p[1];
+        const val = CHESS_VALUES[type] || 0;
+        const pst = CHESS_PST[type];
+        const idx = color==='w' ? (r*8+c) : ((7-r)*8+c);
+        const pos = pst ? (pst[idx]||0) : 0;
+        score += (color==='w' ? 1 : -1) * (val + pos);
+    }
+    return score;
+}
+
+function chessMinimax(board, depth, alpha, beta, maximizing) {
+    const color = maximizing ? 'b' : 'w';
+    const moves = chessAllMoves(board, color);
+    if (depth === 0 || !moves.length) return chessEval(board);
+    if (maximizing) {
+        let best = -Infinity;
+        for (const [fr,fc,tr,tc] of moves) {
+            const nb = chessApplyMove(fr,fc,tr,tc,board);
+            best = Math.max(best, chessMinimax(nb, depth-1, alpha, beta, false));
+            alpha = Math.max(alpha, best);
+            if (beta <= alpha) break;
+        }
+        return best;
+    } else {
+        let best = Infinity;
+        for (const [fr,fc,tr,tc] of moves) {
+            const nb = chessApplyMove(fr,fc,tr,tc,board);
+            best = Math.min(best, chessMinimax(nb, depth-1, alpha, beta, true));
+            beta = Math.min(beta, best);
+            if (beta <= alpha) break;
+        }
+        return best;
+    }
+}
+
+function chessDoAI() {
+    if (chessGameOver || chessTurn !== 'b') return;
+    const moves = chessAllMoves(chessBoard, 'b');
+    if (!moves.length) { renderChess(); return; }
+    let best = -Infinity, bestMove = moves[0];
+    for (const [fr,fc,tr,tc] of moves) {
+        const nb = chessApplyMove(fr,fc,tr,tc,chessBoard);
+        const score = chessMinimax(nb, 2, -Infinity, Infinity, false);
+        if (score > best) { best = score; bestMove = [fr,fc,tr,tc]; }
+    }
+    chessApplyMove(...bestMove);
+}
+
+// ══════════════════════════════════════════════════════════════
+// WORDLE
+// ══════════════════════════════════════════════════════════════
+const WORDLE_WORDS = ['crane','slate','trace','crate','least','raise','arise','irate','stare','snare','share','spare','flare','glare','blare','stale','shale','whale','swale','scale','table','fable','sable','cable','maple','staple','ample','apple','angle','ankle','cycle','style','smile','while','shrine','thrive','drive','strive','alive','olive','gripe','tripe','swipe','snipe','spine','shine','whine','twine','brine','crime','prime','grime','climb','clime','slime','chime','rhyme','thyme','clyde','clove','drove','grove','prove','trove','shove','above','glove','stove','score','store','shore','snore','swore','chore','adore','spore','more','bore','core','fore','gore','lore','pore','sore','wore','yore','sport','short','snort','abort','exert','inert','overt','avert','divert','revert','covert','avert','asset','beset','reset','unset','onset','baste','caste','haste','paste','taste','waste','blaze','craze','glaze','graze','faze','gaze','haze','maze','raze','daze','phase','chase','blase','erase','grease','lease','cease','tease','please','peace','place','grace','space','brace','trace','price','slice','twice','spice','since','mince','wince','prince','fence','hence','pence','sense','dense','tense','scene','green','queen','sheen','preen','screen','been','keen','teen','seen','keen','mean','lean','bean','dean','jean','pean','wean','clean','glean','ocean','peach','beach','reach','teach','leach','bleach','breach','each','preach','steal','teal','deal','heal','meal','real','seal','veal','zeal','kneel','wheel','steel','creel','sleet','beet','feet','greet','meet','sheet','sweet','fleet','tweet','bleat','cheat','pleat','treat','wheat','great','sweat','bread','dread','spread','tread','read','bead','dead','head','lead','shed','sled','fled','bled','bred','Fred','cred','dread','stead','ahead','deaf','leaf','loaf','goaf','staff','quaff','gruff','stuff','bluff','fluff','snuff','scuff','buff','cuff','duff','huff','muff','puff','ruff','tuft','craft','draft','drift','shift','lift','gift','rift','sift','swift','fifth','sixth','width','depth','north','south','birth','earth','worth','forth','mouth','youth','truth','booth','tooth','tooth','youth','cloth','broth','froth','sloth','moth','both','growth','grove','croup','droop','group','snoop','swoop','troop','whoop','scoop','bloom','broom','gloom','groom','vroom','ploom','spoon','croon','swoon','prune','flute','brute','route','grout','trout','snout','scout','shout','clout','about','doubt','devout','sprout','brown','crown','drown','frown','grown','known','blown','gown','down','own','town','shown','sown','loan','groan','moan','roan','moon','boon','loon','noon','soon','boo','coo','moo','goo','hoop','loop','moop','poop','roof','hoof','aloof','proof','spoof','food','brood','flood','mood','wood','good','book','cook','hook','look','nook','rook','took','wool','pool','fool','cool','tool','drool','spool','stool','school'];
+const WORDLE_ANSWERS = ['crane','slate','trace','raise','stare','share','score','store','place','grace','space','brace','price','slice','spice','since','scene','green','queen','sheen','steal','beach','reach','teach','bread','dread','craft','draft','shift','swift','north','south','earth','worth','group','bloom','broom','spoon','flute','brute','route','brown','crown','frown','known','bloom','proof','flood','stool','school','snare','spare','flare','scale','style','smile','shine','crime','prime','drove','grove','prove','shore','snore','sport','short','reset','haste','paste','taste','blaze','craze','glaze','chase','erase','tense','dense','ocean','peach','wheel','steel','great','wheat','treat','cheat','sweat','staff','stuff','bluff','depth','width','birth','mouth','youth','truth','cloth','broth','sloth','growth','scoop','croon','swoon','snout','scout','shout','about','doubt','sprout'];
+
+let wordleAnswer, wordleGuesses, wordleCurrent, wordleDone;
+
+function initWordle() {
+    const today = new Date();
+    const seed  = today.getFullYear()*10000 + (today.getMonth()+1)*100 + today.getDate();
+    wordleAnswer  = WORDLE_ANSWERS[seed % WORDLE_ANSWERS.length];
+    wordleGuesses = [];
+    wordleCurrent = '';
+    wordleDone    = false;
+    renderWordle();
+}
+
+function renderWordle() {
+    const maxGuesses = 6;
+    let status = '';
+    const lastGuess = wordleGuesses[wordleGuesses.length-1];
+    if (lastGuess === wordleAnswer) { status = '🎉 Genius! You got it!'; }
+    else if (wordleGuesses.length >= maxGuesses) { status = `💀 The word was: ${wordleAnswer.toUpperCase()}`; }
+    else { status = `Guess ${wordleGuesses.length+1}/6`; }
+
+    let gridHTML = '<div class="wordle-grid">';
+    for (let g=0; g<maxGuesses; g++) {
+        gridHTML += '<div class="wordle-row">';
+        for (let l=0; l<5; l++) {
+            let cls = 'wordle-tile', ch = '';
+            if (g < wordleGuesses.length) {
+                const guess = wordleGuesses[g];
+                ch = guess[l] || '';
+                // Coloring logic
+                const ansArr = wordleAnswer.split('');
+                const result = Array(5).fill('absent');
+                const used   = Array(5).fill(false);
+                // First pass: correct
+                for (let i=0; i<5; i++) { if (guess[i]===ansArr[i]) { result[i]='correct'; used[i]=true; } }
+                // Second pass: present
+                for (let i=0; i<5; i++) {
+                    if (result[i]==='correct') continue;
+                    for (let j=0; j<5; j++) { if (!used[j] && guess[i]===ansArr[j]) { result[i]='present'; used[j]=true; break; } }
+                }
+                cls += ' ' + result[l];
+            } else if (g === wordleGuesses.length && !wordleDone) {
+                ch = wordleCurrent[l] || '';
+                if (ch) cls += ' filled';
+            }
+            gridHTML += `<div class="${cls}">${ch.toUpperCase()}</div>`;
+        }
+        gridHTML += '</div>';
+    }
+    gridHTML += '</div>';
+
+    // Keyboard state
+    const keyState = {};
+    wordleGuesses.forEach(guess => {
+        const ansArr = wordleAnswer.split('');
+        const result = Array(5).fill('absent');
+        const used   = Array(5).fill(false);
+        for (let i=0; i<5; i++) { if (guess[i]===ansArr[i]) { result[i]='correct'; used[i]=true; } }
+        for (let i=0; i<5; i++) {
+            if (result[i]==='correct') continue;
+            for (let j=0; j<5; j++) { if (!used[j] && guess[i]===ansArr[j]) { result[i]='present'; used[j]=true; break; } }
+        }
+        guess.split('').forEach((ch,i) => {
+            const prev = keyState[ch];
+            if (!prev || (prev==='absent') || (prev==='present'&&result[i]==='correct')) keyState[ch]=result[i];
+        });
+    });
+
+    const rows = [['q','w','e','r','t','y','u','i','o','p'],['a','s','d','f','g','h','j','k','l'],['↵','z','x','c','v','b','n','m','⌫']];
+    let kbdHTML = '<div class="wordle-kbd">';
+    rows.forEach(row => {
+        kbdHTML += '<div class="wordle-kbd-row">';
+        row.forEach(k => {
+            const state = keyState[k] || '';
+            const wide  = k==='↵'||k==='⌫' ? ' wide' : '';
+            kbdHTML += `<button class="wordle-key${wide}${state?' '+state:''}" onclick="wordleKey('${k}')">${k.toUpperCase()}</button>`;
+        });
+        kbdHTML += '</div>';
+    });
+    kbdHTML += '</div>';
+
+    gc().innerHTML = `
+        <div class="game-status">${status}</div>
+        ${gridHTML}
+        ${!wordleDone ? kbdHTML : `<button class="game-mode-btn" style="max-width:200px;margin:14px auto;" onclick="initWordle()">▶ New game</button>`}`;
+
+    if (lastGuess === wordleAnswer || wordleGuesses.length >= maxGuesses) wordleDone = true;
+}
+
+function wordleKey(k) {
+    if (wordleDone) return;
+    if (k === '⌫') { wordleCurrent = wordleCurrent.slice(0,-1); }
+    else if (k === '↵') {
+        if (wordleCurrent.length < 5) { showToast('Not enough letters!'); return; }
+        const valid = WORDLE_WORDS.includes(wordleCurrent) || WORDLE_ANSWERS.includes(wordleCurrent);
+        if (!valid) { showToast('Not in word list!'); return; }
+        wordleGuesses.push(wordleCurrent);
+        wordleCurrent = '';
+    } else {
+        if (wordleCurrent.length < 5) wordleCurrent += k.toLowerCase();
+    }
+    renderWordle();
+}
+
+// Also allow physical keyboard for Wordle
+document.addEventListener('keydown', e => {
+    if (activeGame !== 'wordle' || wordleDone) return;
+    if (e.key === 'Backspace') wordleKey('⌫');
+    else if (e.key === 'Enter') wordleKey('↵');
+    else if (/^[a-zA-Z]$/.test(e.key)) wordleKey(e.key.toLowerCase());
+});
+
+
 document.addEventListener('DOMContentLoaded', () => {
   loadAppearance();
   buildAccentSwatches();
