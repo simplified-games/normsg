@@ -7802,61 +7802,126 @@ function chessAllMoves(board, color) {
     return moves;
 }
 
-// Simple piece-value eval for AI
+// ── Chess AI — full PSTs, move ordering, quiescence, depth 4 ──
 const CHESS_VALUES = { P:100, N:320, B:330, R:500, Q:900, K:20000 };
-const CHESS_PST = { // Piece-square tables (pawn, knight encouragements)
-    P: [0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10, 5,5,10,25,25,10,5,5, 0,0,0,20,20,0,0,0, 5,-5,-10,0,0,-10,-5,5, 5,10,10,-20,-20,10,10,5, 0,0,0,0,0,0,0,0],
-    N: [-50,-40,-30,-30,-30,-30,-40,-50,-40,-20,0,0,0,0,-20,-40,-30,0,10,15,15,10,0,-30,-30,5,15,20,20,15,5,-30,-30,0,15,20,20,15,0,-30,-30,5,10,15,15,10,5,-30,-40,-20,0,5,5,0,-20,-40,-50,-40,-30,-30,-30,-30,-40,-50],
+const CHESS_PST = {
+    P: [ 0,  0,  0,  0,  0,  0,  0,  0,
+        78, 83, 86, 73,102, 82, 85, 90,
+         7, 29, 21, 44, 40, 31, 44,  7,
+       -17, 16, -2, 15, 14,  0, 15,-13,
+       -26,  3, 10,  9,  6,  1,  0,-23,
+       -22,  9,  5,-11,-10, -2,  3,-19,
+       -31,  8, -7,-37,-36,-14,  3,-31,
+         0,  0,  0,  0,  0,  0,  0,  0],
+    N: [-66,-53,-75,-75,-10,-55,-58,-70,
+        -3, -6,100,-36,  4, 62, -4,-14,
+        10, 67,  1, 74, 73, 27, 62, -2,
+        24, 24, 45, 37, 33, 41, 25, 17,
+        -1,  5, 31, 21, 22, 35,  2,  0,
+       -18, 10, 13, 22, 18, 15, 11,-14,
+       -23,-15,  2,  0,  2,  0,-23,-20,
+       -74,-23,-26,-24,-19,-35,-22,-69],
+    B: [-59,-78,-82,-76,-23,-107,-37,-50,
+       -11, 20, 35,-42,-39, 31,  2,-22,
+        -9, 39,-32, 41, 52,-10, 28,-14,
+        25, 17, 20, 34, 26, 25, 15, 10,
+        13, 10, 17, 23, 17, 16,  0,  7,
+        14, 25, 24, 15,  8, 25, 20, 15,
+        19, 20, 11,  6,  7,  6, 20, 16,
+        -7,  2,-15,-12,-14,-15,-10,-10],
+    R: [ 35, 29, 33,  4, 37, 33, 56, 50,
+        55, 29, 56, 67, 55, 62, 34, 60,
+        19, 35, 28, 33, 45, 27, 25, 15,
+         0,  5, 16, 13, 18, -4, -9, -6,
+       -28,-35,-16,-21,-13,-29,-46,-30,
+       -42,-28,-42,-25,-25,-35,-26,-46,
+       -53,-38,-31,-26,-29,-43,-44,-53,
+       -30,-24,-18,  5, -2,-18,-31,-32],
+    Q: [  6,  1, -8,-104, 69, 24, 88, 26,
+        14, 32, 60,-10, 20, 76, 57, 24,
+        -2, 43, 32, 60, 72, 63, 43,  2,
+         1,-16, 22, 17, 25, 20,-13, -6,
+       -14,-15, -2, -5, -1,-10,-20,-22,
+       -30, -6,-13,-11,-16,-11,-16,-27,
+       -36,-18,  0,-19,-15,-15,-21,-38,
+       -39,-30,-31,-13,-31,-36,-34,-42],
+    K: [  4, 54, 47,-99,-99, 60, 83,-62,
+       -32, 10, 55, 56, 56, 55, 10,  3,
+       -62, 12,-57, 44,-67, 28, 37,-31,
+       -55, 50, 11, -4,-19, 13,  0,-49,
+       -55,-43,-52,-28,-51,-47, -8,-50,
+       -47,-42,-43,-79,-64,-32,-29,-32,
+        -4,  3,-14,-50,-57,-18, 13,  4,
+        17, 30, -3,-14,  6, -1, 40, 18],
 };
 
 function chessEval(board) {
-    let score = 0;
+    let score = 0, wMob = 0, bMob = 0, wBish = 0, bBish = 0;
     for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
         const p = board[r][c]; if (!p) continue;
         const color=p[0], type=p[1];
-        const val = CHESS_VALUES[type] || 0;
+        const val = CHESS_VALUES[type]||0;
         const pst = CHESS_PST[type];
-        const idx = color==='w' ? (r*8+c) : ((7-r)*8+c);
+        const idx = color==='w' ? r*8+c : (7-r)*8+c;
         const pos = pst ? (pst[idx]||0) : 0;
-        score += (color==='w' ? 1 : -1) * (val + pos);
+        const mob = chessRawMoves(board,r,c).length;
+        if (color==='w') { wMob+=mob; if(type==='B') wBish++; }
+        else             { bMob+=mob; if(type==='B') bBish++; }
+        score += (color==='w'?1:-1) * (val+pos);
     }
+    if (wBish>=2) score+=30;
+    if (bBish>=2) score-=30;
+    score += (wMob-bMob)*2;
     return score;
 }
 
-function chessMinimax(board, depth, alpha, beta, maximizing) {
-    const color = maximizing ? 'b' : 'w';
-    const moves = chessAllMoves(board, color);
-    if (depth === 0 || !moves.length) return chessEval(board);
-    if (maximizing) {
-        let best = -Infinity;
-        for (const [fr,fc,tr,tc] of moves) {
-            const nb = chessApplyMove(fr,fc,tr,tc,board);
-            best = Math.max(best, chessMinimax(nb, depth-1, alpha, beta, false));
-            alpha = Math.max(alpha, best);
-            if (beta <= alpha) break;
-        }
-        return best;
-    } else {
-        let best = Infinity;
-        for (const [fr,fc,tr,tc] of moves) {
-            const nb = chessApplyMove(fr,fc,tr,tc,board);
-            best = Math.min(best, chessMinimax(nb, depth-1, alpha, beta, true));
-            beta = Math.min(beta, best);
-            if (beta <= alpha) break;
-        }
-        return best;
+function chessOrderMoves(board, moves) {
+    return moves.slice().sort((a,b)=>{
+        const capA = board[a[2]][a[3]] ? (CHESS_VALUES[board[a[2]][a[3]][1]]||0)-(CHESS_VALUES[board[a[0]][a[1]][1]]||0)/10 : -999;
+        const capB = board[b[2]][b[3]] ? (CHESS_VALUES[board[b[2]][b[3]][1]]||0)-(CHESS_VALUES[board[b[0]][b[1]][1]]||0)/10 : -999;
+        return capB-capA;
+    });
+}
+
+function chessQuiesce(board, alpha, beta, maximizing) {
+    const stand = chessEval(board);
+    if (maximizing) { if (stand>=beta) return beta; if (stand>alpha) alpha=stand; }
+    else            { if (stand<=alpha) return alpha; if (stand<beta) beta=stand; }
+    const color = maximizing?'b':'w';
+    const caps  = chessAllMoves(board,color).filter(([fr,fc,tr,tc])=>board[tr][tc]);
+    for (const [fr,fc,tr,tc] of chessOrderMoves(board,caps)) {
+        const nb = chessApplyMove(fr,fc,tr,tc,board);
+        const s  = chessQuiesce(nb,alpha,beta,!maximizing);
+        if (maximizing) { if(s>alpha) alpha=s; if(alpha>=beta) return beta; }
+        else            { if(s<beta)  beta=s;  if(beta<=alpha) return alpha; }
     }
+    return maximizing?alpha:beta;
+}
+
+function chessMinimax(board, depth, alpha, beta, maximizing) {
+    const color = maximizing?'b':'w';
+    const moves = chessAllMoves(board,color);
+    if (!moves.length) return chessEval(board);
+    if (depth===0) return chessQuiesce(board,alpha,beta,maximizing);
+    for (const [fr,fc,tr,tc] of chessOrderMoves(board,moves)) {
+        const nb = chessApplyMove(fr,fc,tr,tc,board);
+        const s  = chessMinimax(nb,depth-1,alpha,beta,!maximizing);
+        if (maximizing) { if(s>alpha) alpha=s; if(alpha>=beta) return beta; }
+        else            { if(s<beta)  beta=s;  if(beta<=alpha) return alpha; }
+    }
+    return maximizing?alpha:beta;
 }
 
 function chessDoAI() {
-    if (chessGameOver || chessTurn !== 'b') return;
-    const moves = chessAllMoves(chessBoard, 'b');
+    if (chessGameOver || chessTurn!=='b') return;
+    const moves = chessAllMoves(chessBoard,'b');
     if (!moves.length) { renderChess(); return; }
-    let best = -Infinity, bestMove = moves[0];
-    for (const [fr,fc,tr,tc] of moves) {
+    const ordered = chessOrderMoves(chessBoard,moves);
+    let best=-Infinity, bestMove=ordered[0];
+    for (const [fr,fc,tr,tc] of ordered) {
         const nb = chessApplyMove(fr,fc,tr,tc,chessBoard);
-        const score = chessMinimax(nb, 2, -Infinity, Infinity, false);
-        if (score > best) { best = score; bestMove = [fr,fc,tr,tc]; }
+        const s  = chessMinimax(nb,4,-Infinity,Infinity,false);
+        if (s>best) { best=s; bestMove=[fr,fc,tr,tc]; }
     }
     chessApplyMove(...bestMove);
 }
@@ -7997,8 +8062,8 @@ function cancelChessOnline() {
 // ══════════════════════════════════════════════════════════════
 // WORDLE
 // ══════════════════════════════════════════════════════════════
-const WORDLE_WORDS = ['crane','slate','trace','crate','least','raise','arise','irate','stare','snare','share','spare','flare','glare','blare','stale','shale','whale','swale','scale','table','fable','sable','cable','maple','staple','ample','apple','angle','ankle','cycle','style','smile','while','shrine','thrive','drive','strive','alive','olive','gripe','tripe','swipe','snipe','spine','shine','whine','twine','brine','crime','prime','grime','climb','clime','slime','chime','rhyme','thyme','clyde','clove','drove','grove','prove','trove','shove','above','glove','stove','score','store','shore','snore','swore','chore','adore','spore','more','bore','core','fore','gore','lore','pore','sore','wore','yore','sport','short','snort','abort','exert','inert','overt','avert','divert','revert','covert','avert','asset','beset','reset','unset','onset','baste','caste','haste','paste','taste','waste','blaze','craze','glaze','graze','faze','gaze','haze','maze','raze','daze','phase','chase','blase','erase','grease','lease','cease','tease','please','peace','place','grace','space','brace','trace','price','slice','twice','spice','since','mince','wince','prince','fence','hence','pence','sense','dense','tense','scene','green','queen','sheen','preen','screen','been','keen','teen','seen','keen','mean','lean','bean','dean','jean','pean','wean','clean','glean','ocean','peach','beach','reach','teach','leach','bleach','breach','each','preach','steal','teal','deal','heal','meal','real','seal','veal','zeal','kneel','wheel','steel','creel','sleet','beet','feet','greet','meet','sheet','sweet','fleet','tweet','bleat','cheat','pleat','treat','wheat','great','sweat','bread','dread','spread','tread','read','bead','dead','head','lead','shed','sled','fled','bled','bred','Fred','cred','dread','stead','ahead','deaf','leaf','loaf','goaf','staff','quaff','gruff','stuff','bluff','fluff','snuff','scuff','buff','cuff','duff','huff','muff','puff','ruff','tuft','craft','draft','drift','shift','lift','gift','rift','sift','swift','fifth','sixth','width','depth','north','south','birth','earth','worth','forth','mouth','youth','truth','booth','tooth','tooth','youth','cloth','broth','froth','sloth','moth','both','growth','grove','croup','droop','group','snoop','swoop','troop','whoop','scoop','bloom','broom','gloom','groom','vroom','ploom','spoon','croon','swoon','prune','flute','brute','route','grout','trout','snout','scout','shout','clout','about','doubt','devout','sprout','brown','crown','drown','frown','grown','known','blown','gown','down','own','town','shown','sown','loan','groan','moan','roan','moon','boon','loon','noon','soon','boo','coo','moo','goo','hoop','loop','moop','poop','roof','hoof','aloof','proof','spoof','food','brood','flood','mood','wood','good','book','cook','hook','look','nook','rook','took','wool','pool','fool','cool','tool','drool','spool','stool','school'];
-const WORDLE_ANSWERS = ['crane','slate','trace','raise','stare','share','score','store','place','grace','space','brace','price','slice','spice','since','scene','green','queen','sheen','steal','beach','reach','teach','bread','dread','craft','draft','shift','swift','north','south','earth','worth','group','bloom','broom','spoon','flute','brute','route','brown','crown','frown','known','bloom','proof','flood','stool','school','snare','spare','flare','scale','style','smile','shine','crime','prime','drove','grove','prove','shore','snore','sport','short','reset','haste','paste','taste','blaze','craze','glaze','chase','erase','tense','dense','ocean','peach','wheel','steel','great','wheat','treat','cheat','sweat','staff','stuff','bluff','depth','width','birth','mouth','youth','truth','cloth','broth','sloth','growth','scoop','croon','swoon','snout','scout','shout','about','doubt','sprout'];
+const WORDLE_WORDS = ['aahed','aalii','abaci','abaca','aback','abaft','abase','abash','abate','abaya','abbey','abbot','abhor','abide','abler','abode','aboon','abort','about','above','abuse','abyss','acids','acing','acorn','acrid','acted','acute','adage','added','adept','admit','adobe','adult','aegis','aeons','affix','afoot','after','again','agave','agaze','agile','aging','aglow','agony','agree','ahead','aided','aimer','aired','aisle','algae','alien','align','alike','allay','allot','allow','alloy','aloft','along','aloof','aloud','altho','alums','amaze','amber','amble','amend','amino','amiss','among','ample','amuse','angel','anger','angle','angst','anime','annex','annoy','antic','anvil','apace','apers','aphid','apple','apply','apron','aptly','arbor','ardor','arena','argon','argue','arise','armed','aroma','arose','array','arrow','arson','aside','asked','askew','assay','asset','atone','attic','audio','audit','augur','avail','avert','avian','avid','avoid','awash','awful','awing','awoke','axial','axing','azote','azure','bacon','badge','badly','bagel','baggy','balls','balmy','banal','bands','barge','baron','basic','basis','batch','bathe','baton','batty','bayou','beach','beady','began','beige','belle','bench','berry','berth','beset','betel','bible','bicep','bigot','bilge','biome','birch','bison','bitty','bland','blank','blare','blast','blaze','bleak','blend','bless','blind','blink','bliss','blimp','bloat','block','blogs','bloke','blood','blot','blown','blurt','blush','board','bogus','boils','bolts','bonds','boner','booze','botch','bower','bowls','brace','braid','brash','brawl','braze','bream','breed','breve','briar','bride','brine','bring','brink','brisk','broil','broke','brood','brook','broom','broth','brown','brows','brunt','brush','brute','budge','buggy','bulge','bully','bumpy','bunch','burly','burro','bushy','butch','bylaw','byway','cabal','cadet','calyx','canny','canoe','cargo','carol','carve','caste','cedar','cells','chafe','chasm','cheat','check','cheek','cheer','chess','chide','chime','chips','choir','choke','chord','chose','civic','civil','clamp','clang','clank','claps','clash','clasp','cleft','clerk','click','cliff','cling','clink','cloak','clone','clop','clout','clown','clump','coach','cobra','comet','comic','comma','conch','condo','conic','coral','couch','could','covet','cower','cozy','crack','cramp','crane','crazy','creak','crest','crimp','crisp','croak','crone','crook','croup','crowd','crumb','crust','crypt','cubic','curly','curry','cyber','cycle','cynic','daddy','daily','dairy','daisy','dance','dealt','decay','decoy','defer','deign','delta','depot','derby','devil','dirty','disco','ditty','divvy','dodge','dogma','doing','dome','dopey','doubt','dough','dowdy','dowel','dowry','drain','drape','drawl','drawn','dregs','dress','drier','drink','droop','drove','drumming','dryer','duvet','dwelt','early','easel','eater','ebony','edged','eight','eject','elbow','elder','elite','ember','emote','empower','empty','endow','enjoy','enter','envoy','epoch','epoxy','equal','error','essay','evade','every','exact','exert','exist','expel','extol','fable','facet','faint','fairy','faith','fancy','farce','fatal','fauna','feast','fetch','fetid','feudal','fever','fewer','filch','filet','finch','fishy','fjord','flame','flank','flask','flawy','flesh','flick','fling','flirt','float','flood','floss','flour','flout','flown','fluff','fluke','flunk','focal','folio','foray','forge','forte','forum','foyer','frail','franc','freak','fresh','friar','frisk','fritz','frizz','front','frost','froze','frugal','fudge','fugue','fungi','furor','fusty','fuzzy','gavel','gauze','gaudy','genre','ghoul','giddy','given','gizmo','gland','glare','glaze','gleam','glean','glide','glint','gloat','globe','gloom','gloss','glove','gnash','gnome','godly','gofer','going','golly','goose','gouge','gourd','graft','grain','grasp','grate','graze','greed','greet','grief','grill','gripe','groan','groom','grope','grout','gruff','grunt','guile','guise','gulch','gusto','gushy','gypsy','habit','haiku','haste','haunt','haven','hedge','heist','hence','heron','highs','hippo','hoist','homer','honey','honor','horny','hound','husky','hutch','hyena','hyper','icier','igloo','image','imbue','impel','inane','incur','indie','inept','inert','infer','infix','ingot','inlay','inner','input','inter','intro','inure','irate','irony','ivory','jaunt','jazzy','jenny','jiffy','jingo','joust','jumpy','karma','kazoo','kiosk','knack','knave','kneel','knelt','knife','knock','known','koala','krill','kudos','label','labor','lance','lanky','lapel','largo','larva','latch','latte','lauds','layup','leapt','ledge','legal','lethal','libel','limbo','liner','lingo','liver','llama','lodge','logic','login','loopy','lusty','lyric','magic','magma','malice','manor','manly','mantle','marsh','matte','maven','maxim','meager','meant','mercy','merit','messy','metal','melee','micro','midway','mirth','model','moldy','monks','monks','moose','mourn','mulch','murky','musty','myrrh','naive','nanny','nasty','naval','navel','needy','nervy','niche','night','ninja','noire','nonce','noodle','novice','nymph','oafish','occur','octet','offal','onset','opaque','other','otter','ought','overt','owner','oxide','ozone','paddy','papal','papyrus','parka','parry','patsy','pause','peace','pearl','penny','perky','petty','phase','phone','photo','phony','pixel','pixie','piano','picky','plaid','plank','plasm','plaza','pleat','pluck','plumb','plump','plunk','plush','poach','podgy','polar','poppy','porch','preen','press','pricy','prism','privy','probe','prone','prowl','prude','prune','proxy','psalm','pubic','pudgy','pulpy','punchy','quirk','quota','rabid','rainy','rally','ramen','range','rapid','raspy','ratty','raven','reach','rebel','recur','reign','relax','remix','repay','repel','rerun','rhyme','ridge','right','ripen','risky','ritzy','river','rocky','roman','rowdy','ruffe','rugby','ruled','rumor','rupee','rural','rusty','saggy','sandy','sauce','saucy','sauna','savvy','scald','scalp','scam','scant','scare','scarf','scary','scone','scope','sedan','seedy','seize','servo','sewer','shade','shaft','shaky','shard','sharp','sheen','shiny','shirt','shoal','showy','shrug','sight','siren','skimp','skirt','skulk','slain','slang','slant','sleet','slept','slick','slope','slosh','sloth','slump','slunk','slurp','slung','snarl','sneak','sneer','snide','sniff','snort','soggy','solar','solve','sorry','spool','spore','spout','spark','spawn','speak','spend','spicy','spike','spill','spire','spite','split','splotch','spoke','spoof','spook','spool','spoon','spore','spout','sprig','spunk','squad','squat','squid','stack','staff','staid','stair','stale','stall','stamp','stand','stark','stead','steam','steed','steep','steer','stern','stiff','still','sting','stint','stoic','stoke','stomp','stood','stork','storm','story','stout','stove','strap','stray','strip','strut','stump','stunt','stupe','suave','sugar','suite','sulky','summon','sunny','super','surge','surly','swamp','swear','sweat','swept','swill','swipe','swoon','swoop','sword','syrup','tabby','tacit','taffy','talon','tango','taunt','tawny','tepid','terse','testy','thane','thank','their','theme','thick','thief','thing','think','those','three','threw','throw','thrum','thugs','thumb','thump','tithe','token','totem','touch','tough','toxic','track','trawl','tread','trend','trial','tribe','trill','trite','tromp','trope','troth','trout','truce','trump','trunk','truss','trust','tryst','tulip','tulle','tumor','tuner','twang','tweak','twirl','ulcer','ultra','unify','union','untie','unzip','upper','usher','usurp','utter','vague','valor','vapid','vault','vaunt','verge','vigor','viper','viral','vivid','visor','vocab','vodka','vomit','vying','wacky','waltz','warty','waste','weary','wedge','weedy','weigh','weird','whale','whiff','whirl','whisk','white','whole','widen','windy','wispy','witch','witty','woeful','wormy','wrath','wreak','wring','wrist','wrong','wrote','yacht','yearn','yodel','young','yummy','zappy','zebra','zilch','zippy','zombi','zonal'];
+const WORDLE_ANSWERS = ['aback','abide','abled','abode','abort','about','above','abuse','acute','admit','adobe','adult','affix','after','agile','aglow','agree','ahead','aisle','algae','align','allay','allow','amaze','amber','amend','angle','anime','annex','antic','apple','apply','apron','ardor','argue','aroma','arose','arrow','aside','atone','audio','audit','augur','avoid','awful','azure','badge','badly','bagel','banal','baron','basic','batch','bathe','beach','began','belle','bench','berry','berth','beset','birch','bland','blank','blare','blast','blaze','bleak','blend','blind','bliss','bloat','block','bloke','blurt','blush','brand','brave','bream','breed','bride','brine','brisk','broke','brook','broom','broth','brown','brunt','brush','brute','bunch','cabal','cameo','candy','canny','canoe','cargo','carve','cedar','chafe','chasm','cheat','check','chess','chide','chime','civic','clamp','clash','clasp','clean','cleft','click','cliff','cling','cloak','clone','clout','cobra','comet','coral','couch','covet','cower','crack','crane','crazy','creak','crest','crisp','croak','crowd','crumb','crust','daily','dairy','daisy','dance','delta','depot','derby','devil','dirty','dodge','dogma','doubt','dowdy','drain','drawl','drawn','drink','drove','eater','eight','elbow','elder','elite','empty','enjoy','epoch','error','evade','exact','exert','exist','expel','fable','fairy','faith','fancy','farce','fatal','fauna','feast','fever','flame','flank','flash','flesh','flick','fling','float','flour','blown','fluff','focal','foray','forge','forte','forum','frail','freak','fresh','frisk','frost','fungi','gaudy','genre','given','gland','glare','glaze','gleam','glide','globe','gloom','gloss','glove','gnome','goose','gourd','grain','grasp','grate','graze','greed','greet','grief','grill','groan','grope','grout','gruff','grunt','guile','gusto','habit','haiku','haste','haven','hedge','hence','heron','hippo','hoist','honey','honor','hound','husky','icier','image','imbue','inner','input','inure','ivory','jaunt','joust','jumpy','kazoo','kneel','knife','knock','koala','kudos','label','lance','lapel','latent','ledge','libel','liner','lingo','lodge','logic','lusty','lyric','magic','magma','manor','marsh','maven','merit','messy','metal','micro','mirth','mourn','mulch','murky','naive','niche','night','ninja','novice','oafish','onset','otter','overt','papal','parka','pause','pearl','penny','perky','petty','phase','photo','piano','pixel','plank','pleat','pluck','plumb','plush','poach','polar','porch','preen','prism','probe','prone','prowl','prune','rabid','rainy','rally','range','rapid','raven','rebel','recur','reign','relax','remix','rhyme','ridge','ripen','risky','rocky','rowdy','rugby','rural','rusty','sauce','saucy','sauna','savvy','scalp','scant','scone','sedan','seize','servo','shade','shaft','shaky','shard','sharp','shiny','shirt','showy','shrug','siren','skimp','skirt','slain','slant','slick','slope','slosh','sloth','slump','sneak','sneer','snide','snort','solve','spark','spawn','speak','spend','spice','spike','spill','spire','spite','split','squad','squat','stack','staid','stair','stale','stamp','stand','stark','stead','steam','steed','steep','stern','stiff','still','sting','stoic','stoke','stomp','stork','storm','stout','stove','strap','stray','strip','strut','stump','stunt','suave','sugar','suite','sulky','surge','surly','swear','sweat','swept','swipe','swoon','swoop','sword','tabby','talon','tango','taunt','terse','testy','thick','thief','think','threw','thumb','thump','totem','touch','tough','toxic','track','trawl','tread','trend','tribe','trill','trite','trope','trout','truce','trunk','trust','tryst','tumor','twang','tweak','twirl','ultra','union','upper','usher','vague','valor','vault','verge','vigor','viper','viral','vivid','wacky','waltz','waste','weary','wedge','weigh','weird','whale','whirl','whisk','whole','windy','witch','witty','wrath','wreak','wring','wrong','yacht','yearn','young','zippy'];
 
 let wordleAnswer, wordleGuesses, wordleCurrent, wordleDone;
 
@@ -8093,7 +8158,7 @@ function wordleKey(k) {
     if (k === '⌫') { wordleCurrent = wordleCurrent.slice(0,-1); }
     else if (k === '↵') {
         if (wordleCurrent.length < 5) { showToast('Not enough letters!'); return; }
-        const valid = WORDLE_WORDS.includes(wordleCurrent) || WORDLE_ANSWERS.includes(wordleCurrent);
+        const valid = (WORDLE_WORDS.includes(wordleCurrent) || WORDLE_ANSWERS.includes(wordleCurrent)) && wordleCurrent.length === 5;
         if (!valid) { showToast('Not in word list!'); return; }
         wordleGuesses.push(wordleCurrent);
         wordleCurrent = '';
