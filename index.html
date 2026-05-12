@@ -7498,7 +7498,7 @@ async function startTTTOnline() {
             <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:center;margin-top:10px;">
                 <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Share this code with a friend:</div>
                 <div style="font-size:32px;font-weight:800;color:var(--a2);letter-spacing:7px;font-family:monospace;">${code}</div>
-                <button class="game-mode-btn" style="margin-top:12px;max-width:180px;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
+                <button class="game-mode-btn" style="margin:12px auto 0;max-width:180px;display:block;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
             </div>
             <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelTTTOnline()">✕ Cancel</button>`;
         subscribeTTTOnline(gameRef.id);
@@ -7564,7 +7564,7 @@ function renderTTTOnline(data) {
         <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:center;margin-top:10px;">
             <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Share this code with a friend:</div>
             <div style="font-size:32px;font-weight:800;color:var(--a2);letter-spacing:7px;font-family:monospace;">${data.code}</div>
-            <button class="game-mode-btn" style="margin-top:12px;max-width:180px;" onclick="navigator.clipboard.writeText('${data.code}');showToast('✅ Code copied!')">📋 Copy code</button>
+            <button class="game-mode-btn" style="margin:12px auto 0;max-width:180px;display:block;" onclick="navigator.clipboard.writeText('${data.code}');showToast('✅ Code copied!')">📋 Copy code</button>
         </div>
         <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelTTTOnline()">✕ Cancel</button>` : '';
 
@@ -8047,7 +8047,7 @@ async function startChessOnline(role) {
                 <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:center;margin-top:10px;">
                     <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Share this code with a friend:</div>
                     <div style="font-size:32px;font-weight:800;color:var(--a2);letter-spacing:7px;font-family:monospace;">${code}</div>
-                    <button class="game-mode-btn" style="margin-top:12px;max-width:180px;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
+                    <button class="game-mode-btn" style="margin:12px auto 0;max-width:180px;display:block;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
                 </div>
                 <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelChessOnline()">✕ Cancel</button>`;
             subscribeChessOnline(ref.id);
@@ -8102,6 +8102,15 @@ function renderChessOnline(data) {
     const allMoves = chessAllMoves(data.board, data.turn);
     const inCheck  = chessKingInCheck(data.board, data.turn);
     let statusMsg = '';
+    const waitingChessCodeHTML = (data.status === 'waiting' && chessOnlineMyColor === 'w' && data.code) ? `
+        <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:18px;text-align:center;margin-top:10px;">
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Share this code with a friend:</div>
+            <div style="font-size:32px;font-weight:800;color:var(--a2);letter-spacing:7px;font-family:monospace;">${data.code}</div>
+            <div style="text-align:center;">
+                <button class="game-mode-btn" style="margin:12px auto 0;max-width:180px;display:block;" onclick="navigator.clipboard.writeText('${data.code}');showToast('✅ Code copied!')">&#128203; Copy code</button>
+            </div>
+        </div>
+        <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelChessOnline()">✕ Cancel</button>` : '';
     if (data.status === 'waiting') statusMsg = 'Waiting for opponent…';
     else if (data.status === 'done') {
         const winner = data.turn === 'w' ? 'Black' : 'White';
@@ -8119,7 +8128,8 @@ function renderChessOnline(data) {
 
     gc().innerHTML = `
         <div style="text-align:center;margin-bottom:4px;font-size:11px;color:var(--muted);">You are <b>${chessOnlineMyColor==='w'?'⬜ White':'⬛ Black'}</b></div>
-        <div class="chess-wrap">
+        ${waitingChessCodeHTML}
+        <div class="chess-wrap" style="${data.status==='waiting'?'display:none;':''}">
             <div class="chess-taken">${bCap||'&nbsp;'}</div>
             <div class="game-status">${statusMsg}</div>
             <div class="chess-board" id="chessBoard"></div>
