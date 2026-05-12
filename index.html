@@ -6332,7 +6332,7 @@ return card;
 
 const AI_MAX_CHATS  = 3;
 const AI_RATE_WIN   = 60000;                          // 1 min window
-const AI_FREE_RPM   = 2;   const AI_PRO_RPM  = 4;    // requests per minute
+const AI_FREE_RPM   = 4;   const AI_PRO_RPM  = 6;    // requests per minute
 const AI_FREE_MAX   = 12;  const AI_PRO_MAX  = 24;   // max msgs per chat
 
 let activeAIChatId  = null;           // currently open AI chat
@@ -6421,8 +6421,20 @@ function updateAIRateBar() {
     const max  = userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX;
     const left = aiReqsLeft(activeAIChatId);
     const msgs = getAIMsgs(activeAIChatId).filter(m => m.role === 'user').length;
-    bar.innerHTML = `<span>⚡ ${left}/${rpm} req/min</span><span>💬 ${msgs}/${max} in chat</span>`;
+    // Show time until oldest request expires when rate limited
+    let resetHint = '';
+    if (left === 0) {
+        const ts = (aiReqTs[activeAIChatId] || []).filter(t => Date.now() - t < AI_RATE_WIN);
+        if (ts.length) {
+            const secsLeft = Math.ceil((ts[0] + AI_RATE_WIN - Date.now()) / 1000);
+            if (secsLeft > 0) resetHint = ` · resets in ${secsLeft}s`;
+        }
+    }
+    bar.innerHTML = `<span>⚡ ${left}/${rpm} req/min${resetHint}</span><span>💬 ${msgs}/${max} in chat</span>`;
 }
+
+// Tick the rate bar every second so the "resets in Xs" countdown is live
+setInterval(() => { if (activeAIChatId) updateAIRateBar(); }, 1000);
 
 // ── Create a new AI chat ───────────────────────────────────
 function createAIChat() {
@@ -6550,7 +6562,9 @@ async function sendAIChatMsg() {
     // Check per-minute rate limit
     if (!checkAIChatRate(activeAIChatId)) {
         const rpm = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
-        showToast(`Rate limit: max ${rpm} requests/min for ${userPlan === 'pro' ? 'Pro' : 'Free'}.`);
+        const ts  = (aiReqTs[activeAIChatId] || []).filter(t => Date.now() - t < AI_RATE_WIN);
+        const secsLeft = ts.length ? Math.ceil((ts[0] + AI_RATE_WIN - Date.now()) / 1000) : 60;
+        showToast(`Rate limit: ${rpm}/min for ${userPlan === 'pro' ? 'Pro' : 'Free'}. Try again in ${secsLeft}s ⏱`);
         return;
     }
 
