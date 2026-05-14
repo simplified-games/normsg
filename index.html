@@ -2993,11 +2993,17 @@ function updateNormAIBadge() {
     }
 }
 
+// Completion budget for NorMAI proxies (OpenAI-style `max_tokens`; ignored if backend omits it)
+const NORMAI_MAX_TOKENS = 16384;
+
 async function callNormAI(prompt, context = '') {
     const url    = getNormAIUrl();
     const isPro  = userPlan === 'pro' || userPlan === 'ultra';
     const isUltra = userPlan === 'ultra';
-    const body   = isPro ? { prompt, context, mode: isUltra ? 'ultra' : 'pro' } : { prompt };
+    const body   = Object.assign(
+        { max_tokens: NORMAI_MAX_TOKENS },
+        isPro ? { prompt, context, mode: isUltra ? 'ultra' : 'pro' } : { prompt }
+    );
     const res    = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6330,14 +6336,14 @@ content: `${d.data().senderUsername || d.data().senderName || 'User'}: ${d.data(
 try {
 // Build context string from history for the worker
 const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content.split(':')[0]}: ${m.content.split(':').slice(1).join(':').trim()}`).join('\n');
-const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown code blocks with the language specified. The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
+const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown fenced blocks with the language tag and real line breaks (never JSON \\n escapes). The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
 const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
 
 // Always use Free API format for @AI — the Pro endpoint doesn't support this call shape
 const res = await fetch(NORMAI_FREE_API, {
 method:  'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}` })
+body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}`, max_tokens: NORMAI_MAX_TOKENS })
 });
 
 if (!res.ok) {
@@ -6362,18 +6368,25 @@ const _AI_MATH_SL = '\uE001';
 
 function normalizeCodeFenceContent(code) {
     if (code == null || code === '') return code;
-    const s = String(code);
-    const realNl = (s.match(/\n/g) || []).length;
+    let s = String(code);
     const litNl = (s.match(/\\n/g) || []).length;
-    if (litNl > 0 && litNl >= Math.max(1, realNl)) {
-        return s
-            .replace(/\\r\\n/g, '\n')
-            .replace(/\\n/g, '\n')
-            .replace(/\\r/g, '\n')
-            .replace(/\\t/g, '\t')
-            .replace(/\\"/g, '"');
-    }
-    return s;
+    if (litNl < 2) return s;
+    const realNl = (s.match(/\n/g) || []).length;
+    const total = litNl + realNl + 1;
+    const litRatio = litNl / total;
+    // Models often return a *partially* JSON-escaped fence (literal \n) then real newlines — unescape when escapes are a material fraction of all line breaks
+    const shouldUnescape =
+        litNl >= realNl ||
+        (litNl >= 8 && litRatio >= 0.05) ||
+        (litNl >= 4 && litNl >= realNl * 0.15);
+    if (!shouldUnescape) return s;
+    return s
+        .replace(/\\r\\n/g, '\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'");
 }
 
 function extractMathForAI(text) {
@@ -7459,7 +7472,7 @@ return card;
 const AI_MAX_CHATS  = 3;
 const AI_RATE_WIN   = 60000;                          // 1 min window
 const AI_FREE_RPM   = 4;   const AI_PRO_RPM  = 6;  const AI_ULTRA_RPM = 10;  // requests per minute
-const AI_FREE_MAX   = 12;  const AI_PRO_MAX  = 24;  const AI_ULTRA_MAX = 50;  // max msgs per chat
+// No per-chat message cap (was 12 / 24 / 50 by plan — localStorage size is the practical limit)
 
 let activeAIChatId  = null;           // currently open AI chat
 let aiReqTs         = {};             // chatId → [timestamps] in-memory rate tracking
@@ -7483,7 +7496,6 @@ function saveAIMsgs(id, msgs) {
 
 // ── Rate limit check ───────────────────────────────────────
 function aiRpmForPlan() { return userPlan==='ultra' ? AI_ULTRA_RPM : userPlan==='pro' ? AI_PRO_RPM : AI_FREE_RPM; }
-function aiMaxForPlan() { return userPlan==='ultra' ? AI_ULTRA_MAX : userPlan==='pro' ? AI_PRO_MAX : AI_FREE_MAX; }
 
 function checkAIChatRate(chatId) {
     const now = Date.now();
@@ -7499,11 +7511,6 @@ function aiReqsLeft(chatId) {
     const ts  = (aiReqTs[chatId] || []).filter(t => now - t < AI_RATE_WIN);
     const lim = aiRpmForPlan();
     return Math.max(0, lim - ts.length);
-}
-function aiMsgLimitReached(chatId) {
-    const msgs = getAIMsgs(chatId).filter(m => m.role === 'user' || m.role === 'image');
-    const max  = aiMaxForPlan();
-    return msgs.length >= max;
 }
 
 // ── Render chat list in sidebar ────────────────────────────
@@ -7525,7 +7532,6 @@ function renderAIChats() {
     el.innerHTML = '';
     chats.forEach(c => {
         const msgs    = getAIMsgs(c.id);
-        const maxMsgs = aiMaxForPlan();
         const used    = msgs.filter(m => m.role === 'user' || m.role === 'image').length;
         const d = document.createElement('div');
         d.className = 'ai-chat-item' + (activeAIChatId === c.id ? ' on' : '');
@@ -7533,7 +7539,7 @@ function renderAIChats() {
             <div class="ai-chat-icon">✦</div>
             <div class="ai-chat-info">
                 <div class="ai-chat-title">${esc(c.title)}</div>
-                <div class="ai-chat-meta">${used}/${maxMsgs} messages</div>
+                <div class="ai-chat-meta">${used} message${used === 1 ? '' : 's'}</div>
             </div>
             <button class="ai-chat-del" title="Delete chat">🗑</button>`;
         d.querySelector('.ai-chat-del').onclick = e => deleteAIChat(c.id, e);
@@ -7547,7 +7553,6 @@ function updateAIRateBar() {
     const bar = document.getElementById('aiRateBar');
     if (!bar || !activeAIChatId) { if (bar) bar.textContent = ''; return; }
     const rpm  = aiRpmForPlan();
-    const max  = aiMaxForPlan();
     const left = aiReqsLeft(activeAIChatId);
     const msgs = getAIMsgs(activeAIChatId).filter(m => m.role === 'user' || m.role === 'image').length;
     // Show time until oldest request expires when rate limited
@@ -7559,7 +7564,7 @@ function updateAIRateBar() {
             if (secsLeft > 0) resetHint = ` · resets in ${secsLeft}s`;
         }
     }
-    bar.innerHTML = `<span>⚡ ${left}/${rpm} req/min${resetHint}</span><span>💬 ${msgs}/${max} in chat</span>`;
+    bar.innerHTML = `<span>⚡ ${left}/${rpm} req/min${resetHint}</span><span>💬 ${msgs} sent in chat</span>`;
 }
 
 // Tick the rate bar every second so the "resets in Xs" countdown is live
@@ -7617,10 +7622,10 @@ function openAIChat(chatId) {
     // Patch header for AI mode
     document.getElementById('chatName').textContent = chat?.title || 'AI Chat';
     document.getElementById('chatSub').textContent  = userPlan === 'ultra'
-        ? `NorMAI Ultra · ${AI_ULTRA_RPM}/min · ${AI_ULTRA_MAX} msgs`
+        ? `NorMAI Ultra · ${AI_ULTRA_RPM} req/min`
         : userPlan === 'pro'
-        ? `NorMAI Pro · ${AI_PRO_RPM}/min · ${AI_PRO_MAX} msgs`
-        : `NorMAI · ${AI_FREE_RPM}/min · ${AI_FREE_MAX} msgs`;
+        ? `NorMAI Pro · ${AI_PRO_RPM} req/min`
+        : `NorMAI · ${AI_FREE_RPM} req/min`;
     document.getElementById('renameChatBtn').classList.add('hidden');
     document.getElementById('leaveBtn').style.display = 'none';
     document.getElementById('timeoutBanner').classList.add('hidden');
@@ -7650,10 +7655,10 @@ function renderAIChatMessages(chatId) {
     const msgs  = getAIMsgs(chatId);
     if (!msgs.length) {
         const planLabel = userPlan === 'ultra'
-            ? `Ultra · ${AI_ULTRA_RPM} req/min · up to ${AI_ULTRA_MAX} messages`
+            ? `Ultra · ${AI_ULTRA_RPM} req/min`
             : userPlan === 'pro'
-            ? `Pro · ${AI_PRO_RPM} req/min · up to ${AI_PRO_MAX} messages`
-            : `Free · ${AI_FREE_RPM} req/min · up to ${AI_FREE_MAX} messages`;
+            ? `Pro · ${AI_PRO_RPM} req/min`
+            : `Free · ${AI_FREE_RPM} req/min`;
         area.innerHTML = `<div class="ai-empty-state">
             <div class="ai-empty-ico">✦</div>
             <div class="ai-empty-title">Ask NorMAI anything</div>
@@ -7698,11 +7703,6 @@ async function sendAIChatMsg() {
     const text = inp.value.trim();
     if (!text) return;
 
-    // Check per-chat message cap
-    if (aiMsgLimitReached(activeAIChatId)) {
-        showToast(`Chat limit reached (${aiMaxForPlan()} msgs). Start a new chat!`);
-        return;
-    }
     // Check per-minute rate limit
     if (!checkAIChatRate(activeAIChatId)) {
         const rpm = aiRpmForPlan();
@@ -7745,7 +7745,7 @@ async function sendAIChatMsg() {
     try {
         const isPro   = userPlan === 'pro' || userPlan === 'ultra';
         const isUltra = userPlan === 'ultra';
-        const sysPrompt = `You are NorMAI, a smart and friendly AI assistant inside NorMSG. Be helpful, concise and clear. Use markdown code blocks for code.${isUltra ? ' NorMULTRA mode — give the most detailed, thorough, expert-level answers.' : isPro ? ' Give thorough, detailed answers.' : ''}`;
+        const sysPrompt = `You are NorMAI, a smart and friendly AI assistant inside NorMSG. Be helpful, concise and clear. Use markdown fenced code blocks (\`\`\`language) for code — use real line breaks inside the fence, not JSON-style \\n escape sequences.${isUltra ? ' NorMULTRA mode — give the most detailed, thorough, expert-level answers.' : isPro ? ' Give thorough, detailed answers.' : ''}`;
         const fullPrompt = sysPrompt + (history ? `\n\nConversation so far:\n${history}\n\nUser: ${text}` : `\n\nUser: ${text}`);
         const answer = await callNormAI(fullPrompt, isPro ? history : '');
 
@@ -7777,10 +7777,6 @@ async function handleAIImageUpload(event) {
     if (file.size > 10 * 1024 * 1024) return showToast('Image too large — max 10 MB for AI analysis.');
     if (!activeAIChatId) return;
 
-    if (aiMsgLimitReached(activeAIChatId)) {
-        showToast(`Chat limit reached (${aiMaxForPlan()} msgs). Start a new chat!`);
-        return;
-    }
     if (!checkAIChatRate(activeAIChatId)) {
         showToast(`Rate limit reached. Please wait a moment ⏱`);
         return;
