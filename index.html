@@ -6642,7 +6642,11 @@ function renderAIText(raw) {
     if (!raw) return '';
     let html = '';
     let codeId = 0;
-    const parts = raw.split(/```(\w*)\n?([\s\S]*?)```/g);
+    // Robust fenced-code splitting:
+    // - Accept CRLF or LF after the optional language tag
+    // - Allow non-[A-Za-z0-9_] language identifiers (e.g. c++, python3)
+    // - Avoid leaving fence-header leftovers in the preceding text segment
+    const parts = raw.split(/```([^\n\r`]*)\r?\n?([\s\S]*?)```/g);
     for (let i = 0; i < parts.length; i++) {
         if (i % 3 === 0) {
             html += renderPlainAISegment(parts[i]);
