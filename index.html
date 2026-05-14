@@ -1293,6 +1293,45 @@ exports.handler = async (event) => {
             border: 1px solid rgba(192,132,252,0.35);
             border-radius: 20px; padding: 1px 6px;
         }
+        /* ── AI Model Dropdown ───────────────────────── */
+        #aiModelDropdownWrap {
+            display: none; align-items: center; gap: 4px;
+        }
+        #aiModelDropdownWrap.visible { display: flex; }
+        #aiModelSelect {
+            appearance: none; -webkit-appearance: none;
+            background: var(--card);
+            border: 1px solid var(--border2);
+            border-radius: 10px;
+            color: var(--text);
+            font-size: 10px; font-weight: 700;
+            font-family: 'Figtree', sans-serif;
+            padding: 3px 22px 3px 8px;
+            cursor: pointer;
+            outline: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 6px center;
+            transition: border-color 0.15s;
+            max-width: 110px;
+        }
+        #aiModelSelect:focus { border-color: var(--a2); }
+        /* ── Ultra avatar dot ────────────────────────── */
+        .ultra-av-dot {
+            display: none;
+            position: absolute; bottom: -2px; right: -2px;
+            background: linear-gradient(135deg, #818cf8, #c084fc);
+            border: 1.5px solid var(--surf);
+            border-radius: 20px;
+            font-size: 6px; font-weight: 900;
+            letter-spacing: 0.04em;
+            color: #fff;
+            padding: 1px 4px;
+            white-space: nowrap;
+            box-shadow: 0 0 6px rgba(192,132,252,0.5);
+            z-index: 2;
+        }
+        .ultra-av-dot.on { display: block; }
 
         /* ── AI MESSAGE BUBBLE ───────────────────────────── */
         .bubble.ai {
@@ -2410,6 +2449,26 @@ exports.handler = async (event) => {
 
         <div class="m-msg" id="settingsMsg" style="margin-top:10px;"></div>
 
+        <!-- Ultra @AI Model Preference (Ultra users only) -->
+        <div class="settings-row" id="ultraAiModelRow" style="display:none;flex-direction:column;align-items:flex-start;gap:8px;">
+            <div class="settings-info">
+                <div class="settings-label">⚡ @AI Model Preference <span class="ultra-badge">ULTRA</span></div>
+                <div class="settings-desc">Choose which model responds when you type <code>@AI</code> in a group chat.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                    <input type="radio" name="ultraAiModel" value="pro" id="aiModelPro" onchange="saveUltraAiModel('pro')" style="accent-color:var(--a2);">
+                    <span>⚡ Pro (Ultra)</span>
+                    <span style="font-size:10px;color:var(--muted);">— most powerful</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                    <input type="radio" name="ultraAiModel" value="thinking" id="aiModelThinking" onchange="saveUltraAiModel('thinking')" style="accent-color:var(--a2);">
+                    <span>🧠 Thinking (Super)</span>
+                    <span style="font-size:10px;color:var(--muted);">— step-by-step reasoning</span>
+                </label>
+            </div>
+        </div>
+
         <div class="modal-row" style="margin-top:14px;">
             <button class="btn-sec" onclick="closeModal('settingsModal')">Close</button>
         </div>
@@ -2648,9 +2707,10 @@ exports.handler = async (event) => {
             </div>
             <!-- Profile row -->
             <div class="profile-card" onclick="openProfileModal()" title="Edit profile">
-                <div class="av-wrap" style="width:34px;height:34px;flex-shrink:0;">
+                <div class="av-wrap" style="width:34px;height:34px;flex-shrink:0;position:relative;">
                     <div class="av" id="myAv" style="width:34px;height:34px;font-size:12px;">?</div>
                     <div class="av-edit-badge">✎</div>
+                    <div class="ultra-av-dot" id="ultraAvDot">ULTRA</div>
                 </div>
                 <div style="min-width:0;flex:1;">
                     <div class="me-name" id="myName" style="font-size:13px;">—</div>
@@ -2839,6 +2899,15 @@ exports.handler = async (event) => {
                         <input class="esearch-in" id="esearchIn" placeholder="Search emoji…" oninput="searchEmoji(this.value)" onkeydown="onEsearchKey(event)">
                         <div class="esearch-results" id="esearchResults"></div>
                     </div>
+                    <!-- AI Model Dropdown (only visible in AI chats) -->
+                    <div id="aiModelDropdownWrap" title="Select AI model">
+                        <select id="aiModelSelect" onchange="onAIModelChange(this.value)">
+                            <option value="fast">⚡ Fast</option>
+                        </select>
+                    </div>
+                    <!-- AI photo upload (only visible in AI chats) -->
+                    <button class="img-btn" id="aiImgBtn" onclick="triggerAIImageUpload()" title="Send image to NorMAI for analysis" style="display:none;font-size:13px;">📷✦</button>
+                    <input type="file" id="aiImgFileIn" accept="image/*" style="display:none" onchange="handleAIImageUpload(event)">
                     <!-- NormSticker picker with saved stickers -->
                     <input type="file" id="stickerFileIn" accept="image/*" style="display:none;" onchange="handleStickerUpload(event)">
                     <div id="stickerPickerWrap" style="position:relative;">
@@ -2860,9 +2929,7 @@ exports.handler = async (event) => {
                             <div id="schPendingList"></div>
                         </div>
                     </div>
-                    <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image (Pro: also video up to 150 MB)">🖼</button>
-                    <button class="img-btn" id="aiImgBtn" onclick="triggerAIImageUpload()" title="Send image to NorMAI for analysis (AI chats only)" style="display:none;font-size:13px;">📷✦</button>
-                    <input type="file" id="aiImgFileIn" accept="image/*" style="display:none" onchange="handleAIImageUpload(event)">
+                    <button class="img-btn" id="regularImgBtn" onclick="document.getElementById('imgFileIn').click()" title="Send image (Pro: also video up to 150 MB)">🖼</button>
                     <button class="img-btn" id="pollBtn" onclick="openPollModal()" title="Create a poll (group chats only)">📊</button>
                     <button class="img-btn" id="normAIBtn" onclick="openSmartReply()" title="NorMAI — smart reply suggestions" style="font-size:15px;color:var(--a2);">✦</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
@@ -2925,10 +2992,44 @@ const NORMAI_FREE_API  = 'https://normsg-free.simplifiedtest10.deno.net';
 const NORMAI_ULTRA_API = 'https://normsg-ultra.simplifiedtest10.deno.net';
 
 let userPlan = 'free';   // 'free' | 'pro' | 'ultra'
+let selectedAIModel = 'fast'; // 'fast' | 'thinking' | 'pro'
 
 function getNormAIUrl() {
+    if (userPlan === 'ultra' && selectedAIModel === 'pro') return NORMAI_ULTRA_API;
+    if ((userPlan === 'pro' || userPlan === 'ultra') && selectedAIModel === 'thinking') return NORMAI_PRO_API;
     if (userPlan === 'ultra') return NORMAI_ULTRA_API;
     return userPlan === 'pro' ? NORMAI_PRO_API : NORMAI_FREE_API;
+}
+
+function populateAIModelDropdown() {
+    const sel = document.getElementById('aiModelSelect');
+    sel.innerHTML = '';
+    const opts = [{ value: 'fast', label: '⚡ Fast' }];
+    if (userPlan === 'pro' || userPlan === 'ultra') opts.push({ value: 'thinking', label: '🧠 Thinking' });
+    if (userPlan === 'ultra') opts.push({ value: 'pro', label: '✦ Pro' });
+    opts.forEach(o => {
+        const el = document.createElement('option');
+        el.value = o.value; el.textContent = o.label;
+        if (o.value === selectedAIModel) el.selected = true;
+        sel.appendChild(el);
+    });
+}
+
+function onAIModelChange(val) {
+    selectedAIModel = val;
+    try { localStorage.setItem('normsg_ai_model', val); } catch {}
+}
+
+function saveUltraAiModel(val) {
+    try { localStorage.setItem('normsg_ultra_ai_model', val); } catch {}
+}
+
+function loadUltraAiModelPref() {
+    try {
+        const saved = localStorage.getItem('normsg_ultra_ai_model') || 'pro';
+        document.getElementById('aiModelPro').checked      = saved === 'pro';
+        document.getElementById('aiModelThinking').checked = saved === 'thinking';
+    } catch {}
 }
 
 function extractNormAIReply(data) {
@@ -2991,6 +3092,20 @@ function updateNormAIBadge() {
         badge.style.background = '';
         badge.title       = 'NorMAI Free — upgrade to Pro for smarter AI';
     }
+    // Ultra avatar dot
+    const avDot = document.getElementById('ultraAvDot');
+    if (avDot) avDot.classList.toggle('on', userPlan === 'ultra');
+    // Ultra @AI settings row
+    const ultraRow = document.getElementById('ultraAiModelRow');
+    if (ultraRow) {
+        ultraRow.style.display = userPlan === 'ultra' ? 'flex' : 'none';
+        if (userPlan === 'ultra') loadUltraAiModelPref();
+    }
+    // Restore selected AI model from localStorage
+    try {
+        const saved = localStorage.getItem('normsg_ai_model');
+        if (saved) selectedAIModel = saved;
+    } catch {}
 }
 
 // Completion budget for NorMAI proxies (OpenAI-style `max_tokens`; ignored if backend omits it)
@@ -3980,6 +4095,11 @@ document.getElementById('renameChatBtn').classList.add('hidden');
 document.getElementById('leaveBtn').title = 'Hide conversation';
 document.getElementById('pollBtn').style.display = 'none'; // polls only in groups
 document.getElementById('aiImgBtn').style.display = 'none'; // image analysis only in AI chats
+document.getElementById('regularImgBtn').style.display = 'inline-flex';
+document.getElementById('stickerBtn').style.display = 'inline-flex';
+document.getElementById('scheduleBtn').style.display = 'inline-flex';
+document.getElementById('normAIBtn').style.display = 'inline-flex';
+document.getElementById('aiModelDropdownWrap').classList.remove('visible');
 markRead(chatId);
 activateChat();
 renderFriends();
@@ -4004,6 +4124,11 @@ document.getElementById('renameChatBtn').classList.remove('hidden');
 document.getElementById('leaveBtn').title = 'Leave group';
 document.getElementById('pollBtn').style.display = 'inline-flex'; // polls available in groups
 document.getElementById('aiImgBtn').style.display = 'none'; // image analysis only in AI chats
+document.getElementById('regularImgBtn').style.display = 'inline-flex';
+document.getElementById('stickerBtn').style.display = 'inline-flex';
+document.getElementById('scheduleBtn').style.display = 'inline-flex';
+document.getElementById('normAIBtn').style.display = 'inline-flex';
+document.getElementById('aiModelDropdownWrap').classList.remove('visible');
 markRead(chatId);
 activateChat();
 renderGroups();
@@ -5028,6 +5153,11 @@ if (item.type.startsWith('image/')) {
 event.preventDefault();
 const file = item.getAsFile();
 if (!file) return;
+// In AI chats, paste goes straight to AI image analysis
+if (chatType === 'ai') {
+handleAIImageFile(file);
+return;
+}
 pastedFile = file;
 document.getElementById('pasteThumb').src = URL.createObjectURL(file);
 document.getElementById('pastePreview').classList.add('on');
@@ -6308,7 +6438,15 @@ return;
 
 // Check if the sender has NorMSG Super/Ultra or Pro (all get the smarter model)
 const isSuper = userPlan === 'pro' || userPlan === 'ultra' || await hasSuper(me.uid) || await hasUltra(me.uid);
-const model   = isSuper ? GROQ_MODEL_SUPER : GROQ_MODEL;
+const isUltraUser = userPlan === 'ultra';
+let model = GROQ_MODEL;
+if (isUltraUser) {
+    // Ultra users can pick Pro or Thinking for @AI
+    const ultraPref = (() => { try { return localStorage.getItem('normsg_ultra_ai_model') || 'pro'; } catch { return 'pro'; } })();
+    model = ultraPref === 'thinking' ? GROQ_MODEL_SUPER : GROQ_MODEL_SUPER; // both use super model via GROQ; pro routes to NVIDIA
+} else if (isSuper) {
+    model = GROQ_MODEL_SUPER;
+}
 
 // Post a "thinking" placeholder so everyone sees AI is working
 const thinkRef = await db.collection(msgPath).add({
@@ -6340,7 +6478,10 @@ const systemNote = `You are a helpful AI assistant inside NorMSG, a group messag
 const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
 
 // Always use Free API format for @AI — the Pro endpoint doesn't support this call shape
-const res = await fetch(NORMAI_FREE_API, {
+// Ultra users with Pro preference get the Ultra API
+const ultraPref2 = (() => { try { return localStorage.getItem('normsg_ultra_ai_model') || 'pro'; } catch { return 'pro'; } })();
+const atAiApiUrl = (isUltraUser && ultraPref2 === 'pro') ? NORMAI_ULTRA_API : NORMAI_FREE_API;
+const res = await fetch(atAiApiUrl, {
 method:  'POST',
 headers: { 'Content-Type': 'application/json' },
 body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}`, max_tokens: NORMAI_MAX_TOKENS })
@@ -7631,6 +7772,13 @@ function openAIChat(chatId) {
     document.getElementById('timeoutBanner').classList.add('hidden');
     document.getElementById('pollBtn').style.display = 'none'; // no polls in AI chats
     document.getElementById('aiImgBtn').style.display = 'inline-flex'; // show AI image analysis button
+    document.getElementById('regularImgBtn').style.display = 'none'; // hide regular image btn in AI
+    document.getElementById('stickerBtn').style.display = 'none';
+    document.getElementById('scheduleBtn').style.display = 'none';
+    document.getElementById('normAIBtn').style.display = 'none';
+    // Show model dropdown and populate it for current plan
+    populateAIModelDropdown();
+    document.getElementById('aiModelDropdownWrap').classList.add('visible');
     // Hide pinned banner in AI chats
     if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
     document.getElementById('pinnedBanner').classList.remove('on');
@@ -7774,6 +7922,10 @@ async function handleAIImageUpload(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file || !file.type.startsWith('image/')) return showToast('Please select an image.');
+    await handleAIImageFile(file);
+}
+
+async function handleAIImageFile(file) {
     if (file.size > 10 * 1024 * 1024) return showToast('Image too large — max 10 MB for AI analysis.');
     if (!activeAIChatId) return;
 
