@@ -1262,6 +1262,38 @@ exports.handler = async (event) => {
             border-radius: 20px; padding: 1px 6px;
         }
 
+        /* ── NORMSG ULTRA ────────────────────────────────── */
+        .ultra-name {
+            background: linear-gradient(90deg, #818cf8, #c084fc, #38bdf8, #f472b6, #818cf8);
+            background-size: 250% auto;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: ultraShimmer 2.5s linear infinite;
+            font-weight: 800;
+        }
+        @keyframes ultraShimmer {
+            0%   { background-position: 0% center; }
+            100% { background-position: 250% center; }
+        }
+        .ultra-badge {
+            display: inline-flex; align-items: center;
+            font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+            background: linear-gradient(135deg, rgba(129,140,248,0.25), rgba(192,132,252,0.25));
+            border: 1px solid rgba(129,140,248,0.55);
+            color: #c084fc; border-radius: 20px;
+            padding: 1px 6px; margin-left: 4px; vertical-align: middle;
+            white-space: nowrap;
+            box-shadow: 0 0 7px rgba(192,132,252,0.3);
+        }
+        .ai-ultra-badge {
+            font-size: 9px; color: #c084fc; font-weight: 800;
+            letter-spacing: 0.05em; margin-left: 6px;
+            background: rgba(192,132,252,0.12);
+            border: 1px solid rgba(192,132,252,0.35);
+            border-radius: 20px; padding: 1px 6px;
+        }
+
         /* ── AI MESSAGE BUBBLE ───────────────────────────── */
         .bubble.ai {
             background: linear-gradient(135deg, rgba(45,212,191,0.12), rgba(124,92,252,0.12));
@@ -2143,6 +2175,23 @@ exports.handler = async (event) => {
         </div>
         <div class="m-msg" id="giftMsg"></div>
 
+        <!-- Gift Ultra -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">⚡ Gift NorMULTRA</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">NorMULTRA is the highest tier — includes all Super perks plus the Ultra AI model and API.</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="giftUltraIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') giftUltra()">
+            </div>
+            <select class="m-input" id="giftUltraDuration" style="margin:0;flex:none;width:auto;padding:0 10px;">
+                <option value="7">1 week</option>
+                <option value="30">1 month</option>
+                <option value="365">1 year</option>
+            </select>
+            <button class="btn-add" onclick="giftUltra()" style="background:linear-gradient(135deg,#6366f1,#a855f7);">Gift ⚡</button>
+        </div>
+        <div class="m-msg" id="giftUltraMsg"></div>
+
         <!-- Make Platform Admin -->
         <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Make Platform Admin</div>
         <div style="display:flex;gap:8px;margin-bottom:6px;">
@@ -2791,6 +2840,8 @@ exports.handler = async (event) => {
                         </div>
                     </div>
                     <button class="img-btn" onclick="document.getElementById('imgFileIn').click()" title="Send image (Pro: also video up to 150 MB)">🖼</button>
+                    <button class="img-btn" id="aiImgBtn" onclick="triggerAIImageUpload()" title="Send image to NorMAI for analysis (AI chats only)" style="display:none;font-size:13px;">📷✦</button>
+                    <input type="file" id="aiImgFileIn" accept="image/*" style="display:none" onchange="handleAIImageUpload(event)">
                     <button class="img-btn" id="pollBtn" onclick="openPollModal()" title="Create a poll (group chats only)">📊</button>
                     <button class="img-btn" id="normAIBtn" onclick="openSmartReply()" title="NorMAI — smart reply suggestions" style="font-size:15px;color:var(--a2);">✦</button>
                     <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
@@ -2843,12 +2894,14 @@ const TS      = firebase.firestore.Timestamp;
 
 // ── STATE ──────────────────────────────────────────────────
 // ── NORMAI API ─────────────────────────────────────────────
-const NORMAI_PRO_API  = 'https://normsg-pro.simplifiedtest10.deno.net';
-const NORMAI_FREE_API = 'https://normsg-free.simplifiedtest10.deno.net';
+const NORMAI_PRO_API   = 'https://normsg-pro.simplifiedtest10.deno.net';
+const NORMAI_FREE_API  = 'https://normsg-free.simplifiedtest10.deno.net';
+const NORMAI_ULTRA_API = 'https://normsg-ultra.simplifiedtest10.deno.net';
 
-let userPlan = 'free';   // 'free' | 'pro'
+let userPlan = 'free';   // 'free' | 'pro' | 'ultra'
 
 function getNormAIUrl() {
+    if (userPlan === 'ultra') return NORMAI_ULTRA_API;
     return userPlan === 'pro' ? NORMAI_PRO_API : NORMAI_FREE_API;
 }
 
@@ -2874,7 +2927,18 @@ async function loadUserPlan() {
     if (!me) return;
     try {
         const snap = await getCachedUserDoc(me.uid);
-        userPlan   = snap.data()?.plan === 'pro' ? 'pro' : 'free';
+        const data = snap.data() || {};
+        const storedPlan = data.plan;
+        // Check ultra first (highest tier)
+        const ultraUntil = data.normsgUltra?.until?.toDate?.();
+        const hasUltraSub = !!(ultraUntil && ultraUntil > new Date());
+        if (storedPlan === 'ultra' || hasUltraSub) {
+            userPlan = 'ultra';
+        } else if (storedPlan === 'pro') {
+            userPlan = 'pro';
+        } else {
+            userPlan = 'free';
+        }
     } catch { userPlan = 'free'; }
     updateNormAIBadge();
 }
@@ -2882,22 +2946,33 @@ async function loadUserPlan() {
 function updateNormAIBadge() {
     const badge = document.getElementById('normAIBadge');
     if (!badge) return;
-    if (userPlan === 'pro') {
+    if (userPlan === 'ultra') {
+        badge.textContent = '⚡ Ultra';
+        badge.style.color = '#c084fc';
+        badge.style.borderColor = 'rgba(192,132,252,0.4)';
+        badge.style.background = 'rgba(192,132,252,0.1)';
+        badge.title       = 'NorMULTRA — highest-tier AI with advanced reasoning';
+    } else if (userPlan === 'pro') {
         badge.textContent = '✦ Pro';
         badge.style.color = 'var(--a2)';
+        badge.style.borderColor = '';
+        badge.style.background = '';
         badge.title       = 'NorMAI Pro — enhanced AI with smarter replies and summarisation';
     } else {
         badge.textContent = 'Free';
         badge.style.color = 'var(--muted)';
+        badge.style.borderColor = '';
+        badge.style.background = '';
         badge.title       = 'NorMAI Free — upgrade to Pro for smarter AI';
     }
 }
 
 async function callNormAI(prompt, context = '') {
-    const url   = getNormAIUrl();
-    const isPro = userPlan === 'pro';
-    const body  = isPro ? { prompt, context, mode: 'pro' } : { prompt };
-    const res   = await fetch(url, {
+    const url    = getNormAIUrl();
+    const isPro  = userPlan === 'pro' || userPlan === 'ultra';
+    const isUltra = userPlan === 'ultra';
+    const body   = isPro ? { prompt, context, mode: isUltra ? 'ultra' : 'pro' } : { prompt };
+    const res    = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -2915,7 +2990,7 @@ async function openSmartReply() {
     try {
         const msgs    = [...document.querySelectorAll('#messagesArea .bubble')]
             .slice(-8).map(b => b.textContent.trim()).join('\n');
-        const isPro   = userPlan === 'pro';
+        const isPro   = userPlan === 'pro' || userPlan === 'ultra';
         const context = isPro ? msgs : '';
         const prompt  = isPro
             ? 'Suggest 3 short, natural reply options for the last message in this chat. Output only the replies as a numbered list, no explanation.'
@@ -3655,9 +3730,12 @@ vis.forEach(f => {
     const isOnline = pres?.online === true;
     const unread   = isUnread(cid, dmLastAt[cid]) && chatId !== cid;
     const fIsSuper = superCache[f.uid] === true;
+    const fIsUltra = ultraCache[f.uid] === true;
     const displayLabel = nick
         ? `${esc(nick)} <span class="nick-badge">@${esc(f.username||'')}</span>`
-        : fIsSuper
+        : fIsUltra
+            ? `<span class="ultra-name">${esc(f.displayName)}</span> <span class="ultra-badge">⚡</span>`
+            : fIsSuper
             ? `<span class="super-name">${esc(f.displayName)}</span> <span class="super-badge">✦</span>`
             : esc(f.displayName);
     const statusTxt = isOnline
@@ -3869,6 +3947,7 @@ updateChatSubStatus(pres?.online === true, pres?.lastSeen || null);
 document.getElementById('renameChatBtn').classList.add('hidden');
 document.getElementById('leaveBtn').title = 'Hide conversation';
 document.getElementById('pollBtn').style.display = 'none'; // polls only in groups
+document.getElementById('aiImgBtn').style.display = 'none'; // image analysis only in AI chats
 markRead(chatId);
 activateChat();
 renderFriends();
@@ -3892,6 +3971,7 @@ document.getElementById('chatSub').textContent  = (group.members?.length||0) + '
 document.getElementById('renameChatBtn').classList.remove('hidden');
 document.getElementById('leaveBtn').title = 'Leave group';
 document.getElementById('pollBtn').style.display = 'inline-flex'; // polls available in groups
+document.getElementById('aiImgBtn').style.display = 'none'; // image analysis only in AI chats
 markRead(chatId);
 activateChat();
 renderGroups();
@@ -4230,10 +4310,10 @@ const isVideo = file.type.startsWith('video/');
 const isImage = file.type.startsWith('image/');
 
 if (!isImage && !isVideo) return showToast('Please select an image or video file.');
-if (isVideo && userPlan !== 'pro') return showToast('🎥 Video uploads are a Pro feature.');
+if (isVideo && userPlan === 'free') return showToast('🎥 Video uploads are a Pro/Super feature.');
 
-const maxMB = isVideo ? 150 : (userPlan === 'pro' ? 100 : 25);
-if (file.size > maxMB*1024*1024) return showToast(`File too large — max ${maxMB} MB${!isVideo && userPlan!=='pro' ? ' (Pro gets 100 MB)' : ''}.`);
+const maxMB = isVideo ? 150 : (userPlan !== 'free' ? 100 : 25);
+if (file.size > maxMB*1024*1024) return showToast(`File too large — max ${maxMB} MB${userPlan==='free' ? ' (Pro gets 100 MB)' : ''}.`);
 if (!await checkSend('image','')) return;
 
 document.getElementById('upInd').classList.add('on');
@@ -4264,8 +4344,8 @@ async function pushMsg(extra) {
 const msgPath    = chatType==='dm' ? `conversations/${chatId}/messages` : `groups/${chatId}/messages`;
 const parentPath = chatType==='dm' ? `conversations/${chatId}`          : `groups/${chatId}`;
 
-// Use cached Super status — Pro users get the same treatment as Super
-const isSuper = userPlan === 'pro' || superCache[me.uid] === true;
+// Use cached Super/Ultra status — Pro/Super/Ultra users all get the enhanced treatment
+const isSuper = userPlan === 'pro' || userPlan === 'ultra' || superCache[me.uid] === true || ultraCache[me.uid] === true;
 
 const summary = {
 lastAt:             SV(),
@@ -6191,8 +6271,8 @@ showToast('⚠ AI rate limit reached — please wait a moment.');
 return;
 }
 
-// Check if the sender has NorMSG Super or Pro (both get the smarter model)
-const isSuper = userPlan === 'pro' || await hasSuper(me.uid);
+// Check if the sender has NorMSG Super/Ultra or Pro (all get the smarter model)
+const isSuper = userPlan === 'pro' || userPlan === 'ultra' || await hasSuper(me.uid) || await hasUltra(me.uid);
 const model   = isSuper ? GROQ_MODEL_SUPER : GROQ_MODEL;
 
 // Post a "thinking" placeholder so everyone sees AI is working
@@ -6309,6 +6389,7 @@ setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
 const OWNER_EMAIL = 'simplifiedlearning10@gmail.com';
 let isPlatformAdmin = false;
 let superCache = {}; // uid -> bool, cached for rendering
+let ultraCache = {}; // uid -> bool, cached for rendering (NorMULTRA)
 let superLastLoadedAt = 0;
 let superLastFriendKey = '';
 let superLoadInFlight = null;
@@ -6322,9 +6403,9 @@ isPlatformAdmin = true;
 const adminDoc = await db.collection('platformAdmins').doc(me.uid).get();
 isPlatformAdmin = adminDoc.exists;
 }
-// Platform admins always get Pro
+// Platform admins always get Ultra (highest tier)
 if (isPlatformAdmin) {
-userPlan = 'pro';
+userPlan = 'ultra';
 updateNormAIBadge();
 }
 
@@ -6363,6 +6444,20 @@ return isActive;
 } catch { return false; }
 }
 
+async function hasUltra(uid) {
+const cacheFresh = (Date.now() - superLastLoadedAt) < 45000;
+if (cacheFresh && Object.prototype.hasOwnProperty.call(ultraCache, uid)) {
+return ultraCache[uid] === true;
+}
+try {
+const snap = await db.collection('users').doc(uid).get();
+const until = snap.data()?.normsgUltra?.until?.toDate?.();
+const isActive = !!(until && until > new Date());
+ultraCache[uid] = isActive;
+return isActive;
+} catch { return false; }
+}
+
 async function refreshSuperCache({ force = false } = {}) {
 const uids = [me.uid, ...friends.map(f => f.uid)];
 const uniqueUids = [...new Set(uids)];
@@ -6375,6 +6470,7 @@ return;
 if (superLoadInFlight) return superLoadInFlight;
 
 const nextCache = {};
+const nextUltraCache = {};
 superLoadInFlight = (async () => {
 for (let i = 0; i < uniqueUids.length; i += 10) {
 const chunk = uniqueUids.slice(i, i + 10);
@@ -6383,11 +6479,16 @@ const snap = await db.collection('users')
     .where(firebase.firestore.FieldPath.documentId(), 'in', chunk)
     .get();
 snap.docs.forEach(d => {
-    const until = d.data()?.normsgSuper?.until?.toDate?.();
-    nextCache[d.id] = !!(until && until > new Date());
+    const superUntil = d.data()?.normsgSuper?.until?.toDate?.();
+    const ultraUntil = d.data()?.normsgUltra?.until?.toDate?.();
+    nextCache[d.id]      = !!(superUntil && superUntil > new Date());
+    nextUltraCache[d.id] = !!(ultraUntil && ultraUntil > new Date());
 });
 }
-uniqueUids.forEach(uid => { superCache[uid] = nextCache[uid] || false; });
+uniqueUids.forEach(uid => {
+    superCache[uid] = nextCache[uid] || false;
+    ultraCache[uid] = nextUltraCache[uid] || false;
+});
 superLastLoadedAt = Date.now();
 superLastFriendKey = friendKey;
 })();
@@ -6398,11 +6499,24 @@ await superLoadInFlight;
 superLoadInFlight = null;
 }
 
-// Show Super badge and shimmer on my own profile row
+// Promote plan: Ultra > Super/Pro > Pro > Free
+// Ultra users get ultra plan; Super/Pro users get pro plan (bidirectional)
+if (ultraCache[me.uid]) {
+    userPlan = 'ultra';
+    updateNormAIBadge();
+} else if (superCache[me.uid] && userPlan === 'free') {
+    userPlan = 'pro';   // Super members automatically get Pro
+    updateNormAIBadge();
+}
+
+// Show correct badge on my own profile row
 const myBadge = document.getElementById('mySuperBadge');
 const myHandle = document.getElementById('myHandle');
-if (superCache[me.uid] || userPlan === 'pro') {
-if (myBadge) myBadge.style.display = 'block';
+if (ultraCache[me.uid]) {
+if (myBadge) { myBadge.style.display = 'block'; myBadge.innerHTML = '<span class="ultra-badge">⚡ ULTRA</span>'; }
+if (myHandle) myHandle.innerHTML = `<span class="ultra-name">@${myUsername}</span>`;
+} else if (superCache[me.uid] || userPlan === 'pro') {
+if (myBadge) { myBadge.style.display = 'block'; myBadge.innerHTML = '<span class="super-badge">✦ SUPER</span>'; }
 if (myHandle) myHandle.innerHTML = `<span class="super-name">@${myUsername}</span>`;
 } else {
 if (myBadge) myBadge.style.display = 'none';
@@ -6457,9 +6571,13 @@ async function openUserProfile(uid, displayName, photoURL, username) {
         if (snap?.photoURL) {
             avEl.innerHTML = `<img src="${esc(snap.photoURL)}" alt="">`;
         }
-        // Show super badge if applicable
-        const until = snap?.normsgSuper?.until?.toDate?.();
-        if (until && until > new Date()) {
+        // Show ultra or super badge if applicable
+        const ultraUntil = snap?.normsgUltra?.until?.toDate?.();
+        const superUntil = snap?.normsgSuper?.until?.toDate?.();
+        if (ultraUntil && ultraUntil > new Date()) {
+            document.getElementById('vpName').innerHTML =
+                `<span class="ultra-name">${esc(fresh)}</span> <span class="ultra-badge">⚡ ULTRA</span>`;
+        } else if (superUntil && superUntil > new Date()) {
             document.getElementById('vpName').innerHTML =
                 `<span class="super-name">${esc(fresh)}</span> <span class="super-badge">✦ SUPER</span>`;
         }
@@ -6585,6 +6703,14 @@ async function grantSuperToUid(uid, days) {
 const until = new Date(Date.now() + days * 86400000);
 await db.collection('users').doc(uid).set({
 normsgSuper: { until: TS.fromDate(until), days, grantedAt: SV() }
+}, { merge: true });
+}
+
+async function grantUltraToUid(uid, days) {
+const until = new Date(Date.now() + days * 86400000);
+await db.collection('users').doc(uid).set({
+normsgUltra: { until: TS.fromDate(until), days, grantedAt: SV() },
+plan: 'ultra'
 }, { merge: true });
 }
 
@@ -6756,6 +6882,24 @@ document.getElementById('giftSuperIn').value = '';
 superCache[uid] = true;
 renderFriends();
 } catch(e) { mmsg('giftMsg','Error: '+e.message,'err'); }
+}
+
+async function giftUltra() {
+const uname = document.getElementById('giftUltraIn').value.trim().toLowerCase().replace('@','');
+const days  = parseInt(document.getElementById('giftUltraDuration').value);
+if (!uname) return;
+mmsg('giftUltraMsg','Looking up user…','inf');
+try {
+const uid = await getCachedUid(uname);
+if (!uid) return mmsg('giftUltraMsg',`@${uname} not found.`,'err');
+await grantUltraToUid(uid, days);
+mmsg('giftUltraMsg', `✓ NorMULTRA gifted to @${uname} for ${days} day${days!==1?'s':''}! ⚡`, 'ok');
+document.getElementById('giftUltraIn').value = '';
+ultraCache[uid] = true;
+superCache[uid] = true; // Ultra implies Super
+renderFriends();
+} catch(e) { mmsg('giftUltraMsg','Error: '+e.message,'err'); }
+}
 }
 
 async function giftAdmin() {
@@ -7154,8 +7298,8 @@ return card;
 
 const AI_MAX_CHATS  = 3;
 const AI_RATE_WIN   = 60000;                          // 1 min window
-const AI_FREE_RPM   = 4;   const AI_PRO_RPM  = 6;    // requests per minute
-const AI_FREE_MAX   = 12;  const AI_PRO_MAX  = 24;   // max msgs per chat
+const AI_FREE_RPM   = 4;   const AI_PRO_RPM  = 6;  const AI_ULTRA_RPM = 10;  // requests per minute
+const AI_FREE_MAX   = 12;  const AI_PRO_MAX  = 24;  const AI_ULTRA_MAX = 50;  // max msgs per chat
 
 let activeAIChatId  = null;           // currently open AI chat
 let aiReqTs         = {};             // chatId → [timestamps] in-memory rate tracking
@@ -7178,11 +7322,14 @@ function saveAIMsgs(id, msgs) {
 }
 
 // ── Rate limit check ───────────────────────────────────────
+function aiRpmForPlan() { return userPlan==='ultra' ? AI_ULTRA_RPM : userPlan==='pro' ? AI_PRO_RPM : AI_FREE_RPM; }
+function aiMaxForPlan() { return userPlan==='ultra' ? AI_ULTRA_MAX : userPlan==='pro' ? AI_PRO_MAX : AI_FREE_MAX; }
+
 function checkAIChatRate(chatId) {
     const now = Date.now();
     if (!aiReqTs[chatId]) aiReqTs[chatId] = [];
     aiReqTs[chatId] = aiReqTs[chatId].filter(t => now - t < AI_RATE_WIN);
-    const limit = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
+    const limit = aiRpmForPlan();
     if (aiReqTs[chatId].length >= limit) return false;
     aiReqTs[chatId].push(now);
     return true;
@@ -7190,12 +7337,12 @@ function checkAIChatRate(chatId) {
 function aiReqsLeft(chatId) {
     const now = Date.now();
     const ts  = (aiReqTs[chatId] || []).filter(t => now - t < AI_RATE_WIN);
-    const lim = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
+    const lim = aiRpmForPlan();
     return Math.max(0, lim - ts.length);
 }
 function aiMsgLimitReached(chatId) {
-    const msgs = getAIMsgs(chatId).filter(m => m.role === 'user');
-    const max  = userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX;
+    const msgs = getAIMsgs(chatId).filter(m => m.role === 'user' || m.role === 'image');
+    const max  = aiMaxForPlan();
     return msgs.length >= max;
 }
 
@@ -7218,8 +7365,8 @@ function renderAIChats() {
     el.innerHTML = '';
     chats.forEach(c => {
         const msgs    = getAIMsgs(c.id);
-        const maxMsgs = userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX;
-        const used    = msgs.filter(m => m.role === 'user').length;
+        const maxMsgs = aiMaxForPlan();
+        const used    = msgs.filter(m => m.role === 'user' || m.role === 'image').length;
         const d = document.createElement('div');
         d.className = 'ai-chat-item' + (activeAIChatId === c.id ? ' on' : '');
         d.innerHTML = `
@@ -7239,10 +7386,10 @@ function renderAIChats() {
 function updateAIRateBar() {
     const bar = document.getElementById('aiRateBar');
     if (!bar || !activeAIChatId) { if (bar) bar.textContent = ''; return; }
-    const rpm  = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
-    const max  = userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX;
+    const rpm  = aiRpmForPlan();
+    const max  = aiMaxForPlan();
     const left = aiReqsLeft(activeAIChatId);
-    const msgs = getAIMsgs(activeAIChatId).filter(m => m.role === 'user').length;
+    const msgs = getAIMsgs(activeAIChatId).filter(m => m.role === 'user' || m.role === 'image').length;
     // Show time until oldest request expires when rate limited
     let resetHint = '';
     if (left === 0) {
@@ -7309,12 +7456,16 @@ function openAIChat(chatId) {
 
     // Patch header for AI mode
     document.getElementById('chatName').textContent = chat?.title || 'AI Chat';
-    document.getElementById('chatSub').textContent  = userPlan === 'pro'
+    document.getElementById('chatSub').textContent  = userPlan === 'ultra'
+        ? `NorMAI Ultra · ${AI_ULTRA_RPM}/min · ${AI_ULTRA_MAX} msgs`
+        : userPlan === 'pro'
         ? `NorMAI Pro · ${AI_PRO_RPM}/min · ${AI_PRO_MAX} msgs`
         : `NorMAI · ${AI_FREE_RPM}/min · ${AI_FREE_MAX} msgs`;
     document.getElementById('renameChatBtn').classList.add('hidden');
     document.getElementById('leaveBtn').style.display = 'none';
     document.getElementById('timeoutBanner').classList.add('hidden');
+    document.getElementById('pollBtn').style.display = 'none'; // no polls in AI chats
+    document.getElementById('aiImgBtn').style.display = 'inline-flex'; // show AI image analysis button
     // Hide pinned banner in AI chats
     if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
     document.getElementById('pinnedBanner').classList.remove('on');
@@ -7338,14 +7489,15 @@ function renderAIChatMessages(chatId) {
     const area  = document.getElementById('messagesArea');
     const msgs  = getAIMsgs(chatId);
     if (!msgs.length) {
+        const planLabel = userPlan === 'ultra'
+            ? `Ultra · ${AI_ULTRA_RPM} req/min · up to ${AI_ULTRA_MAX} messages`
+            : userPlan === 'pro'
+            ? `Pro · ${AI_PRO_RPM} req/min · up to ${AI_PRO_MAX} messages`
+            : `Free · ${AI_FREE_RPM} req/min · up to ${AI_FREE_MAX} messages`;
         area.innerHTML = `<div class="ai-empty-state">
             <div class="ai-empty-ico">✦</div>
             <div class="ai-empty-title">Ask NorMAI anything</div>
-            <div class="ai-empty-sub" style="max-width:240px;">
-                ${userPlan === 'pro'
-                    ? `Pro · ${AI_PRO_RPM} req/min · up to ${AI_PRO_MAX} messages`
-                    : `Free · ${AI_FREE_RPM} req/min · up to ${AI_FREE_MAX} messages`}
-            </div>
+            <div class="ai-empty-sub" style="max-width:240px;">${planLabel}<br><span style="opacity:0.7;font-size:11px;">📷 You can also send an image for analysis</span></div>
         </div>`;
         return;
     }
@@ -7358,9 +7510,16 @@ function renderAIChatMessages(chatId) {
                     <span class="ai-thinking-dot">●</span>
                 </div>
             </div>`;
-        const isUser  = m.role === 'user';
+        const isUser  = m.role === 'user' || m.role === 'image';
         const timeStr = m.ts ? new Date(m.ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
-        const content = isUser ? esc(m.text) : renderAIText(m.text);
+        let content;
+        if (m.role === 'image') {
+            content = `<div style="font-size:11px;color:var(--muted);margin-bottom:4px;">📷 Image sent for analysis</div>
+                <img src="${esc(m.dataUrl)}" alt="uploaded" style="max-width:200px;max-height:160px;border-radius:10px;display:block;">
+                ${m.caption ? `<div style="margin-top:4px;font-size:13px;">${esc(m.caption)}</div>` : ''}`;
+        } else {
+            content = isUser ? esc(m.text) : renderAIText(m.text);
+        }
         return `<div class="ai-msg-wrap ${isUser ? 'user-msg' : 'ai-msg'}">
             <div class="ai-bubble">${content}</div>
             <div class="ai-msg-meta">${isUser ? 'You' : '✦ NorMAI'} · ${timeStr}</div>
@@ -7378,15 +7537,16 @@ async function sendAIChatMsg() {
 
     // Check per-chat message cap
     if (aiMsgLimitReached(activeAIChatId)) {
-        showToast(`Chat limit reached (${userPlan === 'pro' ? AI_PRO_MAX : AI_FREE_MAX} msgs). Start a new chat!`);
+        showToast(`Chat limit reached (${aiMaxForPlan()} msgs). Start a new chat!`);
         return;
     }
     // Check per-minute rate limit
     if (!checkAIChatRate(activeAIChatId)) {
-        const rpm = userPlan === 'pro' ? AI_PRO_RPM : AI_FREE_RPM;
+        const rpm = aiRpmForPlan();
+        const planName = userPlan === 'ultra' ? 'Ultra' : userPlan === 'pro' ? 'Pro' : 'Free';
         const ts  = (aiReqTs[activeAIChatId] || []).filter(t => Date.now() - t < AI_RATE_WIN);
         const secsLeft = ts.length ? Math.ceil((ts[0] + AI_RATE_WIN - Date.now()) / 1000) : 60;
-        showToast(`Rate limit: ${rpm}/min for ${userPlan === 'pro' ? 'Pro' : 'Free'}. Try again in ${secsLeft}s ⏱`);
+        showToast(`Rate limit: ${rpm}/min for ${planName}. Try again in ${secsLeft}s ⏱`);
         return;
     }
 
@@ -7420,8 +7580,9 @@ async function sendAIChatMsg() {
         .join('\n');
 
     try {
-        const isPro = userPlan === 'pro';
-        const sysPrompt = `You are NorMAI, a smart and friendly AI assistant inside NorMSG. Be helpful, concise and clear. Use markdown code blocks for code.${isPro ? ' Give thorough, detailed answers.' : ''}`;
+        const isPro   = userPlan === 'pro' || userPlan === 'ultra';
+        const isUltra = userPlan === 'ultra';
+        const sysPrompt = `You are NorMAI, a smart and friendly AI assistant inside NorMSG. Be helpful, concise and clear. Use markdown code blocks for code.${isUltra ? ' NorMULTRA mode — give the most detailed, thorough, expert-level answers.' : isPro ? ' Give thorough, detailed answers.' : ''}`;
         const fullPrompt = sysPrompt + (history ? `\n\nConversation so far:\n${history}\n\nUser: ${text}` : `\n\nUser: ${text}`);
         const answer = await callNormAI(fullPrompt, isPro ? history : '');
 
@@ -7432,6 +7593,103 @@ async function sendAIChatMsg() {
     } catch(e) {
         const updatedMsgs = getAIMsgs(activeAIChatId).filter(m => m.role !== 'thinking');
         updatedMsgs.push({ role: 'assistant', text: `⚠ Error: ${e.message}`, ts: Date.now() });
+        saveAIMsgs(activeAIChatId, updatedMsgs);
+    }
+
+    renderAIChatMessages(activeAIChatId);
+    updateAIRateBar();
+    renderAIChats();
+}
+
+// ── AI Chat Image Upload (Groq Vision) ──────────────────────
+function triggerAIImageUpload() {
+    if (!activeAIChatId) return showToast('Open an AI chat first.');
+    document.getElementById('aiImgFileIn').click();
+}
+
+async function handleAIImageUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !file.type.startsWith('image/')) return showToast('Please select an image.');
+    if (file.size > 10 * 1024 * 1024) return showToast('Image too large — max 10 MB for AI analysis.');
+    if (!activeAIChatId) return;
+
+    if (aiMsgLimitReached(activeAIChatId)) {
+        showToast(`Chat limit reached (${aiMaxForPlan()} msgs). Start a new chat!`);
+        return;
+    }
+    if (!checkAIChatRate(activeAIChatId)) {
+        showToast(`Rate limit reached. Please wait a moment ⏱`);
+        return;
+    }
+
+    // Convert to base64
+    const dataUrl = await new Promise((res, rej) => {
+        const reader = new FileReader();
+        reader.onload  = () => res(reader.result);
+        reader.onerror = () => rej(new Error('Read failed'));
+        reader.readAsDataURL(file);
+    });
+    const base64Data = dataUrl.split(',')[1];
+    const mimeType   = file.type;
+
+    // Get optional caption from current input
+    const inp = document.getElementById('msgInput');
+    const caption = inp.value.trim();
+    inp.value = '';
+    autoGrow(inp);
+
+    // Save image message
+    const msgs = getAIMsgs(activeAIChatId);
+    msgs.push({ role: 'image', dataUrl, caption, ts: Date.now() });
+
+    // Auto-title from first message
+    const chats = getAIChats();
+    const chat  = chats.find(c => c.id === activeAIChatId);
+    if (chat && chat.title === 'New Chat') {
+        chat.title = caption ? caption.slice(0, 36) + (caption.length > 36 ? '…' : '') : '📷 Image analysis';
+        saveAIChats(chats);
+    }
+
+    // Add thinking placeholder
+    msgs.push({ role: 'thinking', ts: Date.now() });
+    saveAIMsgs(activeAIChatId, msgs);
+    renderAIChatMessages(activeAIChatId);
+    updateAIRateBar();
+    renderAIChats();
+
+    try {
+        // Call Groq vision via the free API endpoint with vision flag
+        // The backend should support: { vision: true, image: base64, mimeType, prompt }
+        const userPrompt = caption || 'Describe this image in detail. What do you see?';
+        const sysPrompt  = 'You are NorMAI, a smart and helpful AI inside NorMSG. Analyse the image and respond clearly and helpfully.';
+        let answer;
+        try {
+            const res = await fetch(NORMAI_FREE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    vision: true,
+                    image:    base64Data,
+                    mimeType: mimeType,
+                    prompt:   sysPrompt + '\n\nUser: ' + userPrompt,
+                    model:    'meta-llama/llama-4-scout-17b-16e-instruct'
+                })
+            });
+            if (!res.ok) throw new Error(`API ${res.status}`);
+            const data = await res.json();
+            answer = extractNormAIReply(data);
+        } catch (fetchErr) {
+            // Fallback: if the free endpoint doesn't support vision yet, use a friendly message
+            answer = `⚠ Vision analysis requires the backend to support vision requests. To enable this, update your Netlify/Deno function to forward \`vision:true\` requests to Groq using the \`meta-llama/llama-4-scout-17b-16e-instruct\` model with an image_url content block.`;
+        }
+
+        const updatedMsgs = getAIMsgs(activeAIChatId).filter(m => m.role !== 'thinking');
+        updatedMsgs.push({ role: 'assistant', text: answer || '(No response — try again)', ts: Date.now() });
+        saveAIMsgs(activeAIChatId, updatedMsgs);
+    } catch(e) {
+        const updatedMsgs = getAIMsgs(activeAIChatId).filter(m => m.role !== 'thinking');
+        updatedMsgs.push({ role: 'assistant', text: `⚠ Vision error: ${e.message}`, ts: Date.now() });
         saveAIMsgs(activeAIChatId, updatedMsgs);
     }
 
@@ -8613,16 +8871,18 @@ function chessMinimax(board, depth, alpha, beta, maximizing) {
 // -- Difficulty picker --
 function startChessAISelect() {
     const levels = [
-        { label: 'Beginner',  elo: '~600',  val: 0  },
-        { label: 'Easy',      elo: '~1000', val: 5  },
-        { label: 'Medium',    elo: '~1500', val: 10 },
-        { label: 'Hard',      elo: '~2000', val: 15 },
-        { label: 'Master',    elo: '~2400', val: 20 },
+        { label: 'Beginner 150', elo: '~150',  val: 'elo150' },
+        { label: 'Beginner 300', elo: '~300',  val: 'elo300' },
+        { label: 'Beginner',     elo: '~600',  val: 0  },
+        { label: 'Easy',         elo: '~1000', val: 5  },
+        { label: 'Medium',       elo: '~1500', val: 10 },
+        { label: 'Hard',         elo: '~2000', val: 15 },
+        { label: 'Master',       elo: '~2400', val: 20 },
     ];
     gc().innerHTML = `
         <div style="margin-bottom:8px;color:var(--muted);font-size:12px;text-align:center;">Choose difficulty</div>
         ${levels.map(l => `
-            <button class="game-mode-btn" onclick="chessStartAI(${l.val})" style="display:flex;justify-content:space-between;align-items:center;padding:10px 18px;">
+            <button class="game-mode-btn" onclick="chessStartAI('${l.val}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 18px;">
                 <span>${l.label}</span>
                 <span style="font-size:11px;color:var(--muted);">ELO ${l.elo}</span>
             </button>`).join('')}
@@ -8634,7 +8894,16 @@ function chessStartAI(skillLevel) {
     if (sfWorker) { try { sfWorker.terminate(); } catch(e){} }
     sfWorker = new Worker('stockfish.js');
     sfWorker.postMessage('uci');
-    sfWorker.postMessage('setoption name Skill Level value ' + chessSkillLevel);
+    if (skillLevel === 'elo150') {
+        sfWorker.postMessage('setoption name UCI_LimitStrength value true');
+        sfWorker.postMessage('setoption name UCI_Elo value 150');
+    } else if (skillLevel === 'elo300') {
+        sfWorker.postMessage('setoption name UCI_LimitStrength value true');
+        sfWorker.postMessage('setoption name UCI_Elo value 300');
+    } else {
+        sfWorker.postMessage('setoption name UCI_LimitStrength value false');
+        sfWorker.postMessage('setoption name Skill Level value ' + chessSkillLevel);
+    }
     sfWorker.postMessage('isready');
     startChess('ai');
 }
