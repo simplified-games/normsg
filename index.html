@@ -1437,6 +1437,106 @@ exports.handler = async (event) => {
             display: flex; align-items: center; gap: 6px;
         }
 
+
+        /* ── STATUS VIEWER — interactions bar ───────────────── */
+        .sv-interact-bar {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 14px 0; flex-shrink: 0;
+        }
+        .sv-react-btn {
+            background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18);
+            color: white; border-radius: 20px; padding: 6px 13px;
+            font-size: 13px; font-weight: 600; cursor: pointer;
+            transition: background 0.15s; white-space: nowrap;
+            font-family: 'Figtree', sans-serif;
+        }
+        .sv-react-btn:hover { background: rgba(255,255,255,0.22); }
+        .sv-react-btn.liked { background: rgba(244,63,94,0.35); border-color: rgba(244,63,94,0.6); }
+        .sv-reply-wrap {
+            flex: 1; display: flex; align-items: center;
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 20px; padding: 6px 14px; gap: 8px;
+        }
+        .sv-reply-in {
+            flex: 1; background: none; border: none; outline: none;
+            color: white; font-family: 'Figtree', sans-serif; font-size: 13px;
+        }
+        .sv-reply-in::placeholder { color: rgba(255,255,255,0.45); }
+        .sv-reply-send {
+            background: none; border: none; color: rgba(255,255,255,0.7);
+            font-size: 16px; cursor: pointer; padding: 0; line-height: 1;
+            transition: color 0.15s;
+        }
+        .sv-reply-send:hover { color: white; }
+
+        /* Emoji reaction picker overlay */
+        .sv-emoji-picker {
+            position: absolute; bottom: calc(100% + 8px); left: 14px;
+            background: rgba(20,20,32,0.97); border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 16px; padding: 10px; display: flex;
+            flex-wrap: wrap; gap: 4px; width: 232px;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.7); z-index: 800;
+            animation: fadeIn 0.15s ease;
+        }
+        .sv-ep-emoji {
+            width: 34px; height: 34px; display: flex; align-items: center;
+            justify-content: center; font-size: 20px; border-radius: 8px;
+            cursor: pointer; transition: background 0.1s;
+        }
+        .sv-ep-emoji:hover { background: rgba(255,255,255,0.15); transform: scale(1.2); }
+
+        /* Reactions display on status */
+        .sv-reactions-row {
+            display: flex; flex-wrap: wrap; gap: 5px;
+            padding: 6px 14px 0; flex-shrink: 0;
+        }
+        .sv-reaction-chip {
+            display: inline-flex; align-items: center; gap: 3px;
+            background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 20px; padding: 3px 9px; font-size: 13px;
+            cursor: pointer; transition: background 0.13s; user-select: none;
+        }
+        .sv-reaction-chip.mine { background: rgba(124,92,252,0.35); border-color: rgba(124,92,252,0.6); }
+        .sv-reaction-chip:hover { background: rgba(255,255,255,0.22); }
+        .sv-reaction-count { font-size: 11px; color: rgba(255,255,255,0.8); font-weight: 700; }
+
+        /* Views panel (slide up from bottom) */
+        .sv-views-panel {
+            position: fixed; inset: 0; z-index: 810;
+            display: flex; flex-direction: column; justify-content: flex-end;
+        }
+        .sv-views-backdrop {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.5);
+        }
+        .sv-views-sheet {
+            position: relative; background: var(--panel);
+            border-radius: 24px 24px 0 0; padding: 20px 18px 32px;
+            max-height: 60vh; overflow-y: auto;
+            animation: slideUpSheet 0.25s cubic-bezier(0.34,1.56,0.64,1);
+        }
+        @keyframes slideUpSheet {
+            from { transform: translateY(100%); }
+            to   { transform: translateY(0); }
+        }
+        .sv-views-sheet::-webkit-scrollbar { width: 4px; }
+        .sv-views-sheet::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+        .sv-views-handle {
+            width: 36px; height: 4px; background: var(--border2);
+            border-radius: 2px; margin: 0 auto 16px; display: block;
+        }
+        .sv-views-title {
+            font-family: 'Syne', sans-serif; font-size: 15px;
+            font-weight: 800; margin-bottom: 14px; color: var(--text);
+        }
+        .sv-viewer-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 0; border-bottom: 1px solid var(--border);
+        }
+        .sv-viewer-row:last-child { border-bottom: none; }
+        .sv-viewer-name { font-size: 13px; font-weight: 600; flex: 1; }
+        .sv-viewer-time { font-size: 11px; color: var(--muted); }
+        .sv-viewer-reaction { font-size: 18px; }
+
         /* ── ADD STATUS MODAL ────────────────────────────── */
         .status-type-row {
             display: flex; gap: 8px; margin-bottom: 14px;
@@ -2261,7 +2361,22 @@ exports.handler = async (event) => {
         <div class="sv-tap-prev" onclick="svPrev()"></div>
         <div class="sv-tap-next" onclick="svNext()"></div>
     </div>
+    <!-- Reactions display row -->
+    <div class="sv-reactions-row" id="svReactionsRow"></div>
+    <!-- Views bar / interaction bar (owner vs viewer) -->
     <div class="sv-views" id="svViews"></div>
+    <!-- Reply + react bar (shown for others' statuses) -->
+    <div class="sv-interact-bar" id="svInteractBar" style="display:none;padding-bottom:20px;">
+        <div style="position:relative;">
+            <button class="sv-react-btn" id="svLikeBtn" onclick="toggleStatusLike()">❤️</button>
+        </div>
+        <button class="sv-react-btn" id="svEmojiBtn" onclick="toggleStatusEmojiPicker(event)">😊</button>
+        <div class="sv-reply-wrap">
+            <input class="sv-reply-in" id="svReplyIn" placeholder="Reply to status…" maxlength="200"
+                onkeydown="if(event.key==='Enter') sendStatusReply()" onfocus="svPauseProgress()" onblur="svResumeProgress(statusCurrentUser?.statuses?.[statusCurrentIndex])">
+            <button class="sv-reply-send" onclick="sendStatusReply()">➤</button>
+        </div>
+    </div>
 </div>
 
 <!-- ═══════════════ ADD STATUS MODAL ════════════════ -->
@@ -5545,27 +5660,26 @@ else avEl.textContent = initials(name);
 document.getElementById('svName').textContent = name;
 document.getElementById('svTime').textContent = timeAgo(s.createdAt?.toDate?.() || new Date());
 
-// Show/hide delete + add buttons based on ownership
+// Show/hide owner vs viewer buttons
 const isOwner = statusCurrentUser.uid === me.uid;
 let delBtn = document.getElementById('svDeleteBtn');
 let addBtn = document.getElementById('svAddBtn');
 if (!delBtn) {
-delBtn = ce('button');
-delBtn.id = 'svDeleteBtn';
-delBtn.style.cssText = 'background:rgba(244,63,94,0.2);border:1px solid rgba(244,63,94,0.4);color:#f43f5e;border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:auto;';
-delBtn.textContent = '🗑 Delete';
-document.getElementById('svHeader').appendChild(delBtn);
+    delBtn = ce('button');
+    delBtn.id = 'svDeleteBtn';
+    delBtn.style.cssText = 'background:rgba(244,63,94,0.2);border:1px solid rgba(244,63,94,0.4);color:#f43f5e;border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:auto;';
+    delBtn.textContent = '🗑 Delete';
+    document.getElementById('svHeader').appendChild(delBtn);
 }
 if (!addBtn) {
-addBtn = ce('button');
-addBtn.id = 'svAddBtn';
-addBtn.style.cssText = 'background:rgba(124,92,252,0.2);border:1px solid rgba(124,92,252,0.4);color:var(--a2);border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:4px;';
-addBtn.textContent = '+ Add';
-document.getElementById('svHeader').appendChild(addBtn);
+    addBtn = ce('button');
+    addBtn.id = 'svAddBtn';
+    addBtn.style.cssText = 'background:rgba(124,92,252,0.2);border:1px solid rgba(124,92,252,0.4);color:var(--a2);border-radius:9px;padding:5px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:Figtree,sans-serif;margin-left:4px;';
+    addBtn.textContent = '+ Add';
+    document.getElementById('svHeader').appendChild(addBtn);
 }
 delBtn.style.display = isOwner ? 'inline-block' : 'none';
 addBtn.style.display = isOwner ? 'inline-block' : 'none';
-// Reset onclick each render to capture current s.id
 delBtn.onclick = () => deleteStatus(s.id);
 addBtn.onclick = () => { closeStatusViewer(); openAddStatus(); };
 
@@ -5573,43 +5687,91 @@ addBtn.onclick = () => { closeStatusViewer(); openAddStatus(); };
 const prog = document.getElementById('svProgress');
 prog.innerHTML = '';
 statuses.forEach((_, i) => {
-const seg = ce('div'); seg.className = 'sv-seg';
-const fill = ce('div'); fill.className = 'sv-seg-fill';
-if (i < statusCurrentIndex) fill.style.width = '100%';
-seg.appendChild(fill); prog.appendChild(seg);
+    const seg = ce('div'); seg.className = 'sv-seg';
+    const fill = ce('div'); fill.className = 'sv-seg-fill';
+    if (i < statusCurrentIndex) fill.style.width = '100%';
+    seg.appendChild(fill); prog.appendChild(seg);
 });
 
 // Content
 const cont = document.getElementById('svContent');
-// Remove previous media but keep tap zones
 cont.querySelectorAll('img,video,.sv-text-card').forEach(el => el.remove());
-
 if (s.type === 'text') {
-cont.style.background = s.bgColor || '#1e293b';
-const card = ce('div'); card.className = 'sv-text-card'; card.textContent = s.content;
-cont.insertBefore(card, cont.firstChild);
+    cont.style.background = s.bgColor || '#1e293b';
+    const card = ce('div'); card.className = 'sv-text-card'; card.textContent = s.content;
+    cont.insertBefore(card, cont.firstChild);
 } else if (s.type === 'photo') {
-cont.style.background = '#000';
-const img = ce('img'); img.src = s.url; img.style.maxWidth='100%'; img.style.maxHeight='100%';
-cont.insertBefore(img, cont.firstChild);
+    cont.style.background = '#000';
+    const img = ce('img'); img.src = s.url; img.style.maxWidth='100%'; img.style.maxHeight='100%';
+    cont.insertBefore(img, cont.firstChild);
 } else if (s.type === 'video') {
-cont.style.background = '#000';
-const vid = ce('video'); vid.src = s.url; vid.controls = true; vid.autoplay = true;
-vid.style.maxWidth='100%'; vid.style.maxHeight='100%';
-cont.insertBefore(vid, cont.firstChild);
+    cont.style.background = '#000';
+    const vid = ce('video'); vid.src = s.url; vid.controls = true; vid.autoplay = true;
+    vid.style.maxWidth='100%'; vid.style.maxHeight='100%';
+    cont.insertBefore(vid, cont.firstChild);
 }
 
-// Views (mine only)
+// ── Reactions row ─────────────────────────────────────────
+const reactRow = document.getElementById('svReactionsRow');
+reactRow.innerHTML = '';
+const reactions = s.reactions || {};
+const grouped = {};
+Object.entries(reactions).forEach(([uid, emoji]) => {
+    if (!grouped[emoji]) grouped[emoji] = [];
+    grouped[emoji].push(uid);
+});
+Object.entries(grouped).forEach(([emoji, uids]) => {
+    const chip = ce('span');
+    chip.className = 'sv-reaction-chip' + (uids.includes(me.uid) ? ' mine' : '');
+    chip.innerHTML = `${emoji} <span class="sv-reaction-count">${uids.length}</span>`;
+    chip.title = uids.length + ' reaction' + (uids.length !== 1 ? 's' : '');
+    chip.onclick = () => toggleStatusReaction(s.id, emoji);
+    reactRow.appendChild(chip);
+});
+
+// ── Views bar (owner) ─────────────────────────────────────
 const viewsEl = document.getElementById('svViews');
-if (statusCurrentUser.uid === me.uid && s.views) {
-const count = Object.keys(s.views).length;
-viewsEl.innerHTML = `👁 ${count} view${count !== 1 ? 's' : ''}`;
-} else { viewsEl.innerHTML = ''; }
+if (isOwner && s.views) {
+    const viewUids = Object.keys(s.views);
+    const count    = viewUids.length;
+    const likeCount = Object.values(reactions).filter(e => e === '❤️').length;
+    viewsEl.innerHTML = '';
+    const viewBtn = ce('button');
+    viewBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,0.6);font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;padding:0;font-family:Figtree,sans-serif;';
+    viewBtn.innerHTML = `👁 <span>${count} view${count !== 1 ? 's' : ''}</span>`;
+    viewBtn.onclick = () => openStatusViewsPanel(s);
+    viewsEl.appendChild(viewBtn);
+    if (likeCount > 0) {
+        const likeSpan = ce('span');
+        likeSpan.style.cssText = 'color:rgba(255,255,255,0.55);font-size:12px;margin-left:8px;';
+        likeSpan.textContent = `❤️ ${likeCount}`;
+        viewsEl.appendChild(likeSpan);
+    }
+} else {
+    viewsEl.innerHTML = '';
+}
+
+// ── Interact bar (viewer) ─────────────────────────────────
+const interactBar = document.getElementById('svInteractBar');
+if (!isOwner) {
+    interactBar.style.display = 'flex';
+    // Like button state
+    const likeBtn = document.getElementById('svLikeBtn');
+    const alreadyLiked = (s.reactions || {})[me.uid] === '❤️';
+    likeBtn.className = 'sv-react-btn' + (alreadyLiked ? ' liked' : '');
+    likeBtn.textContent = alreadyLiked ? '❤️ Liked' : '❤️';
+    // Store current status id on the bar for the handlers
+    interactBar.dataset.sid = s.id;
+    // Clear reply input
+    document.getElementById('svReplyIn').value = '';
+} else {
+    interactBar.style.display = 'none';
+}
 
 // Mark viewed
 markStatusViewed(s.id);
-if (statusCurrentUser.uid !== me.uid) {
-db.collection('statuses').doc(s.id).update({ [`views.${me.uid}`]: SV() }).catch(()=>{});
+if (!isOwner) {
+    db.collection('statuses').doc(s.id).update({ [`views.${me.uid}`]: SV() }).catch(()=>{});
 }
 
 // Auto advance progress
@@ -5617,8 +5779,8 @@ if (statusProgressTimer) clearTimeout(statusProgressTimer);
 const duration = s.type === 'video' ? 30000 : 5000;
 const fillEl = prog.children[statusCurrentIndex]?.querySelector('.sv-seg-fill');
 if (fillEl) {
-fillEl.style.transition = `width ${duration}ms linear`;
-fillEl.style.width = '100%';
+    fillEl.style.transition = `width ${duration}ms linear`;
+    fillEl.style.width = '100%';
 }
 statusProgressTimer = setTimeout(() => svNext(), duration);
 }
@@ -5665,13 +5827,233 @@ showToast('Could not delete: ' + e.message);
 }
 }
 
+
+// ── STATUS INTERACTIONS ────────────────────────────────────
+
+const SV_EMOJIS = ['❤️','🔥','😂','😮','😢','🎉','👏','💯','😍','🥲','😭','🤩','😎','💪','🙏'];
+let svEmojiPickerEl = null;
+
+// Pause/resume progress timer when interacting
+function svPauseProgress() {
+    if (statusProgressTimer) { clearTimeout(statusProgressTimer); statusProgressTimer = null; }
+}
+function svResumeProgress(s) {
+    if (!s || statusProgressTimer) return;
+    const duration = s.type === 'video' ? 30000 : 5000;
+    const prog = document.getElementById('svProgress');
+    const fillEl = prog?.children[statusCurrentIndex]?.querySelector('.sv-seg-fill');
+    // Resume from current fill position
+    if (fillEl) {
+        const remaining = duration * (1 - parseFloat(fillEl.style.width) / 100);
+        statusProgressTimer = setTimeout(() => svNext(), Math.max(remaining, 500));
+    }
+}
+
+// Toggle ❤️ like
+async function toggleStatusLike() {
+    svPauseProgress();
+    const sid = document.getElementById('svInteractBar').dataset.sid;
+    if (!sid) return;
+    const s = statusCurrentUser?.statuses?.[statusCurrentIndex];
+    const cur = (s?.reactions || {})[me.uid];
+    try {
+        if (cur === '❤️') {
+            await db.collection('statuses').doc(sid).update({
+                [`reactions.${me.uid}`]: firebase.firestore.FieldValue.delete()
+            });
+            if (s) { if (!s.reactions) s.reactions = {}; delete s.reactions[me.uid]; }
+        } else {
+            await db.collection('statuses').doc(sid).update({
+                [`reactions.${me.uid}`]: '❤️'
+            });
+            if (s) { if (!s.reactions) s.reactions = {}; s.reactions[me.uid] = '❤️'; }
+        }
+        renderStatusViewerItem();
+    } catch(e) { showToast('Could not react: ' + e.message); }
+    svResumeProgress(s);
+}
+
+// Toggle any emoji reaction
+async function toggleStatusReaction(sid, emoji) {
+    svPauseProgress();
+    const s = statusCurrentUser?.statuses?.[statusCurrentIndex];
+    const cur = (s?.reactions || {})[me.uid];
+    try {
+        if (cur === emoji) {
+            await db.collection('statuses').doc(sid).update({
+                [`reactions.${me.uid}`]: firebase.firestore.FieldValue.delete()
+            });
+            if (s?.reactions) delete s.reactions[me.uid];
+        } else {
+            await db.collection('statuses').doc(sid).update({
+                [`reactions.${me.uid}`]: emoji
+            });
+            if (s) { if (!s.reactions) s.reactions = {}; s.reactions[me.uid] = emoji; }
+        }
+        renderStatusViewerItem();
+    } catch(e) { showToast('Could not react: ' + e.message); }
+    svResumeProgress(s);
+}
+
+// Toggle emoji picker
+function toggleStatusEmojiPicker(event) {
+    event.stopPropagation();
+    svPauseProgress();
+    if (svEmojiPickerEl) { svEmojiPickerEl.remove(); svEmojiPickerEl = null; return; }
+    const bar = document.getElementById('svInteractBar');
+    const picker = ce('div');
+    picker.className = 'sv-emoji-picker';
+    SV_EMOJIS.forEach(em => {
+        const sp = ce('span'); sp.className = 'sv-ep-emoji'; sp.textContent = em;
+        sp.onclick = (e) => {
+            e.stopPropagation();
+            picker.remove(); svEmojiPickerEl = null;
+            const sid = bar.dataset.sid;
+            if (sid) toggleStatusReaction(sid, em);
+        };
+        picker.appendChild(sp);
+    });
+    bar.style.position = 'relative';
+    bar.appendChild(picker);
+    svEmojiPickerEl = picker;
+    setTimeout(() => {
+        document.addEventListener('click', function closePicker() {
+            picker.remove(); svEmojiPickerEl = null;
+            document.removeEventListener('click', closePicker);
+        }, { once: true });
+    }, 0);
+}
+
+// Send a reply to a status (opens DM with a quoted reply)
+async function sendStatusReply() {
+    const inp = document.getElementById('svReplyIn');
+    const text = inp.value.trim();
+    if (!text) return;
+    const s = statusCurrentUser?.statuses?.[statusCurrentIndex];
+    if (!s) return;
+
+    // Find this person in friends list
+    const targetUid = statusCurrentUser.uid;
+    const friend    = friends.find(f => f.uid === targetUid);
+    if (!friend) { showToast('Add them as a friend to reply!'); return; }
+
+    // Build a reply message in the DM
+    const preview = s.type === 'text'
+        ? (s.content || '').slice(0, 60)
+        : s.type === 'photo' ? '📷 Photo status'
+        : s.type === 'video' ? '🎥 Video status'
+        : 'Status';
+
+    const replyPayload = {
+        type: 'text',
+        text,
+        replyTo: {
+            msgId:   s.id,
+            who:     statusCurrentUser.name,
+            snippet: `📌 Status: ${preview}`
+        }
+    };
+
+    // Temporarily switch context to that DM and push
+    const savedChat = chatId, savedType = chatType;
+    chatId   = dmId(me.uid, targetUid);
+    chatType = 'dm';
+
+    // Ensure the parent DM doc exists
+    await db.doc(`conversations/${chatId}`).set({ lastAt: SV() }, { merge: true });
+    await pushMsg(replyPayload);
+
+    chatId   = savedChat;
+    chatType = savedType;
+
+    inp.value = '';
+    showToast('Reply sent! 💬');
+    closeStatusViewer();
+    // Open that DM
+    switchTab('dms');
+    openDM(friend);
+}
+
+// ── Views panel (who viewed) ───────────────────────────────
+async function openStatusViewsPanel(s) {
+    svPauseProgress();
+    // Remove any existing panel
+    document.getElementById('svViewsPanel')?.remove();
+
+    const panel = ce('div');
+    panel.id        = 'svViewsPanel';
+    panel.className = 'sv-views-panel';
+
+    const backdrop = ce('div');
+    backdrop.className = 'sv-views-backdrop';
+    backdrop.onclick   = () => {
+        panel.remove();
+        const cur = statusCurrentUser?.statuses?.[statusCurrentIndex];
+        svResumeProgress(cur);
+    };
+
+    const sheet = ce('div');
+    sheet.className = 'sv-views-sheet';
+    sheet.innerHTML = `
+        <span class="sv-views-handle"></span>
+        <div class="sv-views-title">👁 Viewed by</div>
+        <div id="svViewerList"><div style="color:var(--muted);font-size:13px;padding:8px 0;">Loading…</div></div>`;
+
+    panel.appendChild(backdrop);
+    panel.appendChild(sheet);
+    document.body.appendChild(panel);
+
+    // Load viewer profiles
+    try {
+        const viewUids   = Object.keys(s.views || {});
+        const reactions  = s.reactions || {};
+        if (!viewUids.length) {
+            document.getElementById('svViewerList').innerHTML =
+                '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No views yet.</div>';
+            return;
+        }
+        // Batch fetch profiles
+        const profiles = {};
+        for (let i = 0; i < viewUids.length; i += 10) {
+            const chunk = viewUids.slice(i, i + 10);
+            const snap  = await db.collection('users')
+                .where(firebase.firestore.FieldPath.documentId(), 'in', chunk).get();
+            snap.docs.forEach(d => { profiles[d.id] = d.data(); });
+        }
+        const list = document.getElementById('svViewerList');
+        list.innerHTML = '';
+        viewUids.forEach(uid => {
+            const p    = profiles[uid] || {};
+            const when = s.views[uid]?.toDate?.() || null;
+            const rx   = reactions[uid] || null;
+            const row  = ce('div');
+            row.className = 'sv-viewer-row';
+            row.innerHTML = `
+                ${mkAv(p.displayName || '?', p.photoURL || null, 32)}
+                <div class="sv-viewer-name">${esc(p.displayName || p.username || '?')}<br>
+                    <span style="font-size:11px;color:var(--muted);font-weight:400;">@${esc(p.username || '')}</span>
+                </div>
+                ${rx ? `<span class="sv-viewer-reaction">${rx}</span>` : ''}
+                <span class="sv-viewer-time">${when ? timeAgo(when) : ''}</span>`;
+            list.appendChild(row);
+        });
+    } catch(e) {
+        document.getElementById('svViewerList').innerHTML =
+            `<div style="color:var(--danger);font-size:13px;">${esc(e.message)}</div>`;
+    }
+}
+
 function closeStatusViewer() {
 if (statusProgressTimer) clearTimeout(statusProgressTimer);
 document.getElementById('statusViewer').classList.add('hidden');
 document.getElementById('svContent').style.background = '#000';
-// Clean up dynamic buttons so they don't duplicate next open
 document.getElementById('svDeleteBtn')?.remove();
 document.getElementById('svAddBtn')?.remove();
+document.getElementById('svViewsPanel')?.remove();
+if (svEmojiPickerEl) { svEmojiPickerEl.remove(); svEmojiPickerEl = null; }
+document.getElementById('svReactionsRow').innerHTML = '';
+document.getElementById('svInteractBar').style.display = 'none';
+document.getElementById('svViews').innerHTML = '';
 statusCurrentUser = null;
 renderStatusBar();
 }
