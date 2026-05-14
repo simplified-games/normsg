@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com https://www.google.com https://recaptcha.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.google.com; font-src https://fonts.gstatic.com; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src https://accounts.google.com https://*.firebaseapp.com https://www.google.com https://recaptcha.google.com; object-src 'none';">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com https://www.google.com https://recaptcha.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.google.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src https://accounts.google.com https://*.firebaseapp.com https://www.google.com https://recaptcha.google.com; object-src 'none';">
     <title>NorMSG</title>
     <link rel="icon" href="faviconnormsg.ico" type="image/x-icon">
 
@@ -1351,6 +1351,27 @@ exports.handler = async (event) => {
             font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
             color: var(--teal);
         }
+
+        /* AI markdown + math (NorMAI / @AI) */
+        .ai-md-root { white-space: normal; }
+        .ai-md-root .katex-display { margin: 0.6em 0; overflow-x: auto; max-width: 100%; }
+        .ai-md-h {
+            font-family: 'Syne', sans-serif; font-weight: 700; margin: 10px 0 6px;
+            color: var(--text); line-height: 1.25;
+        }
+        .ai-md-h:first-child { margin-top: 0; }
+        h2.ai-md-h { font-size: 15px; }
+        h3.ai-md-h { font-size: 14px; }
+        h4.ai-md-h { font-size: 13px; }
+        .ai-md-table {
+            border-collapse: collapse; width: 100%; font-size: 12px; margin: 8px 0;
+            max-width: 100%;
+        }
+        .ai-md-table th, .ai-md-table td {
+            border: 1px solid var(--border2); padding: 6px 8px; text-align: left;
+            vertical-align: top;
+        }
+        .ai-md-table th { background: rgba(0,0,0,0.25); color: var(--a2); font-weight: 700; }
 
         /* AI typing indicator */
         .ai-thinking {
@@ -2861,6 +2882,11 @@ exports.handler = async (event) => {
     </div>
 </div>
 
+<!-- KaTeX — LaTeX in NorMAI / @AI replies (cdnjs matches CSP) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" crossorigin="anonymous">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+
 <!-- ═══════════════════════════════════════════════════════════
      JAVASCRIPT
 ════════════════════════════════════════════════════════════ -->
@@ -4168,7 +4194,10 @@ row.innerHTML = `${avPart}
 area.appendChild(row);
 });
 
-requestAnimationFrame(() => { area.scrollTop = area.scrollHeight; });
+requestAnimationFrame(() => {
+    area.scrollTop = area.scrollHeight;
+    typesetAIMathIn(area);
+});
 // Play receive sound if last message is not from me
 if (msgs.length > 0) {
 const last = msgs[msgs.length - 1];
@@ -6327,44 +6356,176 @@ console.error('Groq error:', e);
 }
 }
 
-// Render AI response text — parses markdown code blocks and inline code
+// Render AI response text — fenced code, markdown (headers, tables), LaTeX via KaTeX
+const _AI_MATH_PH = '\uE000';
+const _AI_MATH_SL = '\uE001';
+
+function normalizeCodeFenceContent(code) {
+    if (code == null || code === '') return code;
+    const s = String(code);
+    const realNl = (s.match(/\n/g) || []).length;
+    const litNl = (s.match(/\\n/g) || []).length;
+    if (litNl > 0 && litNl >= Math.max(1, realNl)) {
+        return s
+            .replace(/\\r\\n/g, '\n')
+            .replace(/\\n/g, '\n')
+            .replace(/\\r/g, '\n')
+            .replace(/\\t/g, '\t')
+            .replace(/\\"/g, '"');
+    }
+    return s;
+}
+
+function extractMathForAI(text) {
+    const vault = [];
+    let t = text;
+    t = t.replace(/\\\[([\s\S]*?)\\\]/g, (_, body) => {
+        vault.push('\\[' + body + '\\]');
+        return _AI_MATH_PH + (vault.length - 1) + _AI_MATH_SL;
+    });
+    t = t.replace(/\\\(([\s\S]*?)\\\)/g, (_, body) => {
+        vault.push('\\(' + body + '\\)');
+        return _AI_MATH_PH + (vault.length - 1) + _AI_MATH_SL;
+    });
+    t = t.replace(/\$\$([\s\S]*?)\$\$/g, (_, body) => {
+        vault.push('$$' + body + '$$');
+        return _AI_MATH_PH + (vault.length - 1) + _AI_MATH_SL;
+    });
+    return { t, vault };
+}
+
+function restoreMathForAI(html, vault) {
+    const re = new RegExp(_AI_MATH_PH + '(\\d+)' + _AI_MATH_SL, 'g');
+    return html.replace(re, (_, i) => {
+        const src = vault[parseInt(i, 10)];
+        return src ? src.replace(/</g, '').replace(/>/g, '') : '';
+    });
+}
+
+function isGFMTableSeparator(line) {
+    const s = (line || '').trim();
+    if (!s.includes('|')) return false;
+    return /^[|\s:\-]+$/.test(s);
+}
+
+function splitTableCells(line) {
+    let r = (line || '').trim();
+    if (r.startsWith('|')) r = r.slice(1);
+    if (r.endsWith('|')) r = r.slice(0, -1);
+    return r.split('|').map(c => c.trim());
+}
+
+function applyInlineAIMarkdown(escLine) {
+    let s = escLine;
+    s = s.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    s = s.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
+    s = s.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    return s;
+}
+
+function renderGFMTable(rows) {
+    if (rows.length < 2) return esc(rows.join('\n'));
+    const headers = splitTableCells(rows[0]);
+    const bodyLines = rows.slice(2);
+    function cellMd(c) {
+        let x = esc(c);
+        x = x.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        x = x.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
+        x = x.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        return x;
+    }
+    let h = '<table class="ai-md-table"><thead><tr>';
+    h += headers.map(c => `<th>${cellMd(c)}</th>`).join('');
+    h += '</tr></thead><tbody>';
+    for (const line of bodyLines) {
+        if (!line.trim()) continue;
+        const cells = splitTableCells(line);
+        h += '<tr>' + cells.map(c => `<td>${cellMd(c)}</td>`).join('') + '</tr>';
+    }
+    h += '</tbody></table>';
+    return h;
+}
+
+function renderPlainAISegment(raw) {
+    if (raw === '' || raw == null) return '';
+    const { t, vault } = extractMathForAI(raw);
+    const lines = t.split('\n');
+    const blocks = [];
+    let i = 0;
+    while (i < lines.length) {
+        const line = lines[i];
+        if (line === '') {
+            blocks.push('<br>');
+            i++;
+            continue;
+        }
+        const hm = line.match(/^(#{1,3})\s+(.*)$/);
+        if (hm) {
+            const lev = hm[1].length;
+            const tag = lev === 1 ? 'h2' : lev === 2 ? 'h3' : 'h4';
+            blocks.push(`<${tag} class="ai-md-h">${esc(hm[2])}</${tag}>`);
+            i++;
+            continue;
+        }
+        const next = lines[i + 1];
+        if (next !== undefined && line.includes('|') && isGFMTableSeparator(next)) {
+            const tbl = [line, next];
+            i += 2;
+            while (i < lines.length && lines[i].trim() !== '' && lines[i].includes('|')) {
+                tbl.push(lines[i]);
+                i++;
+            }
+            blocks.push(renderGFMTable(tbl));
+            continue;
+        }
+        blocks.push(applyInlineAIMarkdown(esc(line)));
+        i++;
+    }
+    return restoreMathForAI(blocks.join('<br>'), vault);
+}
+
 function renderAIText(raw) {
-if (!raw) return '';
-let html    = '';
-let codeId  = 0;
-// Split on ``` code fences
-const parts = raw.split(/```(\w*)\n?([\s\S]*?)```/g);
-// parts: [text, lang, code, text, lang, code, ...]
-for (let i = 0; i < parts.length; i++) {
-if (i % 3 === 0) {
-// Plain text segment — escape and render inline code + line breaks
-let seg = esc(parts[i]);
-// Bold **text**
-seg = seg.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-// Italic *text*
-seg = seg.replace(/\*(.*?)\*/g, '<em>$1</em>');
-// Inline code `code`
-seg = seg.replace(/`([^`]+)`/g, '<span class="ai-inline-code">$1</span>');
-// Line breaks
-seg = seg.replace(/\n/g, '<br>');
-html += seg;
-} else if (i % 3 === 1) {
-// Language label — captured by the next iteration
-} else {
-// Code block
-const lang    = parts[i-1] || 'code';
-const code    = parts[i];
-const id      = `aicopy_${codeId++}`;
-html += `<div class="ai-code-wrap">
+    if (!raw) return '';
+    let html = '';
+    let codeId = 0;
+    const parts = raw.split(/```(\w*)\n?([\s\S]*?)```/g);
+    for (let i = 0; i < parts.length; i++) {
+        if (i % 3 === 0) {
+            html += renderPlainAISegment(parts[i]);
+        } else if (i % 3 === 1) {
+            /* language label — consumed with code part */
+        } else {
+            const lang = parts[i - 1] || 'code';
+            const code = normalizeCodeFenceContent(parts[i]);
+            const id = `aicopy_${codeId++}`;
+            html += `<div class="ai-code-wrap">
     <div class="ai-code-bar">
         <span>${esc(lang)}</span>
-        <button class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
+        <button type="button" class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
     </div>
     <pre>${esc(code)}</pre>
 </div>`;
+        }
+    }
+    return `<div class="ai-md-root">${html}</div>`;
 }
-}
-return html;
+
+function typesetAIMathIn(root) {
+    if (!root || typeof renderMathInElement !== 'function') return;
+    try {
+        renderMathInElement(root, {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '\\(', right: '\\)', display: false },
+            ],
+            ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code', 'option'],
+            throwOnError: false,
+            strict: 'ignore',
+        });
+    } catch (e) {
+        console.warn('KaTeX render:', e);
+    }
 }
 
 function copyAICode(btn, code) {
@@ -7524,7 +7685,10 @@ function renderAIChatMessages(chatId) {
             <div class="ai-msg-meta">${isUser ? 'You' : '✦ NorMAI'} · ${timeStr}</div>
         </div>`;
     }).join('');
-    area.scrollTop = area.scrollHeight;
+    requestAnimationFrame(() => {
+        typesetAIMathIn(area);
+        area.scrollTop = area.scrollHeight;
+    });
 }
 
 // ── Send a message in AI chat ──────────────────────────────
