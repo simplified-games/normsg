@@ -1723,6 +1723,90 @@ exports.handler = async (event) => {
         .wordle-key.present { background:#b59f3b;border-color:#b59f3b;color:#fff; }
         .wordle-key.absent  { background:#3a3a4c;border-color:#3a3a4c;color:#555; }
         .wordle-key.wide    { padding:10px 12px; }
+
+        /* ── VIEW PROFILE MODAL ──────────────────────────────── */
+        #viewProfileModal .modal-card {
+            max-height: 88vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border2) transparent;
+        }
+        #viewProfileModal .modal-card::-webkit-scrollbar { width: 4px; }
+        #viewProfileModal .modal-card::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+        .vp-hero {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 10px; padding: 8px 0 20px; text-align: center;
+        }
+        .vp-av {
+            width: 80px; height: 80px; border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), var(--teal));
+            display: flex; align-items: center; justify-content: center;
+            font-family: 'Syne', sans-serif; font-weight: 700; color: white;
+            font-size: 28px; overflow: hidden; flex-shrink: 0;
+            box-shadow: 0 0 0 3px var(--panel), 0 0 0 5px var(--border2);
+        }
+        .vp-av img { width: 100%; height: 100%; object-fit: cover; }
+        .vp-name { font-family: 'Syne', sans-serif; font-size: 20px; font-weight: 800; letter-spacing: -0.5px; }
+        .vp-handle { font-size: 12px; color: var(--muted); margin-top: -4px; }
+        .vp-bio {
+            font-size: 13px; color: var(--text); opacity: 0.8; line-height: 1.6;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 10px 14px; width: 100%;
+            text-align: left; margin-top: 4px; white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .vp-bio-empty { font-style: italic; opacity: 0.4; }
+        .vp-section-label {
+            font-size: 9px; font-weight: 800; letter-spacing: 0.13em;
+            text-transform: uppercase; color: var(--muted);
+            margin: 16px 0 8px; display: block;
+        }
+        .vp-pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+        .vp-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 20px; padding: 5px 10px; font-size: 12px;
+            font-weight: 600; cursor: pointer; transition: border-color 0.15s;
+        }
+        .vp-pill:hover { border-color: var(--accent); color: var(--a2); }
+        .vp-grp-pill {
+            display: flex; align-items: center; gap: 8px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 12px; padding: 8px 11px; font-size: 12px;
+            font-weight: 600; margin-bottom: 6px; cursor: pointer;
+            transition: border-color 0.15s;
+        }
+        .vp-grp-pill:hover { border-color: var(--accent); }
+        .vp-grp-icon {
+            width: 28px; height: 28px; border-radius: 8px;
+            background: linear-gradient(135deg, var(--accent), var(--teal));
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 800; color: white; flex-shrink: 0;
+        }
+        .vp-empty-hint { font-size: 12px; color: var(--muted); padding: 4px 0; }
+        .vp-dm-btn {
+            width: 100%; background: linear-gradient(135deg, var(--accent), #5046e5);
+            color: white; border: none; border-radius: 14px; padding: 13px;
+            font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 700;
+            cursor: pointer; margin-top: 18px; transition: all 0.2s;
+            box-shadow: 0 6px 20px rgba(124,92,252,0.35);
+        }
+        .vp-dm-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(124,92,252,0.5); }
+
+        /* Make profile modal scrollable too */
+        #profileModal .modal-card {
+            max-height: 88vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border2) transparent;
+        }
+        #profileModal .modal-card::-webkit-scrollbar { width: 4px; }
+        #profileModal .modal-card::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+        /* Clickable message avatar */
+        .msg-av:not(.inv) { cursor: pointer; transition: opacity 0.15s; }
+        .msg-av:not(.inv):hover { opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -1865,6 +1949,17 @@ exports.handler = async (event) => {
             </div>
             <div class="m-msg" id="tagMsg"></div>
             <button class="btn-primary" onclick="changeTag()" style="font-size:13px;padding:11px;">Save New Username</button>
+        </div>
+
+
+        <!-- Bio section -->
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:14px;">
+            <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Bio <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px;">(shown on your profile)</span></div>
+            <textarea class="m-input" id="bioInput" placeholder="Tell people a bit about yourself…" maxlength="160" rows="3"
+                style="resize:none;font-size:13px;"></textarea>
+            <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px;" id="bioCharCount">0 / 160</div>
+            <div class="m-msg" id="bioMsg"></div>
+            <button class="btn-primary" onclick="saveBio()" style="font-size:13px;padding:11px;">Save Bio</button>
         </div>
 
         <div class="modal-row" style="margin-top:14px;">
@@ -2313,6 +2408,35 @@ exports.handler = async (event) => {
         <button class="lb-tbtn" onclick="lbZoom(-0.25)" title="Zoom out">－</button>
         <button class="lb-tbtn" onclick="lbReset()" title="Reset">⊙</button>
         <a id="lbDownloadBtn" download class="lb-tbtn" title="Download" style="text-decoration:none;line-height:40px;text-align:center;">⬇</a>
+    </div>
+</div>
+
+
+<!-- ═══════════════ VIEW USER PROFILE MODAL ════════════════ -->
+<div id="viewProfileModal" class="modal-overlay hidden">
+    <div class="modal-card" style="width:min(420px,95vw);padding:28px 26px 24px;">
+        <button onclick="closeModal('viewProfileModal')" style="position:absolute;top:16px;right:18px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:4px;">✕</button>
+
+        <div class="vp-hero">
+            <div class="vp-av" id="vpAv">?</div>
+            <div class="vp-name" id="vpName">—</div>
+            <div class="vp-handle" id="vpHandle">@—</div>
+            <div class="vp-bio" id="vpBio"><span class="vp-bio-empty">No bio yet.</span></div>
+        </div>
+
+        <!-- Mutual Friends -->
+        <span class="vp-section-label">👥 Mutual Friends</span>
+        <div class="vp-pill-row" id="vpMutualFriends">
+            <span class="vp-empty-hint">Loading…</span>
+        </div>
+
+        <!-- Mutual Groups -->
+        <span class="vp-section-label">💬 Mutual Group Chats</span>
+        <div id="vpMutualGroups">
+            <span class="vp-empty-hint">Loading…</span>
+        </div>
+
+        <button class="vp-dm-btn" id="vpDmBtn" onclick="openDMFromProfile()">💬 Send Message</button>
     </div>
 </div>
 
@@ -3720,8 +3844,11 @@ const mid  = msg.id;
 row.className = 'msg-row' + (mine ? ' sent' : '');
 row.dataset.mid = mid;
 
+const avClickAttr = (!same && msg.senderUid && msg.senderUid !== 'AI')
+    ? `onclick="openUserProfile('${msg.senderUid.replace(/'/g,"\\'")}','${esc(msg.senderName||'?').replace(/'/g,"\\'")}','${(msg.senderPhoto||'').replace(/'/g,"\\'")}','${(msg.senderUsername||'').replace(/'/g,"\\'")}')"`
+    : '';
 const avPart = mine ? '' :
-`<div class="msg-av ${same?'inv':''}">` +
+`<div class="msg-av ${same?'inv':''}" ${avClickAttr}>` +
 (msg.senderPhoto ? `<img src="${esc(msg.senderPhoto)}" alt="">` : initials(msg.senderName||'?')) +
 `</div>`;
 
@@ -4296,6 +4423,16 @@ document.getElementById('newTagIn').value = myUsername || '';
 document.getElementById('newDisplayNameIn').value = me.displayName || '';
 mmsg('tagMsg','','');
 mmsg('displayNameMsg','','');
+mmsg('bioMsg','','');
+
+// Pre-fill bio
+const bioEl = document.getElementById('bioInput');
+const bioVal = dat.bio || '';
+bioEl.value = bioVal;
+document.getElementById('bioCharCount').textContent = `${bioVal.length} / 160`;
+bioEl.oninput = () => {
+    document.getElementById('bioCharCount').textContent = `${bioEl.value.length} / 160`;
+};
 
 document.getElementById('profileModal').classList.remove('hidden');
 }
@@ -4421,6 +4558,21 @@ showToast('Display name updated! ✓');
 mmsg('displayNameMsg', 'Failed: ' + e.message, 'err');
 }
 }
+
+// ── SAVE BIO ────────────────────────────────────────────────
+async function saveBio() {
+const bio = document.getElementById('bioInput').value.trim();
+if (bio.length > 160) return mmsg('bioMsg', 'Bio must be 160 chars or less.', 'err');
+mmsg('bioMsg', 'Saving…', 'inf');
+try {
+    invalidateUserCache(me.uid);
+    await db.collection('users').doc(me.uid).update({ bio });
+    mmsg('bioMsg', '✓ Bio saved!', 'ok');
+    showToast('Bio updated!');
+} catch(e) { mmsg('bioMsg', 'Failed: ' + e.message, 'err'); }
+}
+
+
 
 // ── DELETE GROUP (15s countdown) ──────────────────────────
 let delGroupTarget = null;   // { id, name }
@@ -5875,6 +6027,138 @@ if (myBadge) myBadge.style.display = 'none';
 if (myHandle) myHandle.textContent = `@${myUsername}`;
 }
 renderFriends();
+}
+
+
+// ── VIEW USER PROFILE ──────────────────────────────────────
+let _vpTargetUid = null;
+let _vpTargetFriend = null;  // friend object if they're a friend
+
+async function openUserProfile(uid, displayName, photoURL, username) {
+    if (!uid || uid === me.uid) return;
+    _vpTargetUid = uid;
+    _vpTargetFriend = null;
+
+    // Reset modal
+    const avEl = document.getElementById('vpAv');
+    avEl.innerHTML = photoURL
+        ? `<img src="${esc(photoURL)}" alt="">`
+        : initials(displayName || '?');
+    document.getElementById('vpName').textContent   = displayName || '?';
+    document.getElementById('vpHandle').textContent = username ? '@' + username : '';
+    document.getElementById('vpBio').innerHTML      = '<span class="vp-bio-empty">Loading…</span>';
+    document.getElementById('vpMutualFriends').innerHTML = '<span class="vp-empty-hint">Loading…</span>';
+    document.getElementById('vpMutualGroups').innerHTML  = '<span class="vp-empty-hint">Loading…</span>';
+
+    // Show/hide DM button based on friendship
+    const isFriend = friends.some(f => f.uid === uid);
+    _vpTargetFriend = friends.find(f => f.uid === uid) || null;
+    const dmBtn = document.getElementById('vpDmBtn');
+    dmBtn.style.display = isFriend ? 'block' : 'none';
+
+    document.getElementById('viewProfileModal').classList.remove('hidden');
+
+    // Load bio from Firestore
+    try {
+        const snap = await getCachedProfile(uid);
+        const bio  = snap?.bio || '';
+        const bioEl = document.getElementById('vpBio');
+        if (bio) {
+            bioEl.textContent = bio;
+            bioEl.classList.remove('vp-bio-empty');
+        } else {
+            bioEl.innerHTML = '<span class="vp-bio-empty">No bio yet.</span>';
+        }
+        // Update name/photo in case cache had stale data
+        const fresh = snap?.displayName || displayName;
+        document.getElementById('vpName').textContent = fresh;
+        if (snap?.photoURL) {
+            avEl.innerHTML = `<img src="${esc(snap.photoURL)}" alt="">`;
+        }
+        // Show super badge if applicable
+        const until = snap?.normsgSuper?.until?.toDate?.();
+        if (until && until > new Date()) {
+            document.getElementById('vpName').innerHTML =
+                `<span class="super-name">${esc(fresh)}</span> <span class="super-badge">✦ SUPER</span>`;
+        }
+    } catch(e) {
+        document.getElementById('vpBio').innerHTML = '<span class="vp-bio-empty">Could not load bio.</span>';
+    }
+
+    // Mutual friends
+    try {
+        const mutualEl = document.getElementById('vpMutualFriends');
+        // Their friends — fetch from both directions
+        const [q1, q2] = await Promise.all([
+            db.collection('friendRequests').where('fromUid','==',uid).where('status','==','accepted').limit(30).get(),
+            db.collection('friendRequests').where('toUid','==',uid).where('status','==','accepted').limit(30).get()
+        ]);
+        const theirFriendUids = new Set();
+        q1.docs.forEach(d => theirFriendUids.add(d.data().toUid));
+        q2.docs.forEach(d => theirFriendUids.add(d.data().fromUid));
+
+        const mutuals = friends.filter(f => theirFriendUids.has(f.uid));
+        if (!mutuals.length) {
+            mutualEl.innerHTML = '<span class="vp-empty-hint">No mutual friends.</span>';
+        } else {
+            mutualEl.innerHTML = '';
+            mutuals.slice(0, 12).forEach(f => {
+                const pill = ce('div');
+                pill.className = 'vp-pill';
+                pill.innerHTML = mkAv(f.displayName, f.photoURL, 20) + `<span>${esc(f.displayName)}</span>`;
+                pill.onclick = () => {
+                    closeModal('viewProfileModal');
+                    openDM(f);
+                };
+                mutualEl.appendChild(pill);
+            });
+            if (mutuals.length > 12) {
+                const more = ce('span');
+                more.className = 'vp-empty-hint';
+                more.textContent = `+${mutuals.length - 12} more`;
+                mutualEl.appendChild(more);
+            }
+        }
+    } catch(e) {
+        document.getElementById('vpMutualFriends').innerHTML = '<span class="vp-empty-hint">Could not load.</span>';
+    }
+
+    // Mutual group chats
+    try {
+        const grpEl = document.getElementById('vpMutualGroups');
+        const mutualGroups = myGroups.filter(g => (g.members || []).includes(uid));
+        if (!mutualGroups.length) {
+            grpEl.innerHTML = '<span class="vp-empty-hint">No mutual group chats.</span>';
+        } else {
+            grpEl.innerHTML = '';
+            mutualGroups.forEach(g => {
+                const pill = ce('div');
+                pill.className = 'vp-grp-pill';
+                pill.innerHTML = `
+                    <div class="vp-grp-icon">${esc((g.name[0]||'G').toUpperCase())}</div>
+                    <div style="min-width:0;flex:1;">
+                        <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(g.name)}</div>
+                        <div style="font-size:11px;color:var(--muted);">${g.members?.length||0} members</div>
+                    </div>
+                    <span style="font-size:11px;color:var(--a2);font-weight:700;">Open →</span>`;
+                pill.onclick = () => {
+                    closeModal('viewProfileModal');
+                    openGroup(g);
+                    switchTab('groups');
+                };
+                grpEl.appendChild(pill);
+            });
+        }
+    } catch(e) {
+        document.getElementById('vpMutualGroups').innerHTML = '<span class="vp-empty-hint">Could not load.</span>';
+    }
+}
+
+function openDMFromProfile() {
+    if (!_vpTargetFriend) return;
+    closeModal('viewProfileModal');
+    switchTab('dms');
+    openDM(_vpTargetFriend);
 }
 
 // ── WEEKLY MESSAGE COUNT ────────────────────────────────────
