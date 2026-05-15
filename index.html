@@ -25,7 +25,58 @@
          — Firebase will print a direct link to create it
            in your browser console the first time cleanup runs.
     
+======================= netlify/functions/normai.js ===============================
+ // netlify/functions/normai.js
+// Free-tier NorMAI proxy
+// Set GROQ_API_KEY_FREE in Netlify → Site settings → Environment variables
 
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL   = 'llama-3.1-8b-instant';
+
+exports.handler = async (event) => {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+
+  const headers = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    const { prompt } = JSON.parse(event.body || '{}');
+    if (!prompt) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
+    }
+
+    const groqRes = await fetch(GROQ_API_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY_FREE}`, // Change to GROQ_API_KEY_PRO for Pro normai-pro.js
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: 512,
+        temperature: 0.7,
+      }),
+    });
+
+    if (!groqRes.ok) {
+      const err = await groqRes.json().catch(() => ({}));
+      return { statusCode: groqRes.status, headers, body: JSON.stringify({ error: err }) };
+    }
+
+    const data  = await groqRes.json();
+    const reply = data.choices?.[0]?.message?.content ?? '';
+
+    return { statusCode: 200, headers, body: JSON.stringify({ reply }) };
+  } catch (e) {
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+  }
+};
 
     ── FIRESTORE RULES ────────────────────────────────────
     rules_version = '2';
@@ -2943,14 +2994,10 @@ const NORMAI_ULTRA_API = 'https://normsg-ultra.simplifiedtest10.deno.net';
 let userPlan = 'free';   // 'free' | 'pro' | 'ultra'
 let selectedAIModel = 'fast'; // 'fast' | 'thinking' | 'pro'
 
-// NOTE: We intentionally never return NORMAI_ULTRA_API from the browser,
-// because Ultra responses can be 503 without proper CORS headers.
-// This routes Ultra behavior to the CORS-safe Free endpoint until
-// the Ultra function always includes Access-Control-Allow-Origin.
 function getNormAIUrl() {
-    if (userPlan === 'ultra' && selectedAIModel === 'pro') return NORMAI_FREE_API;
+    if (userPlan === 'ultra' && selectedAIModel === 'pro') return NORMAI_ULTRA_API;
     if ((userPlan === 'pro' || userPlan === 'ultra') && selectedAIModel === 'thinking') return NORMAI_PRO_API;
-    if (userPlan === 'ultra') return NORMAI_FREE_API;
+    if (userPlan === 'ultra') return NORMAI_ULTRA_API;
     return userPlan === 'pro' ? NORMAI_PRO_API : NORMAI_FREE_API;
 }
 
@@ -4104,7 +4151,7 @@ subscribePinned();
 }
 
 // ── MESSAGES ───────────────────────────────────────────────
-const MSG_PAGE = 65;  // reads per page — change to load more
+const MSG_PAGE = 40;  // reads per page — change to load more
 
 function subMessages(path) {
 if (msgUnsub) { msgUnsub(); msgUnsub = null; }
@@ -5621,7 +5668,7 @@ const isGroup    = (convType || chatType) === 'group';
 
 // Is this message a @mention of me?
 const isMention = !!(msg.text && myUsername &&
-new RegExp('@' + myUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(msg.text));
+new RegExp('@' + myUsername + '\\b', 'i').test(msg.text));
 
 // DMs always notify. Groups: notify if groupAll is on, OR if it's a @mention and mentions is on.
 const shouldNotify = !isGroup || s.groupAll || (isMention && s.mentions);
@@ -6430,17 +6477,14 @@ const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content
 const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown fenced blocks with the language tag and real line breaks (never JSON \\n escapes). The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
 const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
 
-/*
-  IMPORTANT:
-  This must call the same-origin Netlify proxy to avoid browser CORS failures
-  and to isolate the upstream (deno.net) outage/headers. The proxy only needs `prompt`.
-*/
-// Use Deno endpoints based on plan/model selection (Free/Pro/Ultra + Thinking=Pro)
-const url = getNormAIUrl();
-const res = await fetch(url, {
+// Always use Free API format for @AI — the Pro endpoint doesn't support this call shape
+// Ultra users with Pro preference get the Ultra API
+const ultraPref2 = (() => { try { return localStorage.getItem('normsg_ultra_ai_model') || 'pro'; } catch { return 'pro'; } })();
+const atAiApiUrl = (isUltraUser && ultraPref2 === 'pro') ? NORMAI_ULTRA_API : NORMAI_FREE_API;
+const res = await fetch(atAiApiUrl, {
 method:  'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}` , max_tokens: NORMAI_MAX_TOKENS })
+body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}`, max_tokens: NORMAI_MAX_TOKENS })
 });
 
 if (!res.ok) {
@@ -6466,17 +6510,10 @@ const _AI_MATH_SL = '\uE001';
 function normalizeCodeFenceContent(code) {
     if (code == null || code === '') return code;
     let s = String(code);
+    // Always unescape literal \n/\t inside code fences.
+    // Models should never write \n as literal text inside a code block.
     const litNl = (s.match(/\\n/g) || []).length;
-    if (litNl < 2) return s;
-    const realNl = (s.match(/\n/g) || []).length;
-    const total = litNl + realNl + 1;
-    const litRatio = litNl / total;
-    // Models often return a *partially* JSON-escaped fence (literal \n) then real newlines — unescape when escapes are a material fraction of all line breaks
-    const shouldUnescape =
-        litNl >= realNl ||
-        (litNl >= 8 && litRatio >= 0.05) ||
-        (litNl >= 4 && litNl >= realNl * 0.15);
-    if (!shouldUnescape) return s;
+    if (litNl === 0) return s;
     return s
         .replace(/\\r\\n/g, '\n')
         .replace(/\\n/g, '\n')
@@ -6598,11 +6635,21 @@ function renderAIText(raw) {
     if (!raw) return '';
     let html = '';
     let codeId = 0;
-    // Robust fenced-code splitting:
-    // - Accept CRLF or LF after the optional language tag
-    // - Allow non-[A-Za-z0-9_] language identifiers (e.g. c++, python3)
-    // - Avoid leaving fence-header leftovers in the preceding text segment
-    const parts = raw.split(/```([^\n\r`]*)\r?\n?([\s\S]*?)```/g);
+
+    // Pre-normalize: if the response is heavily escaped (model emitted literal \n instead of
+    // real newlines -- common with smaller models), fix the whole string upfront.
+    // Fires when literal \n count > 10 and outnumbers real newlines 2:1.
+    const totalLitNl  = (raw.match(/\\n/g)  || []).length;
+    const totalRealNl = (raw.match(/\n/g)    || []).length;
+    if (totalLitNl > 10 && totalLitNl > totalRealNl * 2) {
+        raw = raw
+            .replace(/\\r\\n/g, '\n')
+            .replace(/\\n/g,      '\n')
+            .replace(/\\r/g,      '\n')
+            .replace(/\\t/g,      '\t');
+    }
+
+    const parts = raw.split(/```(\w*)\n?([\s\S]*?)```/g);
     for (let i = 0; i < parts.length; i++) {
         if (i % 3 === 0) {
             html += renderPlainAISegment(parts[i]);
@@ -7853,7 +7900,7 @@ async function sendAIChatMsg() {
     try {
         const isPro   = userPlan === 'pro' || userPlan === 'ultra';
         const isUltra = userPlan === 'ultra';
-        const sysPrompt = `You are NorMAI, a smart and friendly AI assistant inside NorMSG. Be helpful, concise and clear. Use markdown fenced code blocks (\`\`\`language) for code — use real line breaks inside the fence, not JSON-style \\n escape sequences.${isUltra ? ' NorMULTRA mode — give the most detailed, thorough, expert-level answers.' : isPro ? ' Give thorough, detailed answers.' : ''}`;
+        const sysPrompt = `You are NorMAI, a smart and friendly AI assistant inside NorMSG. Be helpful, concise and clear. CRITICAL: always wrap ALL code in markdown fenced code blocks using triple backticks and a language tag (e.g. \`\`\`python). Never output code as plain text or with \\n escape sequences outside of a code block. Use real line breaks inside code fences, not JSON-style \\n sequences.${isUltra ? ' NorMULTRA mode — give the most detailed, thorough, expert-level answers.' : isPro ? ' Give thorough, detailed answers.' : ''}`;
         const fullPrompt = sysPrompt + (history ? `\n\nConversation so far:\n${history}\n\nUser: ${text}` : `\n\nUser: ${text}`);
         const answer = await callNormAI(fullPrompt, isPro ? history : '');
 
