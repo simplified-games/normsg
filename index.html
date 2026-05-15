@@ -120,7 +120,7 @@ const CORS = {
 };
 
 const ULTRA_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
-const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const NVIDIA_URL  = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
@@ -128,71 +128,80 @@ Deno.serve(async (req) => {
     return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS });
   }
 
-  let body: Record<string, unknown>;
   try {
-    body = await req.json();
-  } catch {
-    return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
-  }
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
+    }
 
-  const apiKey = Deno.env.get('NVIDIA_ULTRA_API_KEY');
-  if (!apiKey) {
-    return Response.json({ error: 'API key not configured' }, { status: 500, headers: CORS });
-  }
+    const apiKey = Deno.env.get('NVIDIA_ULTRA_API_KEY');
+    if (!apiKey) {
+      return Response.json({ error: 'API key not configured' }, { status: 500, headers: CORS });
+    }
 
-  // Nemotron 3 Super is a text model, so vision inputs are not handled here.
-  if (body.vision) {
+    // Nemotron 3 Super is a text model — vision not supported.
+    if (body.vision) {
+      return Response.json(
+        { error: 'Vision is not supported by the Nemotron 3 Super text model' },
+        { status: 400, headers: CORS },
+      );
+    }
+
+    if (!body.prompt) {
+      return Response.json({ error: 'Missing prompt' }, { status: 400, headers: CORS });
+    }
+
+    // Build messages array — allow optional context/system prompt
+    const messages: { role: 'system' | 'user'; content: string }[] = [];
+    const context   = typeof body.context === 'string' ? body.context.trim() : '';
+    const rawPrompt = String(body.prompt);
+
+    if (body.mode === 'ultra' && context) {
+      messages.push({ role: 'system', content: context });
+    }
+
+    const userSplit = rawPrompt.indexOf('\n\nUser: ');
+    if (userSplit !== -1) {
+      const systemPart = rawPrompt.slice(0, userSplit).trim();
+      const userPart   = rawPrompt.slice(userSplit + 7).trim();
+      if (systemPart) messages.push({ role: 'system', content: systemPart });
+      messages.push({ role: 'user', content: userPart });
+    } else {
+      messages.push({ role: 'user', content: rawPrompt });
+    }
+
+    const nvidiaRes = await fetch(NVIDIA_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        model:       ULTRA_MODEL,
+        messages,
+        max_tokens:  4096,  // was 200000 — above NVIDIA's limit, caused null-status crashes
+        temperature: 0.7,
+      }),
+    });
+
+    const data = await nvidiaRes.json();
+    if (!nvidiaRes.ok) {
+      return Response.json({ error: data }, { status: nvidiaRes.status, headers: CORS });
+    }
+
+    const reply = data.choices?.[0]?.message?.content ?? '';
+    return Response.json({ reply }, { headers: CORS });
+
+  } catch (e) {
+    // Top-level catch — ensures CORS headers are always present so the browser
+    // sees the actual error instead of a null-status CORS failure.
     return Response.json(
-      { error: 'Vision is not supported by the Nemotron 3 Super text model' },
-      { status: 400, headers: CORS },
+      { error: (e as Error).message ?? 'Internal server error' },
+      { status: 500, headers: CORS },
     );
   }
-
-  if (!body.prompt) {
-    return Response.json({ error: 'Missing prompt' }, { status: 400, headers: CORS });
-  }
-
-  // Build messages array — allow optional context/system prompt
-  const messages: { role: 'system' | 'user'; content: string }[] = [];
-
-  const context = typeof body.context === 'string' ? body.context.trim() : '';
-  const rawPrompt = String(body.prompt);
-
-  if (body.mode === 'ultra' && context) {
-    messages.push({ role: 'system', content: context });
-  }
-
-  const userSplit = rawPrompt.indexOf('\n\nUser: ');
-  if (userSplit !== -1) {
-    const systemPart = rawPrompt.slice(0, userSplit).trim();
-    const userPart = rawPrompt.slice(userSplit + 7).trim();
-    if (systemPart) messages.push({ role: 'system', content: systemPart });
-    messages.push({ role: 'user', content: userPart });
-  } else {
-    messages.push({ role: 'user', content: rawPrompt });
-  }
-
-  const groqRes = await fetch(NVIDIA_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: ULTRA_MODEL,
-      messages,
-      max_tokens: 200000,
-      temperature: 0.7,
-    }),
-  });
-
-  const data = await groqRes.json();
-  if (!groqRes.ok) {
-    return Response.json({ error: data }, { status: groqRes.status, headers: CORS });
-  }
-
-  const reply = data.choices?.[0]?.message?.content ?? '';
-  return Response.json({ reply }, { headers: CORS });
 });
 
 
