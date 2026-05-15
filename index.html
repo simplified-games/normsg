@@ -235,7 +235,7 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'openai/gpt-oss-120b',
+      model: 'gpt-oss-120b',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 512,
       temperature: 0.7,
@@ -5388,6 +5388,11 @@ return photo
 function esc(s) {
 return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+\r
+// Escape a string for safe use inside new RegExp(...)
+function reEsc(s) {
+return String(s||'').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function fmtTime(d) { return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
 
@@ -5840,13 +5845,7 @@ const isGroup    = (convType || chatType) === 'group';
 
 // Is this message a @mention of me?
 const isMention = !!(msg.text && myUsername &&
-function reEscape(str) {
-        return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-function reEscape(str) {
-        return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-new RegExp('@' + String(myUsername).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(msg.text));
+new RegExp('@' + myUsername + '\\b', 'i').test(msg.text));
 
 // DMs always notify. Groups: notify if groupAll is on, OR if it's a @mention and mentions is on.
 const shouldNotify = !isGroup || s.groupAll || (isMention && s.mentions);
