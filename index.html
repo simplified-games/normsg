@@ -1,0 +1,1323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com https://apis.google.com https://www.google.com https://recaptcha.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://www.google.com https://cdnjs.cloudflare.com; font-src https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https: blob:; connect-src 'self' https:; frame-src https://accounts.google.com https://*.firebaseapp.com https://www.google.com https://recaptcha.google.com; object-src 'none';">
+    <title>NorMSG</title>
+    <link rel="icon" href="faviconnormsg.ico" type="image/x-icon">
+
+    <!--
+    ═══════════════════════════════════════════════════════
+      NORMSG — SETUP CHECKLIST
+    ═══════════════════════════════════════════════════════
+      1. Replace the firebaseConfig below with your own.
+      2. Enable Authentication → Google sign-in.
+      3. Enable Firestore Database (start in test mode).
+      4. Enable Firebase Storage.
+      5. Add your GitHub Pages URL to Firestore → Authentication
+         → Settings → Authorized Domains.
+      6. Set Firestore rules (see below).
+      7. Set Storage rules (see below).
+      8. Create a Firestore composite index:
+         Collection: (each messages sub-collection)
+         Field: deleteAt  ASC
+         — Firebase will print a direct link to create it
+           in your browser console the first time cleanup runs.
+    
+======================= normsg-free.ts ===============================
+// normsg-free.ts  —  NorMSG Free API (+ vision support)
+// Deploy to: normsg-free.simplifiedtest10.deno.net
+// Env vars needed: GROQ_API_KEY_FREE
+//
+// Supports:
+//   { prompt }                          → standard text chat (llama-3.1-8b-instant)
+//   { vision, image, mimeType, prompt } → image analysis (llama-4-scout-17b-16e-instruct)
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+const TEXT_MODEL   = 'llama-3.1-8b-instant';
+const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (req.method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400 });
+  }
+
+  const apiKey = Deno.env.get('GROQ_API_KEY_FREE');
+  if (!apiKey) return Response.json({ error: 'API key not configured' }, { status: 500 });
+
+  // ── Vision request ─────────────────────────────────────
+  if (body.vision && body.image && body.mimeType && body.prompt) {
+    const imageUrl = `data:${body.mimeType};base64,${body.image}`;
+    const groqRes = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: VISION_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text',      text: String(body.prompt) },
+              { type: 'image_url', image_url: { url: imageUrl } },
+            ],
+          },
+        ],
+        max_tokens: 1024,
+        temperature: 0.7,
+      }),
+    });
+    const data = await groqRes.json();
+    if (!groqRes.ok) return Response.json({ error: data }, { status: groqRes.status, headers: CORS });
+    const reply = data.choices?.[0]?.message?.content ?? '';
+    return Response.json({ reply }, { headers: CORS });
+  }
+
+  // ── Standard text request ──────────────────────────────
+  if (!body.prompt) return Response.json({ error: 'Missing prompt' }, { status: 400 });
+
+  const groqRes = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      messages: [{ role: 'user', content: String(body.prompt) }],
+      max_tokens: 512,
+      temperature: 0.7,
+    }),
+  });
+  const data = await groqRes.json();
+  if (!groqRes.ok) return Response.json({ error: data }, { status: groqRes.status, headers: CORS });
+  const reply = data.choices?.[0]?.message?.content ?? '';
+  return Response.json({ reply }, { headers: CORS });
+});
+
+
+======================= normsg-ultra.ts ===============================
+// normsg-ultra.ts  —  NorMSG Ultra API (NVIDIA version)
+// Deploy to: normsg-ultra.simplifiedtest10.deno.net
+// Env vars needed: NVIDIA_ULTRA_API_KEY
+//
+// Supports:
+//   { prompt }                           → text chat
+//   { prompt, context, mode:'ultra' }    → context-aware chat with system prompt
+//   { vision, image, mimeType, prompt }  → not supported by Nemotron 3 Super (text model)
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+const ULTRA_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
+const NVIDIA_URL  = 'https://integrate.api.nvidia.com/v1/chat/completions';
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (req.method !== 'POST') {
+    return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS });
+  }
+
+  try {
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
+    }
+
+    const apiKey = Deno.env.get('NVIDIA_ULTRA_API_KEY');
+    if (!apiKey) {
+      return Response.json({ error: 'API key not configured' }, { status: 500, headers: CORS });
+    }
+
+    // Nemotron 3 Super is a text model — vision not supported.
+    if (body.vision) {
+      return Response.json(
+        { error: 'Vision is not supported by the Nemotron 3 Super text model' },
+        { status: 400, headers: CORS },
+      );
+    }
+
+    if (!body.prompt) {
+      return Response.json({ error: 'Missing prompt' }, { status: 400, headers: CORS });
+    }
+
+    // Build messages array — allow optional context/system prompt
+    const messages: { role: 'system' | 'user'; content: string }[] = [];
+    const context   = typeof body.context === 'string' ? body.context.trim() : '';
+    const rawPrompt = String(body.prompt);
+
+    if (body.mode === 'ultra' && context) {
+      messages.push({ role: 'system', content: context });
+    }
+
+    const userSplit = rawPrompt.indexOf('\n\nUser: ');
+    if (userSplit !== -1) {
+      const systemPart = rawPrompt.slice(0, userSplit).trim();
+      const userPart   = rawPrompt.slice(userSplit + 7).trim();
+      if (systemPart) messages.push({ role: 'system', content: systemPart });
+      messages.push({ role: 'user', content: userPart });
+    } else {
+      messages.push({ role: 'user', content: rawPrompt });
+    }
+
+    const nvidiaRes = await fetch(NVIDIA_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        model:       ULTRA_MODEL,
+        messages,
+        max_tokens:  4096,  // was 200000 — above NVIDIA's limit, caused null-status crashes
+        temperature: 0.7,
+      }),
+    });
+
+    const data = await nvidiaRes.json();
+    if (!nvidiaRes.ok) {
+      return Response.json({ error: data }, { status: nvidiaRes.status, headers: CORS });
+    }
+
+    const reply = data.choices?.[0]?.message?.content ?? '';
+    return Response.json({ reply }, { headers: CORS });
+
+  } catch (e) {
+    // Top-level catch — ensures CORS headers are always present so the browser
+    // sees the actual error instead of a null-status CORS failure.
+    return Response.json(
+      { error: (e as Error).message ?? 'Internal server error' },
+      { status: 500, headers: CORS },
+    );
+  }
+});
+
+
+======================= normsg-pro.ts ===============================
+// normsg-pro.ts  —  NorMSG Pro API
+// Deploy to: normsg-pro.simplifiedtest10.deno.net
+// Env vars needed: GROQ_API_KEY_PRO
+
+Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+
+  if (req.method !== 'POST') {
+    return Response.json({ error: 'Method not allowed' }, { status: 405 });
+  }
+
+  const { prompt } = await req.json();
+  if (!prompt) return Response.json({ error: 'Missing prompt' }, { status: 400 });
+
+  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('GROQ_API_KEY_PRO')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-oss-120b',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 512,
+      temperature: 0.7,
+    }),
+  });
+
+  const data = await groqRes.json();
+  const reply = data.choices?.[0]?.message?.content ?? '';
+
+  return Response.json({ reply }, {
+    headers: { 'Access-Control-Allow-Origin': '*' },
+  });
+});
+
+    ── FIRESTORE RULES ────────────────────────────────────
+    rules_version = '2';
+    service cloud.firestore {
+      match /databases/{database}/documents {
+        match /users/{uid} {
+          allow read:  if request.auth != null;
+          allow write: if request.auth.uid == uid ||
+            request.auth.token.email == 'simplifiedlearning10@gmail.com' ||
+            exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid));
+        }
+        match /usernames/{uname} {
+          allow read:   if request.auth != null;
+          allow create: if request.auth != null;
+        }
+        match /friendRequests/{id} {
+          allow read: if request.auth != null && resource.data.status == 'accepted';
+          allow read: if request.auth != null &&
+            (request.auth.uid == resource.data.fromUid ||
+             request.auth.uid == resource.data.toUid);
+          allow create: if request.auth != null;
+          allow update: if request.auth != null &&
+            (request.auth.uid == resource.data.fromUid ||
+             request.auth.uid == resource.data.toUid);
+        }
+        match /conversations/{convId} {
+          allow read, write: if request.auth != null;
+          match /messages/{msgId} {
+            allow read, write: if request.auth != null;
+          }
+        }
+        match /groups/{groupId} {
+          allow read, write: if request.auth != null &&
+            request.auth.uid in resource.data.members;
+          allow create: if request.auth != null;
+          match /messages/{msgId} {
+            allow read, write: if request.auth != null;
+          }
+        }
+        match /statuses/{statusId} {
+          allow read:   if request.auth != null;
+          allow create: if request.auth.uid == request.resource.data.uid;
+          allow update: if request.auth != null;
+          allow delete: if request.auth.uid == resource.data.uid;
+        }
+        match /normgames/{gameId} {
+          allow read:   if request.auth != null;
+          allow create: if request.auth != null;
+          allow update: if request.auth != null;
+          allow delete: if request.auth != null;
+        }
+        match /platformAdmins/{uid} {
+          allow read:  if request.auth != null;
+          allow write: if request.auth != null &&
+            (request.auth.token.email == 'simplifiedlearning10@gmail.com' ||
+             exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)));
+        }
+        match /siteConfig/{docId} {
+          allow read:  if request.auth != null;
+          allow write: if request.auth != null &&
+            (request.auth.token.email == 'simplifiedlearning10@gmail.com' ||
+             exists(/databases/$(database)/documents/platformAdmins/$(request.auth.uid)));
+        }
+      }
+    }
+
+    ── STORAGE RULES ──────────────────────────────────────
+    rules_version = '2';
+    service firebase.storage {
+      match /b/{bucket}/o {
+        match /images/{allPaths=**} {
+          allow read:  if request.auth != null;
+          allow write: if request.auth != null
+            && request.resource.size < 8 * 1024 * 1024
+            && request.resource.contentType.matches('image/.*');
+        }
+        match /avatars/{uid}/{allPaths=**} {
+          allow read:  if request.auth != null;
+          allow write: if request.auth.uid == uid
+            && request.resource.size < 4 * 1024 * 1024
+            && request.resource.contentType.matches('image/.*');
+        }
+      }
+    }
+    ═══════════════════════════════════════════════════════
+    -->
+
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-check-compat.js"></script>
+
+    <!-- Fonts: Syne (display) + Figtree (body) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Figtree:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<div class="glow-a"></div>
+<div class="glow-b"></div>
+<div id="toast"></div>
+
+<!-- ── NORMGAMES OVERLAY ── -->
+<div id="gameOverlay" style="display:none;position:fixed;inset:0;z-index:800;background:var(--bg);flex-direction:column;align-items:center;overflow-y:auto;">
+    <div style="width:100%;max-width:560px;padding:16px 16px 40px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+            <button onclick="closeGame()" style="background:var(--panel);border:1px solid var(--border2);color:var(--text);border-radius:10px;padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit;">← Back</button>
+            <div id="gameTitle" style="font-size:17px;font-weight:800;color:var(--text);flex:1;"></div>
+        </div>
+        <div id="gameContent"></div>
+    </div>
+</div>
+<div id="annBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99998;
+    display:none;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;
+    padding:12px 20px;font-family:'Figtree',sans-serif;font-size:13px;
+    box-shadow:0 2px 16px rgba(0,0,0,0.4);text-align:center;">
+    <span id="annBannerText"></span>
+    <button onclick="dismissAnnouncement()" style="
+        background:rgba(255,255,255,0.18);border:none;color:inherit;
+        cursor:pointer;padding:4px 12px;border-radius:20px;font-size:12px;
+        font-family:'Figtree',sans-serif;font-weight:600;white-space:nowrap;flex-shrink:0;">
+        ✕ Dismiss
+    </button>
+</div>
+
+<!-- ═══════════════ LANDING ════════════════ -->
+<div id="landingScreen">
+    <div class="land-card">
+        <div class="land-logo">NorMSG</div>
+        <div class="land-tag">Message your people</div>
+        <div class="land-desc">
+            Real-time DMs and group chats with image sharing.<br>
+            Add friends by <strong>@username</strong>. Messages auto-delete after <strong>7 days</strong>, images after <strong>72 hours</strong>. Download history before it expires.
+        </div>
+        <div class="land-rules">
+            <span class="rule-pill green">📷 Images · 72h</span>
+            <span class="rule-pill green">💬 Messages · 7d</span>
+            <span class="rule-pill warn">⚡ Spam · 1 min timeout</span>
+            <span class="rule-pill red">🤐 Swearing · 5 min timeout</span>
+        </div>
+        <button class="btn-primary" onclick="login()">🔒 &nbsp; Continue with Google</button>
+        <button class="btn-primary" onclick="openLoginModal()" style="margin-top:10px;background:linear-gradient(135deg,rgba(255,255,255,0.07),rgba(255,255,255,0.03));border:1px solid var(--border2);box-shadow:none;color:var(--text);font-size:14px;">🔑 &nbsp; Sign in with login</button>
+        <div style="margin-top:14px;font-size:11px;color:var(--muted);opacity:0.55;">Made by Alex ✦</div>
+    </div>
+</div>
+
+<!-- ═══════════════ LOGIN WITH CREDENTIALS MODAL ════════════════ -->
+<div id="loginModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-title">Sign in</div>
+        <div class="modal-sub">Enter the username and password given to you by an admin.</div>
+
+        <!-- Lockout banner -->
+        <div class="lockout-timer" id="lockoutTimer">🔒 Too many failed attempts. Try again in <span id="lockoutCountdown"></span>s.</div>
+
+        <div style="position:relative;">
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;margin-top:-5px;">@</span>
+            <input class="m-input" id="loginUsernameIn" placeholder="username" maxlength="30"
+                style="padding-left:27px;"
+                oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.]/g,'')"
+                onkeydown="if(event.key==='Enter') doLoginWithCredentials()">
+        </div>
+        <input class="m-input" id="loginPasswordIn" type="password" placeholder="Password"
+            onkeydown="if(event.key==='Enter') doLoginWithCredentials()">
+
+        <!-- CAPTCHA (shown after 3 failures) -->
+        <div class="captcha-box" id="captchaBox">
+            <div class="captcha-q">🤖 Quick check — what is <span id="captchaQ"></span>?</div>
+            <input class="m-input" id="captchaIn" type="number" placeholder="Your answer" style="margin:0;" onkeydown="if(event.key==='Enter') doLoginWithCredentials()">
+        </div>
+
+        <div class="m-msg" id="loginMsg"></div>
+        <div id="loginAttemptsHint" class="login-attempts"></div>
+        <div class="modal-row">
+            <button class="btn-sec" onclick="closeModal('loginModal')">Cancel</button>
+            <button class="btn-primary" id="loginSubmitBtn" onclick="doLoginWithCredentials()" style="flex:1;">Sign in →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ USERNAME MODAL ════════════════ -->
+<div id="usernameModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-title">Choose your @username</div>
+        <div class="modal-sub">This is how friends find and add you on NorMSG. Lowercase letters, numbers, _ and . only.</div>
+        <div style="position:relative;">
+            <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;margin-top:-5px;">@</span>
+            <input class="m-input" id="unameInput" placeholder="coolname" maxlength="30"
+                style="padding-left:27px;"
+                oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.]/g,'')"
+                onkeydown="if(event.key==='Enter') saveUsername()">
+        </div>
+        <div class="m-msg" id="unameMsg"></div>
+        <div class="modal-row">
+            <button class="btn-primary" onclick="saveUsername()" style="flex:1;">Continue →</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ PROFILE MODAL ════════════════ -->
+<div id="profileModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-title">Edit Profile</div>
+        <div class="modal-sub">Update your profile picture or change your @username.</div>
+
+        <!-- Avatar preview -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:20px;">
+            <div class="av" id="profAvPreview" style="width:72px;height:72px;font-size:24px;">?</div>
+            <div style="font-size:10px;color:var(--muted);" id="pfpCountLabel">— / 3 photo changes this week</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                <button class="btn-add" onclick="document.getElementById('pfpFileIn').click()" style="font-size:12px;padding:7px 14px;">📷 Change Photo</button>
+                <button class="btn-sec" onclick="resetPfp()" style="flex:none;padding:7px 14px;font-size:12px;">↩ Reset to Initials</button>
+            </div>
+        </div>
+
+        <div class="m-msg" id="pfpMsg"></div>
+
+        <!-- Change display name section -->
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px;">
+            <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Display Name <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);font-size:9px;">(2× per week)</span></div>
+            <input class="m-input" id="newDisplayNameIn" placeholder="Your display name…" maxlength="40" onkeydown="if(event.key==='Enter') changeDisplayName()">
+            <div class="m-msg" id="displayNameMsg"></div>
+            <button class="btn-primary" onclick="changeDisplayName()" style="font-size:13px;padding:11px;">Save Display Name</button>
+        </div>
+
+        <!-- Change tag section -->
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:14px;">
+            <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Change @username</div>
+            <div style="position:relative;">
+                <span style="position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none;">@</span>
+                <input class="m-input" id="newTagIn" placeholder="new_username" maxlength="30"
+                    style="padding-left:27px;margin-bottom:8px;"
+                    oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.]/g,'')">
+            </div>
+            <div class="m-msg" id="tagMsg"></div>
+            <button class="btn-primary" onclick="changeTag()" style="font-size:13px;padding:11px;">Save New Username</button>
+        </div>
+
+
+        <!-- Bio section -->
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:14px;">
+            <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Bio <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px;">(shown on your profile)</span></div>
+            <textarea class="m-input" id="bioInput" placeholder="Tell people a bit about yourself…" maxlength="160" rows="3"
+                style="resize:none;font-size:13px;"></textarea>
+            <div style="font-size:10px;color:var(--muted);text-align:right;margin-top:2px;" id="bioCharCount">0 / 160</div>
+            <div class="m-msg" id="bioMsg"></div>
+            <button class="btn-primary" onclick="saveBio()" style="font-size:13px;padding:11px;">Save Bio</button>
+        </div>
+
+        <div class="modal-row" style="margin-top:14px;">
+            <button class="btn-sec" onclick="closeModal('profileModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ DELETE GROUP CONFIRM MODAL ════════════════ -->
+<div id="delGroupModal" class="modal-overlay hidden">
+    <div class="modal-card" style="text-align:center;">
+        <div class="modal-title" style="color:var(--danger);">⚠ Delete Group?</div>
+        <div class="modal-sub">This will permanently delete the group and all its messages for everyone. You must wait 15 seconds to confirm.</div>
+        <div class="del-countdown" id="delCountdown">15</div>
+        <div class="del-sub" id="delCountSub">Please wait before you can confirm…</div>
+        <div class="m-msg" id="delGrpMsg"></div>
+        <div class="modal-row">
+            <button class="btn-sec" onclick="cancelDeleteGroup()">Cancel</button>
+            <button id="confirmDelBtn" class="btn-primary" onclick="confirmDeleteGroup()"
+                style="flex:1;background:linear-gradient(135deg,var(--danger),#c41d3f);box-shadow:0 8px 24px rgba(244,63,94,0.3);opacity:0.4;pointer-events:none;">
+                Delete Forever
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden pfp file input -->
+<input type="file" id="pfpFileIn" accept="image/*" style="display:none" onchange="uploadPfp(event)">
+
+<!-- ═══════════════ CREATE GROUP MODAL ════════════════ -->
+<div id="groupModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-title">New Group Chat</div>
+        <div class="modal-sub">Give it a name and pick some friends to add.</div>
+        <input class="m-input" id="grpNameIn" placeholder="Group name…" maxlength="40">
+        <div class="m-msg" id="grpMsg"></div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Add Members</div>
+        <div class="member-list" id="grpMemberList"></div>
+        <div class="modal-row">
+            <button class="btn-sec" onclick="closeModal('groupModal')">Cancel</button>
+            <button class="btn-primary" onclick="createGroup()" style="flex:1;">Create Group</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ NICKNAME MODAL ════════════════ -->
+<div id="nicknameModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-title">Rename Contact</div>
+        <div class="modal-sub" id="nickModalSub">Give this person a nickname — only visible to you. No @ needed.</div>
+        <input class="m-input" id="nickInput" placeholder="e.g. Mum, Best Friend…" maxlength="40"
+            onkeydown="if(event.key==='Enter') saveNickname()">
+        <div class="m-msg" id="nickMsg"></div>
+        <div class="modal-row">
+            <button class="btn-sec" onclick="closeModal('nicknameModal')">Cancel</button>
+            <button class="btn-sec" onclick="clearNickname()" style="color:var(--danger);">Clear</button>
+            <button class="btn-primary" onclick="saveNickname()" style="flex:1;">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ ADMIN PANEL MODAL ════════════════ -->
+<div id="adminModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:85vh;overflow-y:auto;">
+        <div class="modal-title">👑 Admin Panel</div>
+        <div class="modal-sub">Manage NorMSG Super subscriptions and platform admins.</div>
+
+        <!-- Gift Super -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Gift NorMSG Super</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="giftSuperIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') giftSuper()">
+            </div>
+            <select class="m-input" id="giftDuration" style="margin:0;flex:none;width:auto;padding:0 10px;">
+                <option value="7">1 week</option>
+                <option value="30">1 month</option>
+                <option value="365">1 year</option>
+            </select>
+            <button class="btn-add" onclick="giftSuper()">Gift ✦</button>
+        </div>
+        <div class="m-msg" id="giftMsg"></div>
+
+        <!-- Gift Ultra -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">⚡ Gift NorMULTRA</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">NorMULTRA is the highest tier — includes all Super perks plus the Ultra AI model and API.</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="giftUltraIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') giftUltra()">
+            </div>
+            <select class="m-input" id="giftUltraDuration" style="margin:0;flex:none;width:auto;padding:0 10px;">
+                <option value="7">1 week</option>
+                <option value="30">1 month</option>
+                <option value="365">1 year</option>
+            </select>
+            <button class="btn-add" onclick="giftUltra()" style="background:linear-gradient(135deg,#6366f1,#a855f7);">Gift ⚡</button>
+        </div>
+        <div class="m-msg" id="giftUltraMsg"></div>
+
+        <!-- Make Platform Admin -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Make Platform Admin</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="giftAdminIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') giftAdmin()">
+            </div>
+            <button class="btn-add" onclick="giftAdmin()">Make Admin</button>
+        </div>
+        <div class="m-msg" id="giftAdminMsg"></div>
+
+        <!-- Create Account (no-email login) -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Create Login Account</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Create an account for someone without a Google account. They'll sign in using the username and password you set here.</div>
+        <div style="position:relative;margin-bottom:0;">
+            <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+            <input class="m-input" id="createAccUsernameIn" placeholder="username (no spaces)" maxlength="30"
+                style="padding-left:26px;"
+                oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_.]/g,'')">
+        </div>
+        <input class="m-input" id="createAccDisplayIn" placeholder="Display name" maxlength="40">
+        <input class="m-input" id="createAccPasswordIn" type="password" placeholder="Password (share this with them)">
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <button class="btn-add" onclick="adminCreateAccount()" style="flex:1;">Create Account</button>
+        </div>
+        <div class="m-msg" id="createAccMsg"></div>
+
+        <!-- Announcements -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">📢 Announcements</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.5;">Post a banner shown to all users at the top of the page. They can dismiss it, but it'll reappear until it expires.</div>
+        <textarea class="m-input" id="annTextIn" placeholder="Announcement message…" maxlength="200" rows="2"
+            style="resize:none;font-size:13px;"></textarea>
+        <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center;">
+            <select class="m-input" id="annDuration" style="margin:0;flex:none;width:auto;padding:0 10px;font-size:12px;">
+                <option value="1">1 hour</option>
+                <option value="6">6 hours</option>
+                <option value="24">24 hours</option>
+                <option value="72">3 days</option>
+                <option value="168">1 week</option>
+            </select>
+            <select class="m-input" id="annStyle" style="margin:0;flex:none;width:auto;padding:0 10px;font-size:12px;">
+                <option value="info">🔵 Info</option>
+                <option value="warn">🟡 Warning</option>
+                <option value="danger">🔴 Alert</option>
+                <option value="success">🟢 Success</option>
+            </select>
+            <button class="btn-add" onclick="postAnnouncement()" style="white-space:nowrap;">Post 📢</button>
+        </div>
+        <div class="m-msg" id="annMsg"></div>
+        <div id="activeAnnPreview" style="margin-bottom:6px;"></div>
+
+        <!-- Weekly leaderboard -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 8px;">Weekly Top Chatter</div>
+        <div id="adminLeaderboard" style="font-size:12px;color:var(--muted);">Loading…</div>
+
+        <div class="modal-row" style="margin-top:16px;">
+            <button class="btn-sec" onclick="closeModal('adminModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ SETTINGS MODAL ════════════════ -->
+<div id="settingsModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:88vh;overflow-y:auto;">
+        <div class="modal-title">⚙ Settings</div>
+        <div class="modal-sub">Manage your NorMSG preferences.</div>
+
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🔔 Push Notifications</div>
+                <div class="settings-desc">Get notified when a message arrives and the tab is in the background or closed. Requires browser permission.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingPush" onchange="onSettingChange()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">💬 In-App Notifications</div>
+                <div class="settings-desc">Show a banner when a new message arrives while the tab is open but you're in a different chat.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingInApp" onchange="onSettingChange()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🔊 Sound</div>
+                <div class="settings-desc">Play a soft ping sound when a new message arrives.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingSound" onchange="onSettingChange()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🏷 Tab Badge</div>
+                <div class="settings-desc">Show an unread count in the browser tab title (e.g. "(3) NorMSG").</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingTabBadge" onchange="onSettingChange()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">👥 Group Chat Notifications</div>
+                <div class="settings-desc">Notify you for all messages in group chats. Turn off to only be notified when someone @mentions you in a group.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingGroupAll" onchange="onSettingChange()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🔔 @Mention Priority</div>
+                <div class="settings-desc">Always notify when someone @mentions you directly — even if group notifications are off. Mention alerts use a higher-pitched ping.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingMentions" onchange="onSettingChange()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Compact Mode -->
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">📐 Compact Mode</div>
+                <div class="settings-desc">Smaller message bubbles and tighter spacing — fits more messages on screen.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingCompact" onchange="applyAppearance()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Font Size -->
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🔡 Font Size</div>
+                <div class="settings-desc">Adjust the size of message text.</div>
+            </div>
+            <div style="display:flex;gap:6px;margin-left:auto;">
+                <button class="btn-sec" id="fsSmall"  style="padding:4px 10px;font-size:11px;" onclick="setFontSize('13px')">Small</button>
+                <button class="btn-sec" id="fsNormal" style="padding:4px 10px;font-size:11px;" onclick="setFontSize('14px')">Normal</button>
+                <button class="btn-sec" id="fsLarge"  style="padding:4px 10px;font-size:11px;" onclick="setFontSize('16px')">Large</button>
+            </div>
+        </div>
+
+        <!-- Accent Color -->
+        <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px;">
+            <div class="settings-info">
+                <div class="settings-label">🎨 Accent Colour</div>
+                <div class="settings-desc">Change NorMSG's main highlight colour.</div>
+            </div>
+            <div class="accent-swatches" id="accentSwatches"></div>
+        </div>
+
+        <!-- Send sound -->
+        <div class="settings-row">
+            <div class="settings-info">
+                <div class="settings-label">🔔 Message Sounds</div>
+                <div class="settings-desc">Play a sound when sending and receiving messages.</div>
+            </div>
+            <div class="toggle-wrap">
+                <label class="toggle">
+                    <input type="checkbox" id="settingMsgSounds" onchange="applyAppearance()">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+
+        <div class="m-msg" id="settingsMsg" style="margin-top:10px;"></div>
+
+        <!-- Ultra @AI Model Preference (Ultra users only) -->
+        <div class="settings-row" id="ultraAiModelRow" style="display:none;flex-direction:column;align-items:flex-start;gap:8px;">
+            <div class="settings-info">
+                <div class="settings-label">⚡ @AI Model Preference <span class="ultra-badge">ULTRA</span></div>
+                <div class="settings-desc">Choose which model responds when you type <code>@AI</code> in a group chat.</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                    <input type="radio" name="ultraAiModel" value="pro" id="aiModelPro" onchange="saveUltraAiModel('pro')" style="accent-color:var(--a2);">
+                    <span>⚡ Pro (Ultra)</span>
+                    <span style="font-size:10px;color:var(--muted);">— most powerful</span>
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;">
+                    <input type="radio" name="ultraAiModel" value="thinking" id="aiModelThinking" onchange="saveUltraAiModel('thinking')" style="accent-color:var(--a2);">
+                    <span>🧠 Thinking (Super)</span>
+                    <span style="font-size:10px;color:var(--muted);">— step-by-step reasoning</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="modal-row" style="margin-top:14px;">
+            <button class="btn-sec" onclick="closeModal('settingsModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ STATUS VIEWER ════════════════ -->
+<div id="statusViewer" class="hidden">
+    <div class="sv-progress" id="svProgress"></div>
+    <div class="sv-header" id="svHeader">
+        <div class="av" id="svAv" style="width:34px;height:34px;font-size:12px;flex-shrink:0;">?</div>
+        <div>
+            <div class="sv-name" id="svName">—</div>
+            <span class="sv-time" id="svTime">—</span>
+        </div>
+        <button class="sv-close" onclick="closeStatusViewer()" style="margin-left:auto;">✕</button>
+    </div>
+    <div class="sv-content" id="svContent">
+        <div class="sv-tap-prev" onclick="svPrev()"></div>
+        <div class="sv-tap-next" onclick="svNext()"></div>
+    </div>
+    <!-- Reactions display row -->
+    <div class="sv-reactions-row" id="svReactionsRow"></div>
+    <!-- Views bar / interaction bar (owner vs viewer) -->
+    <div class="sv-views" id="svViews"></div>
+    <!-- Reply + react bar (shown for others' statuses) -->
+    <div class="sv-interact-bar" id="svInteractBar" style="display:none;padding-bottom:20px;">
+        <div style="position:relative;">
+            <button class="sv-react-btn" id="svLikeBtn" onclick="toggleStatusLike()">❤️</button>
+        </div>
+        <button class="sv-react-btn" id="svEmojiBtn" onclick="toggleStatusEmojiPicker(event)">😊</button>
+        <div class="sv-reply-wrap">
+            <input class="sv-reply-in" id="svReplyIn" placeholder="Reply to status…" maxlength="200"
+                onkeydown="if(event.key==='Enter') sendStatusReply()" onfocus="svPauseProgress()" onblur="svResumeProgress(statusCurrentUser?.statuses?.[statusCurrentIndex])">
+            <button class="sv-reply-send" onclick="sendStatusReply()">➤</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ ADD STATUS MODAL ════════════════ -->
+<div id="addStatusModal" class="modal-overlay hidden">
+    <div class="modal-card">
+        <div class="modal-title">Add Status</div>
+        <div class="modal-sub">Share a photo, video, or text — visible to friends for 24 hours.</div>
+
+        <div class="status-type-row">
+            <button class="status-type-btn on" id="stTypeText" onclick="setStatusType('text')">✏️ Text</button>
+            <button class="status-type-btn"    id="stTypePhoto" onclick="setStatusType('photo')">📷 Photo</button>
+            <button class="status-type-btn"    id="stTypeVideo" onclick="setStatusType('video')">🎥 Video</button>
+        </div>
+
+        <!-- Text status -->
+        <div id="stTextArea">
+            <textarea class="m-input" id="stTextIn" placeholder="What's on your mind?" maxlength="200" rows="3"
+                style="resize:none;margin-bottom:10px;" oninput="updateStatusPreview()"></textarea>
+            <div class="color-swatches" id="stSwatches"></div>
+            <div class="status-text-preview" id="stPreview">Your text here…</div>
+        </div>
+
+        <!-- Photo/video status -->
+        <div id="stMediaArea" class="hidden">
+            <div style="border:2px dashed var(--border2);border-radius:13px;padding:28px;text-align:center;cursor:pointer;margin-bottom:10px;"
+                onclick="document.getElementById('stMediaIn').click()">
+                <div style="font-size:28px;margin-bottom:8px;" id="stMediaIcon">📷</div>
+                <div style="font-size:12px;color:var(--muted);" id="stMediaLabel">Click to choose a photo or video</div>
+            </div>
+            <input type="file" id="stMediaIn" style="display:none" onchange="previewStatusMedia(event)">
+            <div id="stMediaPreviewWrap" class="hidden">
+                <img id="stImgPreview" style="width:100%;border-radius:11px;max-height:200px;object-fit:cover;display:none;">
+                <video id="stVidPreview" style="width:100%;border-radius:11px;max-height:200px;" controls style="display:none;"></video>
+            </div>
+        </div>
+
+        <div class="m-msg" id="stMsg"></div>
+
+        <div class="modal-row" style="margin-top:12px;">
+            <button class="btn-sec" onclick="closeModal('addStatusModal')">Cancel</button>
+            <button class="btn-primary" onclick="postStatus()" style="flex:1;">Post Status ✨</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ PEOPLE / DISCOVER MODAL ════════════════ -->
+<div id="peopleModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:85vh;overflow-y:auto;width:min(480px,95vw);">
+        <div class="modal-title">Discover People</div>
+        <div class="modal-sub">Friends, friends of friends, and beyond — based on your network.</div>
+        <div id="peopleList"><div style="text-align:center;padding:28px;color:var(--muted);font-size:13px;">Loading…</div></div>
+        <div class="modal-row" style="margin-top:14px;">
+            <button class="btn-sec" onclick="closeModal('peopleModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ MANAGE GROUP MODAL ════════════════ -->
+<div id="manageGroupModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-height:85vh;overflow-y:auto;">
+        <div class="modal-title">Manage Group</div>
+        <div class="modal-sub" id="manageGroupSub">Rename the group or manage admins.</div>
+
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Group Name</div>
+        <div style="display:flex;gap:8px;margin-bottom:14px;">
+            <input class="m-input" id="grpRenameIn" placeholder="New group name…" maxlength="40" style="margin:0;flex:1;" onkeydown="if(event.key==='Enter') renameGroup()">
+            <button class="btn-add" onclick="renameGroup()" style="white-space:nowrap;">Rename</button>
+        </div>
+        <div class="m-msg" id="renameMsg"></div>
+
+        <!-- Add Member -->
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:14px 0 7px;">Add Member</div>
+        <div style="display:flex;gap:8px;margin-bottom:6px;">
+            <div style="position:relative;flex:1;">
+                <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;">@</span>
+                <input class="m-input" id="addMemberIn" placeholder="username" style="margin:0;padding-left:26px;" onkeydown="if(event.key==='Enter') addMemberToGroup()">
+            </div>
+            <button class="btn-add" onclick="addMemberToGroup()" style="white-space:nowrap;">Add</button>
+        </div>
+        <div class="m-msg" id="addMemberMsg"></div>
+
+        <!-- Open/Admin-only adding toggle (owner only) -->
+        <div id="addPermRow" style="display:none;align-items:center;gap:10px;margin-bottom:14px;padding:9px 11px;background:var(--card);border:1px solid var(--border);border-radius:11px;">
+            <div style="flex:1;">
+                <div style="font-size:12px;font-weight:600;">Who can add members?</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="addPermDesc">Everyone can add</div>
+            </div>
+            <button class="btn-toggle-admin" id="addPermBtn" onclick="toggleAddPerm()">Change</button>
+        </div>
+
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin:6px 0 7px;">Members &amp; Admins</div>
+        <div id="manageAdminList" style="margin-bottom:14px;"></div>
+
+        <!-- Group Roles -->
+        <div class="roles-section" id="rolesSection">
+            <div class="roles-section-title">🏷 Group Roles</div>
+            <div id="rolesList"></div>
+            <div style="display:flex;gap:8px;margin-top:8px;" id="rolesAdminControls">
+                <input id="newRoleName" class="m-in" placeholder="Role name" style="flex:1;font-size:12px;padding:6px 10px;">
+                <input type="color" id="newRoleColor" value="#7c5cfc" style="width:34px;height:34px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0;">
+                <button class="btn-sec" style="padding:5px 12px;font-size:12px;" onclick="addGroupRole()">+ Add</button>
+            </div>
+            <div class="m-msg" id="rolesMsg" style="margin-top:4px;"></div>
+        </div>
+
+        <div class="modal-row" style="margin-top:14px;">
+            <button class="btn-sec" onclick="closeModal('manageGroupModal')">Close</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ POLL MODAL ════════════════ -->
+<div id="pollModal" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width:400px;">
+        <div class="modal-title">📊 Create a Poll</div>
+        <div class="modal-sub">Ask your group a question — everyone can vote.</div>
+
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">Question</div>
+        <input class="m-input" id="pollQuestion" placeholder="What do you want to ask?" maxlength="120" style="margin-bottom:14px;">
+
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Options</div>
+        <div id="pollOptions">
+            <div class="poll-opt-row"><input class="m-input" placeholder="Option 1" maxlength="60"><button class="poll-rm-btn" onclick="removePollOpt(this)">✕</button></div>
+            <div class="poll-opt-row"><input class="m-input" placeholder="Option 2" maxlength="60"><button class="poll-rm-btn" onclick="removePollOpt(this)">✕</button></div>
+        </div>
+        <button class="poll-add-btn" onclick="addPollOption()">＋ Add option</button>
+
+        <div class="m-msg" id="pollMsg"></div>
+        <div class="modal-row">
+            <button class="btn-sec" onclick="closeModal('pollModal')">Cancel</button>
+            <button class="btn-add" onclick="createPoll()">Post Poll ➤</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════ LIGHTBOX (with zoom + pan) ════════════════ -->
+<div id="lightbox" class="hidden">
+    <button class="lb-close" onclick="closeLightbox()" style="position:fixed;top:18px;right:22px;background:var(--panel);border:1px solid var(--border2);color:var(--text);font-size:18px;width:42px;height:42px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:602;">✕</button>
+    <div id="lbImgWrap">
+        <img id="lbImg" src="" alt="Image preview">
+    </div>
+    <div class="lb-toolbar">
+        <button class="lb-tbtn" onclick="lbZoom(0.25)" title="Zoom in">＋</button>
+        <button class="lb-tbtn" onclick="lbZoom(-0.25)" title="Zoom out">－</button>
+        <button class="lb-tbtn" onclick="lbReset()" title="Reset">⊙</button>
+        <a id="lbDownloadBtn" download class="lb-tbtn" title="Download" style="text-decoration:none;line-height:40px;text-align:center;">⬇</a>
+    </div>
+</div>
+
+
+<!-- ═══════════════ VIEW USER PROFILE MODAL ════════════════ -->
+<div id="viewProfileModal" class="modal-overlay hidden">
+    <div class="modal-card" style="width:min(420px,95vw);padding:28px 26px 24px;">
+        <button onclick="closeModal('viewProfileModal')" style="position:absolute;top:16px;right:18px;background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:4px;">✕</button>
+
+        <div class="vp-hero">
+            <div class="vp-av" id="vpAv">?</div>
+            <div class="vp-name" id="vpName">—</div>
+            <div class="vp-handle" id="vpHandle">@—</div>
+            <div class="vp-bio" id="vpBio"><span class="vp-bio-empty">No bio yet.</span></div>
+        </div>
+
+        <!-- Mutual Friends -->
+        <span class="vp-section-label">👥 Mutual Friends</span>
+        <div class="vp-pill-row" id="vpMutualFriends">
+            <span class="vp-empty-hint">Loading…</span>
+        </div>
+
+        <!-- Mutual Groups -->
+        <span class="vp-section-label">💬 Mutual Group Chats</span>
+        <div id="vpMutualGroups">
+            <span class="vp-empty-hint">Loading…</span>
+        </div>
+
+        <button class="vp-dm-btn" id="vpDmBtn" onclick="openDMFromProfile()">💬 Send Message</button>
+    </div>
+</div>
+
+<!-- Hidden file input -->
+<input type="file" id="imgFileIn" accept="image/*,video/*" style="display:none" onchange="handleImg(event)">
+
+<!-- ═══════════════ MAIN APP ════════════════ -->
+<div id="mainApp" class="hidden">
+
+    <!-- ── SIDEBAR ── -->
+    <div id="sidebar">
+        <div class="sb-header">
+            <!-- Top row: logo + icon actions -->
+            <div class="sb-top">
+                <div class="sb-brand">
+                    <span class="app-logo" style="font-size:17px;letter-spacing:-0.5px;max-width:142px;">NorMSG</span>
+                </div>
+                <div class="sb-actions">
+                    <button class="ic-btn admin-cta non-admin" id="adminBtn" onclick="handleAdminBtnClick()" title="Admin panel access">👑</button>
+                    <button class="ic-btn" onclick="openPeopleModal()" title="Discover people">🌐</button>
+                    <button class="ic-btn" onclick="openSettingsModal()" title="Settings">⚙️</button>
+                    <button class="ic-btn" onclick="logout()" title="Sign out">⏻</button>
+                </div>
+            </div>
+            <!-- Profile row -->
+            <div class="profile-card" onclick="openProfileModal()" title="Edit profile">
+                <div class="av-wrap" style="width:34px;height:34px;flex-shrink:0;position:relative;">
+                    <div class="av" id="myAv" style="width:34px;height:34px;font-size:12px;">?</div>
+                    <div class="av-edit-badge">✎</div>
+                    <div class="ultra-av-dot" id="ultraAvDot">ULTRA</div>
+                </div>
+                <div style="min-width:0;flex:1;">
+                    <div class="me-name" id="myName" style="font-size:13px;">—</div>
+                    <div class="me-handle" id="myHandle" style="font-size:11px;color:var(--muted);">@—</div>
+                    <span id="normAIBadge" style="font-size:9px;font-weight:700;letter-spacing:0.06em;padding:2px 6px;border-radius:20px;background:rgba(167,139,250,0.1);border:1px solid rgba(167,139,250,0.2);color:var(--muted);cursor:default;transition:color 0.2s;" title="NorMAI plan">Free</span>
+                </div>
+                <div id="mySuperBadge" style="display:none;flex-shrink:0;">
+                    <span class="super-badge">✦ SUPER</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab on" id="tabDMs"     onclick="switchTab('dms')">DMs <span id="reqBadge" class="badge hidden">0</span></button>
+            <button class="tab"    id="tabGroups"  onclick="switchTab('groups')">Groups</button>
+            <button class="tab"    id="tabGames"   onclick="switchTab('games')">Games</button>
+            <button class="tab"    id="tabAI"      onclick="switchTab('ai')"><span class="ai-tab-icon">✦ AI</span></button>
+        </div>
+
+        <!-- DMs panel -->
+        <div id="dmsPanel" class="panel">
+            <!-- Status bar -->
+            <div id="statusBar">
+                <div class="status-bar-row" id="statusBarRow">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+            <div class="search-wrap">
+                <span class="search-ic">🔍</span>
+                <input class="search-in" id="dmSearch" placeholder="Search friends…" oninput="renderFriends()">
+            </div>
+            <div class="scr" id="dmsList">
+                <div class="no-items"><div class="no-ico">👥</div><div class="no-txt">No friends yet.<br>Add by username below!</div></div>
+            </div>
+            <!-- Incoming requests section -->
+            <div id="reqSection" style="display:none;">
+                <div class="sec-label" style="padding-left:17px;">Requests <span id="reqCount"></span></div>
+                <div style="padding:0 9px 6px;" id="reqList"></div>
+            </div>
+            <div class="btm-bar">
+                <span class="btm-label">Add friend by username</span>
+                <div class="btm-row">
+                    <div style="position:relative;flex:1;min-width:0;">
+                        <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;z-index:1;">@</span>
+                        <input class="add-in" id="addIn" placeholder="username" style="padding-left:24px;"
+                            oninput="onAddInput()"
+                            onkeydown="if(event.key==='Enter') sendFriendReq(); if(event.key==='Escape') hideSuggestions();"
+                            onfocus="onAddInput()"
+                            autocomplete="off">
+                        <div id="suggestBox" class="suggest-box" style="display:none;"></div>
+                    </div>
+                    <button class="btn-add" onclick="sendFriendReq()">Add</button>
+                </div>
+                <div class="add-msg" id="addMsg"></div>
+            </div>
+        </div>
+
+        <!-- Groups panel -->
+        <div id="groupsPanel" class="panel" style="display:none;">
+            <div class="scr" id="groupsList">
+                <div class="no-items"><div class="no-ico">💬</div><div class="no-txt">No groups yet.<br>Create one below!</div></div>
+            </div>
+            <div class="btm-bar" style="flex-direction:column;gap:6px;">
+                <button class="btn-new-grp" onclick="openGroupModal()">＋ &nbsp;New Group Chat</button>
+                <button class="btn-norm-games" onclick="switchTab('games')">🎮 &nbsp;NormGames</button>
+            </div>
+        </div>
+
+        <!-- NorMAI Chat panel -->
+        <div id="aiPanel" style="display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0;">
+            <div class="ai-chat-list scr" id="aiChatList"></div>
+            <div class="btm-bar" style="padding:10px 12px;gap:6px;">
+                <button class="ai-new-btn" id="aiNewBtn" onclick="createAIChat()">✦ New AI Chat</button>
+                <div class="ai-rate-bar" id="aiRateBar" style="padding:4px 2px 0;justify-content:center;"></div>
+            </div>
+        </div>
+
+        <!-- NormGames panel -->
+        <div id="gamesPanel" style="display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0;">
+            <div class="scr" style="flex:1;padding:14px 12px 10px;">
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:12px;">NormGames</div>
+                <div id="gameHubCards">
+                    <div class="game-hub-card" onclick="openGame('ttt')">
+                        <div class="game-hub-ico">⬜</div>
+                        <div class="game-hub-info">
+                            <div class="game-hub-title">Tic-Tac-Toe</div>
+                            <div class="game-hub-sub">vs Player or AI</div>
+                        </div>
+                    </div>
+                    <div class="game-hub-card" onclick="openGame('chess')">
+                        <div class="game-hub-ico">♟</div>
+                        <div class="game-hub-info">
+                            <div class="game-hub-title">Chess</div>
+                            <div class="game-hub-sub">vs Player or AI</div>
+                        </div>
+                    </div>
+                    <div class="game-hub-card" onclick="openGame('wordle')">
+                        <div class="game-hub-ico">🟩</div>
+                        <div class="game-hub-info">
+                            <div class="game-hub-title">Wordle</div>
+                            <div class="game-hub-sub">Guess the 5-letter word</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── CHAT PANEL ── -->
+    <div id="chatPanel">
+
+        <!-- Mobile top bar -->
+        <div class="mob-bar">
+            <button class="ic-btn" onclick="document.getElementById('sidebar').classList.toggle('open')">☰</button>
+            <div class="app-logo" style="font-size:18px;">NorMSG</div>
+        </div>
+
+        <!-- Empty state -->
+        <div id="emptyState" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px;">
+            <div class="empty-ico">✉️</div>
+            <div class="empty-title">No conversation open</div>
+            <div class="empty-sub">Select a DM or group from the sidebar, or add a friend to get started.</div>
+        </div>
+
+        <!-- Active chat -->
+        <div id="activeChat" class="hidden" style="display:none;flex-direction:column;height:100%;min-height:0;">
+            <div id="chatHeader">
+                <div class="av" id="chatAv" style="width:38px;height:38px;font-size:13px;flex-shrink:0;">?</div>
+                <div style="min-width:0;flex:1;">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <div class="ch-name" id="chatName">—</div>
+                        <button id="renameChatBtn" class="ic-btn hidden" onclick="openManageGroup()" title="Manage group" style="font-size:13px;padding:3px 5px;">⚙</button>
+                    </div>
+                    <div id="chatSub" class="ch-sub">—</div>
+                </div>
+                <div class="ch-btns">
+                    <button class="ic-btn" onclick="downloadHistory()" style="font-size:17px;" title="Download history">⬇</button>
+                    <button class="ic-btn" id="leaveBtn" onclick="leaveChat()" style="font-size:17px;color:var(--danger);" title="Leave chat">🚪</button>
+                </div>
+            </div>
+
+
+            <div id="timeoutBanner" class="hidden">
+                <span>⏱</span><span id="toMsg">—</span>
+            </div>
+
+            <!-- Pinned message banner -->
+            <div id="pinnedBanner">
+                <span class="pin-ico">📌</span>
+                <span class="pin-text" id="pinnedText">—</span>
+                <button class="pin-unpin" id="pinUnpinBtn" title="Unpin">✕</button>
+            </div>
+
+            <div id="messagesArea"></div>
+
+            <div id="chatInputArea">
+                <div class="upload-ind" id="upInd">
+                    <span class="spinner">⟳</span>
+                    <span>Uploading image…</span>
+                    <button onclick="cancelUpload()" style="margin-left:auto;background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);color:var(--danger);border-radius:7px;padding:2px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:'Figtree',sans-serif;">Cancel</button>
+                </div>
+                <div id="replyBar">
+                    <div class="reply-preview">
+                        <strong id="replyWho">—</strong>
+                        <span id="replySnippet">—</span>
+                    </div>
+                    <button class="reply-cancel" onclick="clearReply()" title="Cancel reply">✕</button>
+                </div>
+                <div id="pastePreview">
+                    <img id="pasteThumb" src="" alt="">
+                    <span class="paste-label">Pasted image ready to send</span>
+                    <button class="paste-send" onclick="sendPastedImg()">Send 📤</button>
+                    <button class="paste-cancel" onclick="clearPaste()" title="Cancel">✕</button>
+                </div>
+                <div class="fmt-toolbar" id="fmtToolbar">
+                    <button class="fmt-btn" id="fmtBold"   onclick="applyFmt('bold')"   title="Bold (Ctrl+B)"><b>B</b></button>
+                    <button class="fmt-btn" id="fmtItalic" onclick="applyFmt('italic')" title="Italic (Ctrl+I)"><i>I</i></button>
+                    <button class="fmt-btn" id="fmtHead"   onclick="applyFmt('heading')" title="Heading"  style="font-family:'Syne',sans-serif;">H</button>
+                    <button class="fmt-btn" id="fmtCode"   onclick="applyFmt('code')"   title="Inline code" style="font-family:monospace;">`·`</button>
+                    <div style="width:1px;height:16px;background:var(--border);margin:0 2px;"></div>
+                    <span style="font-size:9px;color:var(--muted);padding:0 4px;">**bold** _italic_ #heading `code`</span>
+                </div>
+                <div class="in-row" style="position:relative;">
+                    <div id="mentionBox"></div>
+                    <div id="emojiSearchBox">
+                        <input class="esearch-in" id="esearchIn" placeholder="Search emoji…" oninput="searchEmoji(this.value)" onkeydown="onEsearchKey(event)">
+                        <div class="esearch-results" id="esearchResults"></div>
+                    </div>
+                    <!-- AI Model Dropdown (only visible in AI chats) -->
+                    <div id="aiModelDropdownWrap" title="Select AI model">
+                        <select id="aiModelSelect" onchange="onAIModelChange(this.value)">
+                            <option value="fast">⚡ Fast</option>
+                        </select>
+                    </div>
+                    <!-- AI photo upload (only visible in AI chats) -->
+                    <button class="img-btn" id="aiImgBtn" onclick="triggerAIImageUpload()" title="Send image to NorMAI for analysis" style="display:none;font-size:13px;">📷✦</button>
+                    <input type="file" id="aiImgFileIn" accept="image/*" style="display:none" onchange="handleAIImageUpload(event)">
+                    <!-- NormSticker picker with saved stickers -->
+                    <input type="file" id="stickerFileIn" accept="image/*" style="display:none;" onchange="handleStickerUpload(event)">
+                    <div id="stickerPickerWrap" style="position:relative;">
+                        <button class="img-btn" id="stickerBtn" onclick="toggleStickerPicker()" title="NormStickers">🎭</button>
+                        <div id="stickerPicker" style="display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:var(--panel);border:1px solid var(--border2);border-radius:18px;padding:12px;width:260px;z-index:500;box-shadow:0 16px 48px rgba(0,0,0,.6);">
+                            <div style="font-size:11px;font-weight:700;color:var(--a2);font-family:'Syne',sans-serif;margin-bottom:8px;">🎭 NormStickers</div>
+                            <div id="savedStickerGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;max-height:160px;overflow-y:auto;margin-bottom:8px;"></div>
+                            <button class="btn-sec" style="width:100%;font-size:12px;padding:7px;" onclick="document.getElementById('stickerFileIn').click();document.getElementById('stickerPicker').style.display='none';">+ Upload New Sticker</button>
+                        </div>
+                    </div>
+                    <!-- Schedule picker -->
+                    <div id="schedulePickerWrap" style="position:relative;">
+                        <button class="img-btn" id="scheduleBtn" onclick="toggleSchedulePicker()" title="Schedule message">🕐</button>
+                        <div id="schedulePicker">
+                            <div class="sch-title">🕐 Schedule Message</div>
+                            <input type="datetime-local" id="schDateTime">
+                            <button class="btn-pri" style="width:100%;font-size:12px;padding:7px;" onclick="scheduleCurrentMsg()">Schedule Send</button>
+                            <div style="font-size:10px;color:var(--muted);margin:6px 0 4px;">Pending in this chat:</div>
+                            <div id="schPendingList"></div>
+                        </div>
+                    </div>
+                    <button class="img-btn" id="regularImgBtn" onclick="document.getElementById('imgFileIn').click()" title="Send image (Pro: also video up to 150 MB)">🖼</button>
+                    <button class="img-btn" id="pollBtn" onclick="openPollModal()" title="Create a poll (group chats only)">📊</button>
+                    <button class="img-btn" id="normAIBtn" onclick="openSmartReply()" title="NorMAI — smart reply suggestions" style="font-size:15px;color:var(--a2);">✦</button>
+                    <textarea id="msgInput" placeholder="Write a message… (paste an image with Ctrl+V)" rows="1"
+                        oninput="autoGrow(this);onMsgInputChange();updateFmtToolbar(this)"
+                        onfocus="document.getElementById('fmtToolbar').classList.add('visible')"
+                        onblur="setTimeout(()=>document.getElementById('fmtToolbar').classList.remove('visible'),200)"
+                        onpaste="handlePaste(event)"
+                        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg();}
+                                   if((event.ctrlKey||event.metaKey)&&event.key==='b'){event.preventDefault();applyFmt('bold');}
+                                   if((event.ctrlKey||event.metaKey)&&event.key==='i'){event.preventDefault();applyFmt('italic');}"></textarea>
+                    <button class="send-btn" onclick="sendMsg()">➤</button>
+                </div>
+                <div class="in-hint">Enter to send · Shift+Enter for newline · Ctrl+V to paste image</div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- KaTeX — LaTeX in NorMAI / @AI replies (cdnjs matches CSP) -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" crossorigin="anonymous">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" crossorigin="anonymous"></script>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════════════════ -->
+
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/subscriptions.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/presence.js"></script>
+<script src="js/notifications.js"></script>
+<script src="js/statuses.js"></script>
+<script src="js/normai.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/aichat.js"></script>
+<script src="js/games.js"></script>
+</body>
+</html>
