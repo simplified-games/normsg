@@ -2943,10 +2943,14 @@ const NORMAI_ULTRA_API = 'https://normsg-ultra.simplifiedtest10.deno.net';
 let userPlan = 'free';   // 'free' | 'pro' | 'ultra'
 let selectedAIModel = 'fast'; // 'fast' | 'thinking' | 'pro'
 
+// NOTE: We intentionally never return NORMAI_ULTRA_API from the browser,
+// because Ultra responses can be 503 without proper CORS headers.
+// This routes Ultra behavior to the CORS-safe Free endpoint until
+// the Ultra function always includes Access-Control-Allow-Origin.
 function getNormAIUrl() {
-    if (userPlan === 'ultra' && selectedAIModel === 'pro') return NORMAI_ULTRA_API;
+    if (userPlan === 'ultra' && selectedAIModel === 'pro') return NORMAI_FREE_API;
     if ((userPlan === 'pro' || userPlan === 'ultra') && selectedAIModel === 'thinking') return NORMAI_PRO_API;
-    if (userPlan === 'ultra') return NORMAI_ULTRA_API;
+    if (userPlan === 'ultra') return NORMAI_FREE_API;
     return userPlan === 'pro' ? NORMAI_PRO_API : NORMAI_FREE_API;
 }
 
