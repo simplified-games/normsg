@@ -5840,7 +5840,13 @@ const isGroup    = (convType || chatType) === 'group';
 
 // Is this message a @mention of me?
 const isMention = !!(msg.text && myUsername &&
-new RegExp('@' + myUsername + '\\b', 'i').test(msg.text));
+function reEscape(str) {
+        return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+function reEscape(str) {
+        return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+new RegExp('@' + String(myUsername).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(msg.text));
 
 // DMs always notify. Groups: notify if groupAll is on, OR if it's a @mention and mentions is on.
 const shouldNotify = !isGroup || s.groupAll || (isMention && s.mentions);
