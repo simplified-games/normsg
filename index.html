@@ -235,7 +235,7 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-oss-120b',
+      model: 'openai/gpt-oss-120b',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 512,
       temperature: 0.7,
