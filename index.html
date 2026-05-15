@@ -6631,6 +6631,8 @@ function renderPlainAISegment(raw) {
     return restoreMathForAI(blocks.join('<br>'), vault);
 }
 
+const aiCodeMap = {};
+
 function renderAIText(raw) {
     if (!raw) return '';
     let html = '';
@@ -6659,10 +6661,11 @@ function renderAIText(raw) {
             const lang = parts[i - 1] || 'code';
             const code = normalizeCodeFenceContent(parts[i]);
             const id = `aicopy_${codeId++}`;
+            aiCodeMap[id] = code;
             html += `<div class="ai-code-wrap">
     <div class="ai-code-bar">
         <span>${esc(lang)}</span>
-        <button type="button" class="ai-copy-btn" id="${id}" onclick="copyAICode(this,${JSON.stringify(code)})">Copy</button>
+        <button type="button" class="ai-copy-btn" id="${id}" onclick="copyAICode(this)">Copy</button>
     </div>
     <pre>${esc(code)}</pre>
 </div>`;
@@ -6689,7 +6692,8 @@ function typesetAIMathIn(root) {
     }
 }
 
-function copyAICode(btn, code) {
+function copyAICode(btn) {
+const code = aiCodeMap[btn.id] ?? '';
 navigator.clipboard.writeText(code).then(() => {
 btn.textContent = '✓ Copied!';
 btn.classList.add('copied');
