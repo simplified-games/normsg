@@ -25,58 +25,7 @@
          — Firebase will print a direct link to create it
            in your browser console the first time cleanup runs.
     
-======================= netlify/functions/normai.js ===============================
- // netlify/functions/normai.js
-// Free-tier NorMAI proxy
-// Set GROQ_API_KEY_FREE in Netlify → Site settings → Environment variables
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL   = 'llama-3.1-8b-instant';
-
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
-  }
-
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json',
-  };
-
-  try {
-    const { prompt } = JSON.parse(event.body || '{}');
-    if (!prompt) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
-    }
-
-    const groqRes = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY_FREE}`, // Change to GROQ_API_KEY_PRO for Pro normai-pro.js
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 512,
-        temperature: 0.7,
-      }),
-    });
-
-    if (!groqRes.ok) {
-      const err = await groqRes.json().catch(() => ({}));
-      return { statusCode: groqRes.status, headers, body: JSON.stringify({ error: err }) };
-    }
-
-    const data  = await groqRes.json();
-    const reply = data.choices?.[0]?.message?.content ?? '';
-
-    return { statusCode: 200, headers, body: JSON.stringify({ reply }) };
-  } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
-  }
-};
 
     ── FIRESTORE RULES ────────────────────────────────────
     rules_version = '2';
@@ -5668,7 +5617,7 @@ const isGroup    = (convType || chatType) === 'group';
 
 // Is this message a @mention of me?
 const isMention = !!(msg.text && myUsername &&
-new RegExp('@' + myUsername + '\\b', 'i').test(msg.text));
+new RegExp('@' + myUsername.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(msg.text));
 
 // DMs always notify. Groups: notify if groupAll is on, OR if it's a @mention and mentions is on.
 const shouldNotify = !isGroup || s.groupAll || (isMention && s.mentions);
@@ -6477,14 +6426,17 @@ const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content
 const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown fenced blocks with the language tag and real line breaks (never JSON \\n escapes). The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
 const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
 
-// Always use Free API format for @AI — the Pro endpoint doesn't support this call shape
-// Ultra users with Pro preference get the Ultra API
-const ultraPref2 = (() => { try { return localStorage.getItem('normsg_ultra_ai_model') || 'pro'; } catch { return 'pro'; } })();
-const atAiApiUrl = (isUltraUser && ultraPref2 === 'pro') ? NORMAI_ULTRA_API : NORMAI_FREE_API;
-const res = await fetch(atAiApiUrl, {
+/*
+  IMPORTANT:
+  This must call the same-origin Netlify proxy to avoid browser CORS failures
+  and to isolate the upstream (deno.net) outage/headers. The proxy only needs `prompt`.
+*/
+// Use Deno endpoints based on plan/model selection (Free/Pro/Ultra + Thinking=Pro)
+const url = getNormAIUrl();
+const res = await fetch(url, {
 method:  'POST',
 headers: { 'Content-Type': 'application/json' },
-body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}`, max_tokens: NORMAI_MAX_TOKENS })
+body: JSON.stringify({ prompt: fullPrompt + `\n\nUser: ${prompt}` , max_tokens: NORMAI_MAX_TOKENS })
 });
 
 if (!res.ok) {
