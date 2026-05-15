@@ -431,6 +431,7 @@ subscribeAll();
 scheduleStatusesRefresh({ force: true });
 initAdminSystem();
 initAIChats();
+initNormTokens();
 }
 
 function getFriendUidsKey() {

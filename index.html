@@ -1164,6 +1164,76 @@ Deno.serve(async (req) => {
                         </div>
                     </div>
                 </div>
+
+                <!-- ── NormTokens ── -->
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 10px;">NormTokens</div>
+
+                <!-- Balance card -->
+                <div class="nt-balance-card">
+                    <div class="nt-coin">🪙</div>
+                    <div style="flex:1;">
+                        <div class="nt-balance-label">Your Balance</div>
+                        <div class="nt-balance-val" id="ntBalanceDisplay">—</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div class="nt-balance-label">Lifetime Earned</div>
+                        <div class="nt-balance-val" id="ntLifetimeDisplay" style="font-size:13px;color:var(--muted);">—</div>
+                    </div>
+                </div>
+
+                <!-- How to earn -->
+                <div class="nt-earn-grid">
+                    <div class="nt-earn-row"><span>💬 Send a message</span><span class="nt-earn-amt">+1</span></div>
+                    <div class="nt-earn-row"><span>🎮 Play a game</span><span class="nt-earn-amt">+5</span></div>
+                    <div class="nt-earn-row"><span>🏆 Win a game</span><span class="nt-earn-amt">+15</span></div>
+                    <div class="nt-earn-row"><span>🟩 Solve Wordle</span><span class="nt-earn-amt">+20</span></div>
+                    <div class="nt-earn-row" style="border:none;"><span style="color:var(--muted);font-size:11px;">Max 100 tokens/day from messages</span><span></span></div>
+                </div>
+
+                <!-- Shop -->
+                <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin:14px 0 10px;">Shop</div>
+                <div id="ntShopCards">
+                    <div class="nt-shop-card" onclick="ntRedeem('pro_1d',200)">
+                        <div class="nt-shop-ico">✦</div>
+                        <div class="nt-shop-info">
+                            <div class="nt-shop-title">NorMAI Pro — 1 day</div>
+                            <div class="nt-shop-sub">Smart replies, context-aware AI</div>
+                        </div>
+                        <div class="nt-shop-price">200 🪙</div>
+                    </div>
+                    <div class="nt-shop-card" onclick="ntRedeem('pro_7d',1000)">
+                        <div class="nt-shop-ico">✦</div>
+                        <div class="nt-shop-info">
+                            <div class="nt-shop-title">NorMAI Pro — 7 days</div>
+                            <div class="nt-shop-sub">Smart replies, context-aware AI</div>
+                        </div>
+                        <div class="nt-shop-price">1,000 🪙</div>
+                    </div>
+                    <div class="nt-shop-card" onclick="ntRedeem('ultra_1d',500)">
+                        <div class="nt-shop-ico" style="color:#c084fc;">⚡</div>
+                        <div class="nt-shop-info">
+                            <div class="nt-shop-title">NorMULTRA — 1 day</div>
+                            <div class="nt-shop-sub">Highest-tier AI + advanced reasoning</div>
+                        </div>
+                        <div class="nt-shop-price" style="color:#c084fc;">500 🪙</div>
+                    </div>
+                    <div class="nt-shop-card" onclick="ntRedeem('ultra_7d',2500)">
+                        <div class="nt-shop-ico" style="color:#c084fc;">⚡</div>
+                        <div class="nt-shop-info">
+                            <div class="nt-shop-title">NorMULTRA — 7 days</div>
+                            <div class="nt-shop-sub">Highest-tier AI + advanced reasoning</div>
+                        </div>
+                        <div class="nt-shop-price" style="color:#c084fc;">2,500 🪙</div>
+                    </div>
+                    <div class="nt-shop-card" onclick="ntRedeem('ultra_30d',8000)">
+                        <div class="nt-shop-ico" style="color:#c084fc;">⚡</div>
+                        <div class="nt-shop-info">
+                            <div class="nt-shop-title">NorMULTRA — 30 days</div>
+                            <div class="nt-shop-sub">Best value — full month of Ultra</div>
+                        </div>
+                        <div class="nt-shop-price" style="color:#c084fc;">8,000 🪙</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -1318,6 +1388,7 @@ Deno.serve(async (req) => {
 <script src="js/normai.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/aichat.js"></script>
+<script src="js/normtokens.js"></script>
 <script src="js/games.js"></script>
 </body>
 </html>

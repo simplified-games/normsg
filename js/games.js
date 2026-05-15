@@ -83,6 +83,7 @@ function startTTT(mode) {
     tttTurn  = 'X';
     tttMode  = mode;
     tttDone  = false;
+    ntAward(NT_EARN_PLAY, 'game started'); // NormTokens
     renderTTT();
 }
 
@@ -144,6 +145,7 @@ function tttClick(i) {
     const wins = tttGetWins(sz);
     const won  = wins.some(l => tttBoard[l[0]] && l.every(i => tttBoard[i]===tttBoard[l[0]]));
     const draw = !won && tttBoard.every(c => c);
+    if (won) ntAward(NT_EARN_WIN, 'TTT win! 🏆'); // NormTokens
     if (won || draw) tttDone = true;
     else tttTurn = tttTurn==='X' ? 'O' : 'X';
     renderTTT();
@@ -372,6 +374,7 @@ function renderChessModeSelect() {
 }
 
 function startChess(mode) {
+    ntAward(NT_EARN_PLAY, 'game started'); // NormTokens
     chessBoard     = initChessBoard();
     chessMode      = mode;
     chessTurn      = 'w';
@@ -483,6 +486,9 @@ function chessApplyMove(fr, fc, tr, tc, board) {
         if (inCheck) {
             const winner = nextTurn === 'w' ? 'Black' : 'White';
             if (statusEl) statusEl.textContent = `♟ Checkmate! ${winner} wins!`;
+            // NormTokens: award win only if human won (in AI mode white wins = player wins)
+            if (chessMode !== 'online' && nextTurn === 'b') ntAward(NT_EARN_WIN, 'Chess win! 🏆');
+            else if (chessMode === 'local') ntAward(NT_EARN_WIN, 'Chess win! 🏆');
         } else {
             if (statusEl) statusEl.textContent = '🤝 Stalemate! Draw.';
         }
@@ -1031,6 +1037,7 @@ function wordleKey(k) {
         const valid = (WORDLE_WORDS.includes(wordleCurrent) || WORDLE_ANSWERS.includes(wordleCurrent)) && wordleCurrent.length === 5;
         if (!valid) { showToast('Not in word list!'); return; }
         wordleGuesses.push(wordleCurrent);
+        if (wordleCurrent === wordleAnswer) ntAward(NT_EARN_WORDLE_WIN, 'Wordle solved! 🟩'); // NormTokens
         wordleCurrent = '';
     } else {
         if (wordleCurrent.length < 5) wordleCurrent += k.toLowerCase();

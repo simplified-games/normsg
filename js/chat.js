@@ -299,6 +299,7 @@ inp.value = ''; inp.style.height = '';
 const rt = replyTo ? { ...replyTo } : null;
 clearReply();
 await pushMsg({ type:'text', text, ...(rt ? { replyTo: rt } : {}) });
+ntOnMessage(); // NormTokens: +1 per message (capped at 100/day)
 
 // Trigger AI if @AI is mentioned in a group chat
 if (chatType === 'group' && /@AI\b/i.test(text)) {

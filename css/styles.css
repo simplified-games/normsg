@@ -1820,3 +1820,45 @@
         /* Clickable message avatar */
         .msg-av:not(.inv) { cursor: pointer; transition: opacity 0.15s; }
         .msg-av:not(.inv):hover { opacity: 0.8; }
+
+        /* ── NormTokens ───────────────────────────────────────── */
+        .nt-balance-card {
+            display:flex;align-items:center;gap:12px;
+            background:linear-gradient(135deg,rgba(124,92,252,0.18),rgba(45,212,191,0.10));
+            border:1px solid rgba(124,92,252,0.35);border-radius:16px;
+            padding:14px 16px;margin-bottom:12px;
+        }
+        .nt-coin { font-size:28px;flex-shrink:0; }
+        .nt-balance-label { font-size:10px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:var(--muted);margin-bottom:3px; }
+        .nt-balance-val { font-size:20px;font-weight:800;color:var(--text);font-family:'Syne',sans-serif; }
+
+        .nt-earn-grid {
+            background:var(--panel);border:1px solid var(--border2);border-radius:14px;
+            overflow:hidden;margin-bottom:4px;
+        }
+        .nt-earn-row {
+            display:flex;align-items:center;justify-content:space-between;
+            padding:9px 14px;font-size:12px;color:var(--text);
+            border-bottom:1px solid var(--border);
+        }
+        .nt-earn-amt { font-weight:800;color:var(--green);font-size:13px; }
+
+        .nt-shop-card {
+            display:flex;align-items:center;gap:12px;
+            background:var(--panel);border:1px solid var(--border2);border-radius:14px;
+            padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:all 0.18s;
+        }
+        .nt-shop-card:hover { border-color:var(--a2);background:rgba(167,139,250,0.07); }
+        .nt-shop-card:active { transform:scale(0.98); }
+        .nt-shop-ico { font-size:20px;width:28px;text-align:center;flex-shrink:0;color:var(--a2); }
+        .nt-shop-info { flex:1;min-width:0; }
+        .nt-shop-title { font-size:13px;font-weight:700;color:var(--text); }
+        .nt-shop-sub   { font-size:11px;color:var(--muted);margin-top:2px; }
+        .nt-shop-price { font-size:12px;font-weight:800;color:var(--a2);white-space:nowrap;flex-shrink:0; }
+
+        @keyframes ntPop {
+            0%   { transform:scale(1); }
+            40%  { transform:scale(1.18); }
+            100% { transform:scale(1); }
+        }
+        .nt-pop { animation:ntPop 0.35s cubic-bezier(0.34,1.56,0.64,1); }
