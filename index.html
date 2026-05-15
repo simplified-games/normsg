@@ -25,58 +25,221 @@
          — Firebase will print a direct link to create it
            in your browser console the first time cleanup runs.
     
-======================= netlify/functions/normai.js ===============================
- // netlify/functions/normai.js
-// Free-tier NorMAI proxy
-// Set GROQ_API_KEY_FREE in Netlify → Site settings → Environment variables
+======================= normsg-free.ts ===============================
+// normsg-free.ts  —  NorMSG Free API (+ vision support)
+// Deploy to: normsg-free.simplifiedtest10.deno.net
+// Env vars needed: GROQ_API_KEY_FREE
+//
+// Supports:
+//   { prompt }                          → standard text chat (llama-3.1-8b-instant)
+//   { vision, image, mimeType, prompt } → image analysis (llama-4-scout-17b-16e-instruct)
 
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
-const GROQ_MODEL   = 'llama-3.1-8b-instant';
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
+const TEXT_MODEL   = 'llama-3.1-8b-instant';
+const VISION_MODEL = 'meta-llama/llama-4-scout-17b-16e-instruct';
+const GROQ_URL     = 'https://api.groq.com/openai/v1/chat/completions';
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (req.method !== 'POST') return Response.json({ error: 'Method not allowed' }, { status: 405 });
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Content-Type': 'application/json',
-  };
+  const apiKey = Deno.env.get('GROQ_API_KEY_FREE');
+  if (!apiKey) return Response.json({ error: 'API key not configured' }, { status: 500 });
 
-  try {
-    const { prompt } = JSON.parse(event.body || '{}');
-    if (!prompt) {
-      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Missing prompt' }) };
-    }
-
-    const groqRes = await fetch(GROQ_API_URL, {
+  // ── Vision request ─────────────────────────────────────
+  if (body.vision && body.image && body.mimeType && body.prompt) {
+    const imageUrl = `data:${body.mimeType};base64,${body.image}`;
+    const groqRes = await fetch(GROQ_URL, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY_FREE}`, // Change to GROQ_API_KEY_PRO for Pro normai-pro.js
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 512,
+        model: VISION_MODEL,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text',      text: String(body.prompt) },
+              { type: 'image_url', image_url: { url: imageUrl } },
+            ],
+          },
+        ],
+        max_tokens: 1024,
         temperature: 0.7,
       }),
     });
-
-    if (!groqRes.ok) {
-      const err = await groqRes.json().catch(() => ({}));
-      return { statusCode: groqRes.status, headers, body: JSON.stringify({ error: err }) };
-    }
-
-    const data  = await groqRes.json();
+    const data = await groqRes.json();
+    if (!groqRes.ok) return Response.json({ error: data }, { status: groqRes.status, headers: CORS });
     const reply = data.choices?.[0]?.message?.content ?? '';
-
-    return { statusCode: 200, headers, body: JSON.stringify({ reply }) };
-  } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
+    return Response.json({ reply }, { headers: CORS });
   }
+
+  // ── Standard text request ──────────────────────────────
+  if (!body.prompt) return Response.json({ error: 'Missing prompt' }, { status: 400 });
+
+  const groqRes = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: TEXT_MODEL,
+      messages: [{ role: 'user', content: String(body.prompt) }],
+      max_tokens: 512,
+      temperature: 0.7,
+    }),
+  });
+  const data = await groqRes.json();
+  if (!groqRes.ok) return Response.json({ error: data }, { status: groqRes.status, headers: CORS });
+  const reply = data.choices?.[0]?.message?.content ?? '';
+  return Response.json({ reply }, { headers: CORS });
+});
+
+
+======================= normsg-ultra.ts ===============================
+// normsg-ultra.ts  —  NorMSG Ultra API (NVIDIA version)
+// Deploy to: normsg-ultra.simplifiedtest10.deno.net
+// Env vars needed: NVIDIA_ULTRA_API_KEY
+//
+// Supports:
+//   { prompt }                           → text chat
+//   { prompt, context, mode:'ultra' }    → context-aware chat with system prompt
+//   { vision, image, mimeType, prompt }  → not supported by Nemotron 3 Super (text model)
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
 };
+
+const ULTRA_MODEL = 'nvidia/nemotron-3-super-120b-a12b';
+const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
+  if (req.method !== 'POST') {
+    return Response.json({ error: 'Method not allowed' }, { status: 405, headers: CORS });
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: 'Invalid JSON' }, { status: 400, headers: CORS });
+  }
+
+  const apiKey = Deno.env.get('NVIDIA_ULTRA_API_KEY');
+  if (!apiKey) {
+    return Response.json({ error: 'API key not configured' }, { status: 500, headers: CORS });
+  }
+
+  // Nemotron 3 Super is a text model, so vision inputs are not handled here.
+  if (body.vision) {
+    return Response.json(
+      { error: 'Vision is not supported by the Nemotron 3 Super text model' },
+      { status: 400, headers: CORS },
+    );
+  }
+
+  if (!body.prompt) {
+    return Response.json({ error: 'Missing prompt' }, { status: 400, headers: CORS });
+  }
+
+  // Build messages array — allow optional context/system prompt
+  const messages: { role: 'system' | 'user'; content: string }[] = [];
+
+  const context = typeof body.context === 'string' ? body.context.trim() : '';
+  const rawPrompt = String(body.prompt);
+
+  if (body.mode === 'ultra' && context) {
+    messages.push({ role: 'system', content: context });
+  }
+
+  const userSplit = rawPrompt.indexOf('\n\nUser: ');
+  if (userSplit !== -1) {
+    const systemPart = rawPrompt.slice(0, userSplit).trim();
+    const userPart = rawPrompt.slice(userSplit + 7).trim();
+    if (systemPart) messages.push({ role: 'system', content: systemPart });
+    messages.push({ role: 'user', content: userPart });
+  } else {
+    messages.push({ role: 'user', content: rawPrompt });
+  }
+
+  const groqRes = await fetch(NVIDIA_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: ULTRA_MODEL,
+      messages,
+      max_tokens: 200000,
+      temperature: 0.7,
+    }),
+  });
+
+  const data = await groqRes.json();
+  if (!groqRes.ok) {
+    return Response.json({ error: data }, { status: groqRes.status, headers: CORS });
+  }
+
+  const reply = data.choices?.[0]?.message?.content ?? '';
+  return Response.json({ reply }, { headers: CORS });
+});
+
+
+======================= normsg-pro.ts ===============================
+// normsg-pro.ts  —  NorMSG Pro API
+// Deploy to: normsg-pro.simplifiedtest10.deno.net
+// Env vars needed: GROQ_API_KEY_PRO
+
+Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
+  }
+
+  if (req.method !== 'POST') {
+    return Response.json({ error: 'Method not allowed' }, { status: 405 });
+  }
+
+  const { prompt } = await req.json();
+  if (!prompt) return Response.json({ error: 'Missing prompt' }, { status: 400 });
+
+  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('GROQ_API_KEY_PRO')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-oss-120b',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 512,
+      temperature: 0.7,
+    }),
+  });
+
+  const data = await groqRes.json();
+  const reply = data.choices?.[0]?.message?.content ?? '';
+
+  return Response.json({ reply }, {
+    headers: { 'Access-Control-Allow-Origin': '*' },
+  });
+});
 
     ── FIRESTORE RULES ────────────────────────────────────
     rules_version = '2';
@@ -6416,8 +6579,7 @@ console.error('postStatus:', e);
 }
 
 // ── GROQ AI INTEGRATION ────────────────────────────────────
-// Key is stored securely in the Netlify Function environment — never exposed here
-const GROQ_WORKER    = '/.netlify/functions/normai';
+// Key is stored securely in the Deno Deploy environment — never exposed here
 const GROQ_MODEL     = 'llama-3.1-8b-instant';        // standard
 const GROQ_MODEL_SUPER = 'llama-3.3-70b-versatile';  // NorMSG Super
 
