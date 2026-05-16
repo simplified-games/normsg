@@ -1,7 +1,8 @@
 // ┌─────────────────────────────────────────────────────────┐
 // │  🔧  REPLACE THIS ENTIRE BLOCK WITH YOUR FIREBASE CONFIG  │
 // └─────────────────────────────────────────────────────────┘
-const firebaseConfig = {
+// Change 'firebaseConfig' to 'config'
+const config = {
     apiKey:            "AIzaSyCcanLWJKqCWkPlBvBdCJjERkIimH0Xo-c",
     authDomain:        "messages-by-alex.firebaseapp.com",
     projectId:         "messages-by-alex",
@@ -10,7 +11,8 @@ const firebaseConfig = {
     appId:             "1:859501460037:web:7f7a12f7d88f7d6dbc412c"
 };
 
-firebase.initializeApp(firebaseConfig);
+// Update this line to use 'config' as well
+firebase.initializeApp(config);
 
 // ── APP CHECK (reCAPTCHA v3) — blocks direct API abuse ─────
 const appCheck = firebase.appCheck();
