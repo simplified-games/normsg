@@ -1,13 +1,13 @@
 // ── NORMTOKENS ─────────────────────────────────────────────
 // Tokens stored in Firestore: users/{uid}.normTokens { balance, lifetime, dailyMsgCount, dailyMsgDate }
-// Earnings:  +1 per message (max 100/day)  |  +5 play game  |  +15 win game  |  +20 solve Wordle
-// Shop:      pro_1d=200  pro_7d=1000  ultra_1d=500  ultra_7d=2500  ultra_30d=8000
+// Earnings:  +2 per message (max 500/day)  |  +10 play game  |  +25 win game  |  +40 solve Wordle
+// Shop:      pro_1d=100  pro_7d=500  ultra_1d=250  ultra_7d=1250  ultra_30d=4000
 
-const NT_MSG_DAILY_CAP  = 100;
-const NT_EARN_MSG        = 1;
-const NT_EARN_PLAY       = 5;
-const NT_EARN_WIN        = 15;
-const NT_EARN_WORDLE_WIN = 20;
+const NT_MSG_DAILY_CAP  = 500;
+const NT_EARN_MSG        = 2;
+const NT_EARN_PLAY       = 10;
+const NT_EARN_WIN        = 25;
+const NT_EARN_WORDLE_WIN = 40;
 
 // ── Load & display balance ──────────────────────────────────
 async function ntLoad() {
@@ -79,11 +79,11 @@ async function ntOnMessage() {
 
 // ── Shop / redeem ───────────────────────────────────────────
 const NT_SHOP = {
-    pro_1d:    { label: 'NorMAI Pro 1 day',    cost: 200,  plan: 'pro',   days: 1  },
-    pro_7d:    { label: 'NorMAI Pro 7 days',   cost: 1000, plan: 'pro',   days: 7  },
-    ultra_1d:  { label: 'NorMULTRA 1 day',     cost: 500,  plan: 'ultra', days: 1  },
-    ultra_7d:  { label: 'NorMULTRA 7 days',    cost: 2500, plan: 'ultra', days: 7  },
-    ultra_30d: { label: 'NorMULTRA 30 days',   cost: 8000, plan: 'ultra', days: 30 },
+    pro_1d:    { label: 'NorMAI Pro 1 day',    cost: 100,  plan: 'pro',   days: 1  },
+    pro_7d:    { label: 'NorMAI Pro 7 days',   cost: 500, plan: 'pro',   days: 7  },
+    ultra_1d:  { label: 'NorMULTRA 1 day',     cost: 250,  plan: 'ultra', days: 1  },
+    ultra_7d:  { label: 'NorMULTRA 7 days',    cost: 1250, plan: 'ultra', days: 7  },
+    ultra_30d: { label: 'NorMULTRA 30 days',   cost: 4000, plan: 'ultra', days: 30 },
 };
 
 async function ntRedeem(itemId, cost) {
