@@ -528,11 +528,6 @@ document.getElementById('giftAdminIn').value = '';
 } catch(e) { mmsg('giftAdminMsg','Error: '+e.message,'err'); }
 }
 
-function showToast(msg) {
-const t = document.getElementById('toast');
-t.textContent = msg; t.classList.add('show');
-setTimeout(()=>t.classList.remove('show'), 3000);
-}
 
 // ── @ MENTION SYSTEM ───────────────────────────────────────
 let mentionSearch  = null; // current search string after @
@@ -916,3 +911,4 @@ const AI_FREE_RPM   = 4;   const AI_PRO_RPM  = 6;  const AI_ULTRA_RPM = 10;  // 
 
 let activeAIChatId  = null;           // currently open AI chat
 let aiReqTs         = {};             // chatId → [timestamps] in-memory rate tracking
+
