@@ -502,8 +502,6 @@ async function postStatus() {
         const deleteAt = new Date(now.getTime() + 24 * 3600000).toISOString();
         let statusData = {
             uid:         me.uid,
-            displayName: me.displayName || me.email,
-            photoURL:    me.photoURL || null,
             createdAt:   now.toISOString(),
             deleteAt,
             views:       awEncode({}),

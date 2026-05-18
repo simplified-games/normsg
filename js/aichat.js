@@ -434,22 +434,23 @@ async function createPoll() {
     if (postBtn) { postBtn.disabled = true; postBtn.textContent = 'Posting…'; }
 
     try {
-        const path = `groups/${chatId}/messages`;
-        await db.collection(path).add({
+        await awAdd('messages', {
             type:           'poll',
             question:       q,
-            options,
-            votes:          {},
+            options:        awEncode(options),
+            votes:          awEncode({}),
             senderUid:      me.uid,
             senderName:     me.displayName || me.email,
             senderUsername: myUsername,
             senderPhoto:    me.photoURL || null,
-            timestamp:      SV(),
+            timestamp:      awNow(),
+            chatId,
+            chatType:       'group',
         });
 
-        await db.collection('groups').doc(chatId).update({
+        await awUpdate('groups', chatId, {
             lastMsg:            '📊 Poll: ' + q.slice(0, 40),
-            lastAt:             SV(),
+            lastAt:             awNow(),
             lastSenderUid:      me.uid,
             lastSenderUsername: myUsername,
         }).catch(() => {});
@@ -462,17 +463,13 @@ async function createPoll() {
 }
 
 async function votePoll(msgId, msgPath, optionIdx) {
-    if (!msgPath) return;
+    if (!msgId) return;
     try {
-        const ref  = db.collection(msgPath).doc(msgId);
-        const snap = await ref.get();
-        if (!snap.exists) return;
-        const votes  = snap.data().votes || {};
-        const DEL    = firebase.firestore.FieldValue.delete();
-        const update = votes[me.uid] === optionIdx
-            ? { [`votes.${me.uid}`]: DEL }
-            : { [`votes.${me.uid}`]: optionIdx };
-        await ref.update(update);
+        const doc    = await awGet('messages', msgId);
+        const votes  = awDecode(doc.votes) || {};
+        if (votes[me.uid] === optionIdx) delete votes[me.uid];
+        else votes[me.uid] = optionIdx;
+        await awUpdate('messages', msgId, { votes: awEncode(votes) });
     } catch(e) { console.error('votePoll error:', e); }
 }
 
@@ -658,24 +655,20 @@ document.addEventListener('click', e => {
 // ═══════════════════════════════════════════════════════════
 async function pinMessage(mid, pid, text) {
   if (!chatId) return;
-  const col  = chatType === 'dm' ? 'conversations' : 'groups';
-  const snap = await db.collection(col).doc(chatId).get();
-  // Toggle: if same msg pinned, unpin
-  const cur  = snap?.data()?.pinnedMsgId;
+  const col = chatType === 'dm' ? 'conversations' : 'groups';
+  const doc = await awGet(col, chatId).catch(() => null);
+  const cur = doc?.pinnedMsgId;
   if (cur === mid) { await unpinMessage(); return; }
-  await db.collection(col).doc(chatId).set({
+  await awUpsert(col, chatId, {
     pinnedMsgId: mid, pinnedText: (text||'').slice(0,100),
-  }, { merge: true });
+  });
   showToast('📌 Message pinned!');
 }
 
 async function unpinMessage() {
   if (!chatId) return;
   const col = chatType === 'dm' ? 'conversations' : 'groups';
-  await db.collection(col).doc(chatId).update({
-    pinnedMsgId: firebase.firestore.FieldValue.delete(),
-    pinnedText:  firebase.firestore.FieldValue.delete(),
-  });
+  await awUpdate(col, chatId, { pinnedMsgId: null, pinnedText: null });
   document.getElementById('pinnedBanner').classList.remove('on');
   showToast('📌 Unpinned.');
 }
@@ -702,9 +695,15 @@ function subscribePinned() {
   if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
   if (!chatId) return;
   const col = chatType === 'dm' ? 'conversations' : 'groups';
-  pinnedUnsub = db.collection(col).doc(chatId).onSnapshot(snap => {
-    const d = snap.data() || {};
-    showPinnedBanner(d.pinnedText || '', d.pinnedMsgId || '');
+  // Load initial pinned state
+  awGet(col, chatId).then(doc => {
+    showPinnedBanner(doc?.pinnedText || '', doc?.pinnedMsgId || '');
+  }).catch(() => showPinnedBanner('', ''));
+  // Subscribe to live changes
+  pinnedUnsub = awSubscribe([col], event => {
+    const doc = event.payload;
+    if (doc?.$id !== chatId) return;
+    showPinnedBanner(doc.pinnedText || '', doc.pinnedMsgId || '');
   });
 }
 
@@ -713,28 +712,28 @@ function subscribePinned() {
 // ═══════════════════════════════════════════════════════════
 async function loadGroupRoles(groupId) {
   try {
-    const snap = await db.collection('groups').doc(groupId).get();
-    return snap.data()?.customRoles || [];
+    const doc = await awGet('groups', groupId);
+    return awDecode(doc.customRoles) || [];
   } catch { return []; }
 }
 
 async function getMemberRole(groupId, uid) {
   try {
-    const snap = await db.collection('groups').doc(groupId).get();
-    const roles   = snap.data()?.customRoles || [];
-    const roleMap = snap.data()?.memberRoles || {};
-    const rid     = roleMap[uid];
+    const doc    = await awGet('groups', groupId);
+    const roles  = awDecode(doc.customRoles) || [];
+    const roleMap= awDecode(doc.memberRoles) || {};
+    const rid    = roleMap[uid];
     return rid ? roles.find(r => r.id === rid) : null;
   } catch { return null; }
 }
 
 async function renderRolesSection(groupId) {
-  const snap    = await db.collection('groups').doc(groupId).get();
-  const gdata   = snap.data() || {};
-  const roles   = gdata.customRoles || [];
-  const roleMap = gdata.memberRoles || {};
+  const doc     = await awGet('groups', groupId);
+  const gdata   = doc || {};
+  const roles   = awDecode(gdata.customRoles) || [];
+  const roleMap = awDecode(gdata.memberRoles) || {};
   const isOwner = gdata.createdBy === me.uid;
-  const isAdmin = (gdata.admins||[]).includes(me.uid) || isOwner;
+  const isAdmin = (awDecode(gdata.admins)||gdata.admins||[]).includes(me.uid) || isOwner;
 
   const list = document.getElementById('rolesList');
   if (!roles.length) {
@@ -755,49 +754,50 @@ async function addGroupRole() {
   const name  = document.getElementById('newRoleName').value.trim();
   const color = document.getElementById('newRoleColor').value;
   if (!name) { mmsg('rolesMsg','Enter a role name.','err'); return; }
-  const snap  = await db.collection('groups').doc(manageGroupId).get();
-  const roles = snap.data()?.customRoles || [];
+  const doc   = await awGet('groups', manageGroupId);
+  const roles = awDecode(doc.customRoles) || [];
   if (roles.length >= 8) { mmsg('rolesMsg','Max 8 custom roles.','err'); return; }
   roles.push({ id: Date.now().toString(), name, color });
-  await db.collection('groups').doc(manageGroupId).update({ customRoles: roles });
+  await awUpdate('groups', manageGroupId, { customRoles: awEncode(roles) });
   document.getElementById('newRoleName').value = '';
   mmsg('rolesMsg','✓ Role added!','ok');
   renderRolesSection(manageGroupId);
 }
 
 async function deleteGroupRole(roleId) {
-  const snap    = await db.collection('groups').doc(manageGroupId).get();
-  const roles   = (snap.data()?.customRoles||[]).filter(r => r.id !== roleId);
-  // Also remove from all member assignments
-  const roleMap = snap.data()?.memberRoles || {};
+  const doc     = await awGet('groups', manageGroupId);
+  const roles   = (awDecode(doc.customRoles)||[]).filter(r => r.id !== roleId);
+  const roleMap = awDecode(doc.memberRoles) || {};
   Object.keys(roleMap).forEach(uid => { if (roleMap[uid] === roleId) delete roleMap[uid]; });
-  await db.collection('groups').doc(manageGroupId).update({ customRoles: roles, memberRoles: roleMap });
+  await awUpdate('groups', manageGroupId, {
+    customRoles: awEncode(roles),
+    memberRoles: awEncode(roleMap),
+  });
   renderRolesSection(manageGroupId);
 }
 
 function openAssignRole(roleId, roleName, roleColor) {
-  const snap_promise = db.collection('groups').doc(manageGroupId).get();
-  snap_promise.then(snap => {
-    const members = snap.data()?.members || [];
-    const profiles_promise = members.length
-      ? db.collection('users').where(firebase.firestore.FieldPath.documentId(),'in',members.slice(0,10)).get()
-      : Promise.resolve({ docs: [] });
-    profiles_promise.then(s => {
-      const names = {};
-      s.docs.forEach(d => names[d.id] = d.data().displayName || d.data().username || d.id);
-      const opts = members.map(uid => `<option value="${uid}">${esc(names[uid]||uid)}</option>`).join('');
-      const sel  = `<select id="assignRoleSel" style="width:100%;background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:7px 10px;color:var(--text);font-family:'Figtree',sans-serif;font-size:13px;margin-bottom:10px;">${opts}</select>`;
-      if (!confirm(`Assign role "${roleName}" — pick a member in the next step. OK to continue?`)) return;
-      // Simple prompt-based for now
-      const uid = prompt(`Assign "${roleName}" to user UID or username:\n${members.map(u => names[u]).join(', ')}`);
-      if (!uid) return;
-      const match = members.find(u => u === uid || names[u] === uid);
-      if (!match) { showToast('Member not found.'); return; }
-      snap.ref.update({ [`memberRoles.${match}`]: roleId });
-      showToast(`✓ Role "${roleName}" assigned!`);
-      renderRolesSection(manageGroupId);
-    });
-  });
+  awGet('groups', manageGroupId).then(async doc => {
+    const members = doc.members || [];
+    const profiles = {};
+    if (members.length) {
+      for (let i = 0; i < members.length; i += 100) {
+        const chunk = members.slice(i, i + 100);
+        const docs  = await awList('users', [Query.equal('$id', chunk), Query.limit(100)]);
+        docs.forEach(d => { profiles[d.$id] = d.displayName || d.username || d.$id; });
+      }
+    }
+    if (!confirm(`Assign role "${roleName}" — pick a member in the next step. OK to continue?`)) return;
+    const uid = prompt(`Assign "${roleName}" to user UID or username:\n${members.map(u => profiles[u]||u).join(', ')}`);
+    if (!uid) return;
+    const match = members.find(u => u === uid || profiles[u] === uid);
+    if (!match) { showToast('Member not found.'); return; }
+    const roleMap = awDecode(doc.memberRoles) || {};
+    roleMap[match] = roleId;
+    await awUpdate('groups', manageGroupId, { memberRoles: awEncode(roleMap) });
+    showToast(`✓ Role "${roleName}" assigned!`);
+    renderRolesSection(manageGroupId);
+  }).catch(e => showToast('Error: ' + e.message));
 }
 
 // AI suggest bar removed

@@ -217,14 +217,15 @@ async function startTTTOnline() {
     const code = Math.random().toString(36).slice(2,8).toUpperCase();
     gc().innerHTML = `<div class="game-status">Creating game…</div>`;
     try {
-        const gameRef = await db.collection('normgames').add({
+        const doc = await awAdd('normgames', {
             type: 'ttt', size: sz, code,
-            board: Array(sz*sz).fill(''),
-            turn: 'X', status: 'waiting',
-            players: { X: me.uid },
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            board:    awEncode(Array(sz*sz).fill('')),
+            turn:     'X',
+            status:   'waiting',
+            players:  awEncode({ X: me.uid }),
+            createdAt: awNow(),
         });
-        tttOnlineGameId   = gameRef.id;
+        tttOnlineGameId   = doc.$id;
         tttOnlineMySymbol = 'X';
         gc().innerHTML = `
             <div class="game-status">Waiting for opponent…</div>
@@ -234,7 +235,7 @@ async function startTTTOnline() {
                 <button class="game-mode-btn" style="margin:12px auto 0;max-width:180px;display:block;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
             </div>
             <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelTTTOnline()">✕ Cancel</button>`;
-        subscribeTTTOnline(gameRef.id);
+        subscribeTTTOnline(doc.$id);
     } catch(e) {
         showToast('Could not create game: ' + (e.message || e.code));
         renderTTTModeSelect();
@@ -247,36 +248,68 @@ async function joinTTTOnline() {
     if (!code) return;
     gc().innerHTML = `<div class="game-status">Finding game…</div>`;
     try {
-        const snap = await db.collection('normgames')
-            .where('code', '==', code.trim().toUpperCase())
-            .where('type', '==', 'ttt')
-            .limit(1).get();
-        if (snap.empty) { showToast('Game not found! Check the code.'); renderTTTModeSelect(); return; }
-        const doc = snap.docs[0];
-        if (doc.data().status !== 'waiting') { showToast('Game already started!'); renderTTTModeSelect(); return; }
-        await doc.ref.update({ 'players.O': me.uid, status: 'playing' });
-        tttOnlineGameId   = doc.id;
+        const docs = await awList('normgames', [
+            Query.equal('code', code.trim().toUpperCase()),
+            Query.equal('type', 'ttt'),
+            Query.limit(1),
+        ]);
+        if (!docs.length) { showToast('Game not found! Check the code.'); renderTTTModeSelect(); return; }
+        const doc = docs[0];
+        if (doc.status !== 'waiting') { showToast('Game already started!'); renderTTTModeSelect(); return; }
+        const players = awDecode(doc.players) || {};
+        players.O = me.uid;
+        await awUpdate('normgames', doc.$id, { players: awEncode(players), status: 'playing' });
+        tttOnlineGameId   = doc.$id;
         tttOnlineMySymbol = 'O';
-        tttSize = doc.data().size || 3;
-        subscribeTTTOnline(doc.id);
+        tttSize = doc.size || 3;
+        subscribeTTTOnline(doc.$id);
     } catch(e) {
         showToast('Could not join game: ' + (e.message || e.code));
         renderTTTModeSelect();
     }
 }
 
+function _handleTTTOnlineData(data) {
+    tttSize  = data.size || 3;
+    tttBoard = awDecode(data.board) || Array((data.size||3)*(data.size||3)).fill('');
+    tttTurn  = data.turn;
+    tttMode  = 'online';
+    tttDone  = data.status === 'done';
+    renderTTTOnline({
+        ...data,
+        board:   tttBoard,
+        players: awDecode(data.players) || {},
+    });
+}
+
 function subscribeTTTOnline(gameId) {
     if (tttOnlineUnsub) tttOnlineUnsub();
-    tttOnlineUnsub = db.collection('normgames').doc(gameId).onSnapshot(snap => {
-        const data = snap.data(); if (!data) return;
-        tttSize  = data.size || 3;
-        tttBoard = data.board;
-        tttTurn  = data.turn;
-        tttMode  = 'online';
-        tttDone  = data.status === 'done';
-        // Override render for online
-        renderTTTOnline(data);
+    // Load initial state immediately
+    awGet('normgames', gameId).then(_handleTTTOnlineData).catch(console.error);
+    // Subscribe to real-time changes
+    tttOnlineUnsub = awSubscribe(['normgames'], event => {
+        const data = event.payload;
+        if (data?.$id !== gameId) return;
+        _handleTTTOnlineData(data);
     });
+}
+
+async function tttClickOnline(i, sz, data) {
+    const newBoard = [...data.board]; newBoard[i] = tttOnlineMySymbol;
+    const wins = tttGetWins(sz);
+    const won  = wins.some(l=>newBoard[l[0]]&&l.every(j=>newBoard[j]===newBoard[l[0]]));
+    const draw = !won && newBoard.every(c=>c);
+    await awUpdate('normgames', tttOnlineGameId, {
+        board:  awEncode(newBoard),
+        turn:   tttOnlineMySymbol==='X' ? 'O' : 'X',
+        status: (won||draw) ? 'done' : 'playing',
+    });
+}
+
+function cancelTTTOnline() {
+    if (tttOnlineUnsub) { tttOnlineUnsub(); tttOnlineUnsub=null; }
+    if (tttOnlineGameId) { awDelete('normgames', tttOnlineGameId).catch(()=>{}); tttOnlineGameId=null; }
+    renderTTTModeSelect();
 }
 
 function renderTTTOnline(data) {
@@ -318,24 +351,6 @@ function renderTTTOnline(data) {
         board.appendChild(sq);
     });
 }
-
-async function tttClickOnline(i, sz, data) {
-    const newBoard = [...data.board]; newBoard[i] = tttOnlineMySymbol;
-    const wins = tttGetWins(sz);
-    const won  = wins.some(l=>newBoard[l[0]]&&l.every(j=>newBoard[j]===newBoard[l[0]]));
-    const draw = !won && newBoard.every(c=>c);
-    await db.collection('normgames').doc(tttOnlineGameId).update({
-        board: newBoard, turn: tttOnlineMySymbol==='X'?'O':'X',
-        status: (won||draw)?'done':'playing'
-    });
-}
-
-function cancelTTTOnline() {
-    if (tttOnlineUnsub) { tttOnlineUnsub(); tttOnlineUnsub=null; }
-    if (tttOnlineGameId) { db.collection('normgames').doc(tttOnlineGameId).delete().catch(()=>{}); tttOnlineGameId=null; }
-    renderTTTModeSelect();
-}
-
 
 // ══════════════════════════════════════════════════════════════
 // CHESS
@@ -780,15 +795,16 @@ async function startChessOnline(role) {
         const code = Math.random().toString(36).slice(2,8).toUpperCase();
         gc().innerHTML = `<div class="game-status">Creating game…</div>`;
         try {
-            const ref = await db.collection('normgames').add({
-                type: 'chess', code,
-                board: initChessBoard().flat(),
-                turn: 'w', status: 'waiting',
-                players: { w: me.uid },
-                lastMove: null,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            const doc = await awAdd('normgames', {
+                type:      'chess', code,
+                board:     awEncode(initChessBoard().flat()),
+                turn:      'w',
+                status:    'waiting',
+                players:   awEncode({ w: me.uid }),
+                lastMove:  null,
+                createdAt: awNow(),
             });
-            chessOnlineGameId  = ref.id;
+            chessOnlineGameId  = doc.$id;
             chessOnlineMyColor = 'w';
             gc().innerHTML = `
                 <div class="game-status">Waiting for opponent…</div>
@@ -798,7 +814,7 @@ async function startChessOnline(role) {
                     <button class="game-mode-btn" style="margin:12px auto 0;max-width:180px;display:block;" onclick="navigator.clipboard.writeText('${code}');showToast('✅ Code copied!')">📋 Copy code</button>
                 </div>
                 <button class="game-mode-btn" style="margin-top:10px;" onclick="cancelChessOnline()">✕ Cancel</button>`;
-            subscribeChessOnline(ref.id);
+            subscribeChessOnline(doc.$id);
         } catch(e) {
             showToast('Could not create game: ' + (e.message || e.code));
             renderChessModeSelect();
@@ -808,17 +824,20 @@ async function startChessOnline(role) {
         if (!code) return;
         gc().innerHTML = `<div class="game-status">Finding game…</div>`;
         try {
-            const snap = await db.collection('normgames')
-                .where('code', '==', code.trim().toUpperCase())
-                .where('type', '==', 'chess')
-                .limit(1).get();
-            if (snap.empty) { showToast('Game not found! Check the code.'); renderChessModeSelect(); return; }
-            const doc = snap.docs[0];
-            if (doc.data().status !== 'waiting') { showToast('Game already started!'); renderChessModeSelect(); return; }
-            await doc.ref.update({ 'players.b': me.uid, status: 'playing' });
-            chessOnlineGameId  = doc.id;
+            const docs = await awList('normgames', [
+                Query.equal('code', code.trim().toUpperCase()),
+                Query.equal('type', 'chess'),
+                Query.limit(1),
+            ]);
+            if (!docs.length) { showToast('Game not found! Check the code.'); renderChessModeSelect(); return; }
+            const doc = docs[0];
+            if (doc.status !== 'waiting') { showToast('Game already started!'); renderChessModeSelect(); return; }
+            const players = awDecode(doc.players) || {};
+            players.b = me.uid;
+            await awUpdate('normgames', doc.$id, { players: awEncode(players), status: 'playing' });
+            chessOnlineGameId  = doc.$id;
             chessOnlineMyColor = 'b';
-            subscribeChessOnline(doc.id);
+            subscribeChessOnline(doc.$id);
         } catch(e) {
             showToast('Could not join game: ' + (e.message || e.code));
             renderChessModeSelect();
@@ -828,20 +847,29 @@ async function startChessOnline(role) {
 
 function unflatBoard(f){const b=[];for(let i=0;i<8;i++)b.push(f.slice(i*8,i*8+8));return b;}
 
+function _handleChessOnlineData(data) {
+    const rawBoard = awDecode(data.board) || data.board;
+    const board2d  = Array.isArray(rawBoard[0]) ? rawBoard : unflatBoard(rawBoard);
+    data.board      = board2d;
+    chessBoard      = board2d;
+    chessTurn       = data.turn;
+    chessLastMove   = awDecode(data.lastMove);
+    chessMode       = 'online';
+    chessSelected   = null;
+    chessValidMoves = [];
+    chessGameOver   = data.status === 'done';
+    renderChessOnline(data);
+}
+
 function subscribeChessOnline(gameId) {
     if (chessOnlineUnsub) chessOnlineUnsub();
-    chessOnlineUnsub = db.collection('normgames').doc(gameId).onSnapshot(snap => {
-        const data = snap.data(); if (!data) return;
-        const board2d = Array.isArray(data.board[0]) ? data.board : unflatBoard(data.board);
-        data.board = board2d;
-        chessBoard      = board2d;
-        chessTurn       = data.turn;
-        chessLastMove   = data.lastMove;
-        chessMode       = 'online';
-        chessSelected   = null;
-        chessValidMoves = [];
-        chessGameOver   = data.status === 'done';
-        renderChessOnline(data);
+    // Load initial state immediately
+    awGet('normgames', gameId).then(_handleChessOnlineData).catch(console.error);
+    // Subscribe to real-time changes
+    chessOnlineUnsub = awSubscribe(['normgames'], event => {
+        const data = event.payload;
+        if (data?.$id !== gameId) return;
+        _handleChessOnlineData(data);
     });
 }
 
@@ -911,10 +939,11 @@ function chessClickOnline(r, c, data) {
             const newBoard = chessApplyMove(chessSelected[0],chessSelected[1],r,c,data.board);
             const nextTurn = chessOnlineMyColor==='w'?'b':'w';
             const allNext  = chessAllMoves(newBoard, nextTurn);
-            db.collection('normgames').doc(chessOnlineGameId).update({
-                board: newBoard.flat(), turn: nextTurn,
-                lastMove: [chessSelected[0],chessSelected[1],r,c],
-                status: allNext.length===0 ? 'done' : 'playing'
+            await awUpdate('normgames', chessOnlineGameId, {
+                board:    awEncode(newBoard.flat()),
+                turn:     nextTurn,
+                lastMove: awEncode([chessSelected[0],chessSelected[1],r,c]),
+                status:   allNext.length===0 ? 'done' : 'playing',
             });
             chessSelected=null; chessValidMoves=[];
             return;
