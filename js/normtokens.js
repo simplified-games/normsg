@@ -1,6 +1,7 @@
 // ── NORMTOKENS ─────────────────────────────────────────────
-// Tokens stored in Firestore: users/{uid}.normTokens { balance, lifetime, dailyMsgCount, dailyMsgDate }
-// Earnings:  +2 per message (max 500/day)  |  +10 play game  |  +25 win game  |  +40 solve Wordle
+// Tokens stored in Appwrite: users/{uid}.normTokens (JSON string)
+// Structure: { balance, lifetime, dailyMsgCount, dailyMsgDate }
+// Earnings:  +2 per message (max 500/day) | +10 play game | +25 win | +40 Wordle
 // Shop:      pro_1d=100  pro_7d=500  ultra_1d=250  ultra_7d=1250  ultra_30d=4000
 
 const NT_MSG_DAILY_CAP  = 500;
@@ -13,8 +14,8 @@ const NT_EARN_WORDLE_WIN = 40;
 async function ntLoad() {
     if (!me) return;
     try {
-        const snap = await db.collection('users').doc(me.uid).get();
-        const d    = snap.data()?.normTokens || {};
+        const doc = await awGet('users', me.uid);
+        const d   = awDecode(doc.normTokens) || {};
         ntRefreshDisplay(d.balance || 0, d.lifetime || 0);
     } catch { /* silent */ }
 }
@@ -26,27 +27,25 @@ function ntRefreshDisplay(balance, lifetime) {
     if (l) l.textContent = lifetime.toLocaleString() + ' earned';
 }
 
-// ── Award tokens (Firestore transaction) ───────────────────
+// ── Award tokens ────────────────────────────────────────────
+// Appwrite client SDK has no transactions, so we use optimistic fetch → update.
+// For a chat app this is fine — token counts don't need bank-level consistency.
 async function ntAward(amount, reason) {
     if (!me || amount <= 0) return;
     try {
-        const ref = db.collection('users').doc(me.uid);
-        await db.runTransaction(async tx => {
-            const snap = await tx.get(ref);
-            const d    = snap.data()?.normTokens || {};
-            let balance  = (d.balance  || 0) + amount;
-            let lifetime = (d.lifetime || 0) + amount;
-            tx.set(ref, { normTokens: { balance, lifetime,
-                dailyMsgCount: d.dailyMsgCount || 0,
-                dailyMsgDate:  d.dailyMsgDate  || '' } }, { merge: true });
-            return { balance, lifetime };
-        }).then(result => {
-            if (result) ntRefreshDisplay(result.balance, result.lifetime);
-        });
-        // Visual pulse on balance display
+        const doc      = await awGet('users', me.uid);
+        const d        = awDecode(doc.normTokens) || {};
+        const balance  = (d.balance  || 0) + amount;
+        const lifetime = (d.lifetime || 0) + amount;
+        const updated  = { ...d, balance, lifetime };
+
+        await awUpdate('users', me.uid, { normTokens: awEncode(updated) });
+        ntRefreshDisplay(balance, lifetime);
+
+        // Visual pulse
         const b = document.getElementById('ntBalanceDisplay');
         if (b) { b.classList.remove('nt-pop'); void b.offsetWidth; b.classList.add('nt-pop'); }
-        // Tiny toast only for bigger awards
+
         if (amount >= NT_EARN_PLAY) showToast(`+${amount} 🪙 ${reason}`);
     } catch { /* silent — never block the user action */ }
 }
@@ -55,35 +54,36 @@ async function ntAward(amount, reason) {
 async function ntOnMessage() {
     if (!me) return;
     try {
-        const ref  = db.collection('users').doc(me.uid);
-        const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-        await db.runTransaction(async tx => {
-            const snap  = await tx.get(ref);
-            const d     = snap.data()?.normTokens || {};
-            const prevDate  = d.dailyMsgDate  || '';
-            const prevCount = prevDate === today ? (d.dailyMsgCount || 0) : 0;
-            if (prevCount >= NT_MSG_DAILY_CAP) return null; // cap hit
-            const balance  = (d.balance  || 0) + NT_EARN_MSG;
-            const lifetime = (d.lifetime || 0) + NT_EARN_MSG;
-            tx.set(ref, { normTokens: {
-                balance, lifetime,
-                dailyMsgCount: prevCount + 1,
-                dailyMsgDate:  today
-            }}, { merge: true });
-            return { balance, lifetime };
-        }).then(result => {
-            if (result) ntRefreshDisplay(result.balance, result.lifetime);
-        });
+        const today    = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+        const doc      = await awGet('users', me.uid);
+        const d        = awDecode(doc.normTokens) || {};
+        const prevDate  = d.dailyMsgDate  || '';
+        const prevCount = prevDate === today ? (d.dailyMsgCount || 0) : 0;
+
+        if (prevCount >= NT_MSG_DAILY_CAP) return; // cap hit — silent skip
+
+        const balance  = (d.balance  || 0) + NT_EARN_MSG;
+        const lifetime = (d.lifetime || 0) + NT_EARN_MSG;
+        const updated  = {
+            ...d,
+            balance,
+            lifetime,
+            dailyMsgCount: prevCount + 1,
+            dailyMsgDate:  today,
+        };
+
+        await awUpdate('users', me.uid, { normTokens: awEncode(updated) });
+        ntRefreshDisplay(balance, lifetime);
     } catch { /* silent */ }
 }
 
 // ── Shop / redeem ───────────────────────────────────────────
 const NT_SHOP = {
-    pro_1d:    { label: 'NorMAI Pro 1 day',    cost: 100,  plan: 'pro',   days: 1  },
-    pro_7d:    { label: 'NorMAI Pro 7 days',   cost: 500, plan: 'pro',   days: 7  },
-    ultra_1d:  { label: 'NorMULTRA 1 day',     cost: 250,  plan: 'ultra', days: 1  },
-    ultra_7d:  { label: 'NorMULTRA 7 days',    cost: 1250, plan: 'ultra', days: 7  },
-    ultra_30d: { label: 'NorMULTRA 30 days',   cost: 4000, plan: 'ultra', days: 30 },
+    pro_1d:    { label: 'NorMAI Pro 1 day',   cost: 100,  plan: 'pro',   days: 1  },
+    pro_7d:    { label: 'NorMAI Pro 7 days',  cost: 500,  plan: 'pro',   days: 7  },
+    ultra_1d:  { label: 'NorMULTRA 1 day',    cost: 250,  plan: 'ultra', days: 1  },
+    ultra_7d:  { label: 'NorMULTRA 7 days',   cost: 1250, plan: 'ultra', days: 7  },
+    ultra_30d: { label: 'NorMULTRA 30 days',  cost: 4000, plan: 'ultra', days: 30 },
 };
 
 async function ntRedeem(itemId, cost) {
@@ -91,54 +91,48 @@ async function ntRedeem(itemId, cost) {
     const item = NT_SHOP[itemId];
     if (!item) return;
 
-    // Confirm
     if (!confirm(`Redeem ${item.label} for ${cost.toLocaleString()} 🪙?\n\nThis will extend your ${item.plan === 'ultra' ? 'NorMULTRA' : 'NorMAI Pro'} access by ${item.days} day${item.days > 1 ? 's' : ''}.`)) return;
 
-    const ref = db.collection('users').doc(me.uid);
-    let ok = false;
-
     try {
-        await db.runTransaction(async tx => {
-            const snap = await tx.get(ref);
-            const d    = snap.data() || {};
-            const tokens = d.normTokens || {};
-            const balance = tokens.balance || 0;
+        const doc    = await awGet('users', me.uid);
+        const tokens = awDecode(doc.normTokens) || {};
+        const balance = tokens.balance || 0;
 
-            if (balance < cost) throw new Error('not_enough');
-
-            // Work out new plan expiry — extend from now or existing expiry, whichever is later
-            const planField = item.plan === 'ultra' ? 'normsgUltra' : 'normsgSuper';
-            const existing  = d[planField]?.until?.toDate?.();
-            const base      = (existing && existing > new Date()) ? existing : new Date();
-            const until     = new Date(base.getTime() + item.days * 86400000);
-
-            tx.set(ref, {
-                normTokens: { ...tokens, balance: balance - cost },
-                [planField]: { until: TS.fromDate(until), days: item.days, grantedAt: SV() },
-                ...(item.plan === 'ultra' ? { plan: 'ultra' } : {})
-            }, { merge: true });
-
-            ok = true;
-            return balance - cost;
-        }).then(newBal => {
-            if (ok) {
-                ntRefreshDisplay(newBal, 0); // lifetime unchanged by spend
-                ntLoad(); // reload both values from Firestore
-                loadUserPlan();
-                showToast(`✅ ${item.label} activated!`);
-            }
-        });
-    } catch (e) {
-        if (e.message === 'not_enough') {
+        if (balance < cost) {
             showToast(`Not enough tokens — you need ${cost.toLocaleString()} 🪙`);
-        } else {
-            showToast('Redeem failed: ' + e.message);
+            return;
         }
+
+        // Work out new plan expiry — extend from now or existing expiry, whichever is later
+        const planField = item.plan === 'ultra' ? 'normsgUltra' : 'normsgSuper';
+        const existing  = awDecode(doc[planField]);
+        const existingUntil = existing?.until ? new Date(existing.until) : null;
+        const base  = (existingUntil && existingUntil > new Date()) ? existingUntil : new Date();
+        const until = new Date(base.getTime() + item.days * 86400000);
+
+        const newTokens = { ...tokens, balance: balance - cost };
+        const planData  = awEncode({ until: until.toISOString(), days: item.days, grantedAt: awNow() });
+
+        const updatePayload = {
+            normTokens: awEncode(newTokens),
+            [planField]: planData,
+            ...(item.plan === 'ultra' ? { plan: 'ultra' } : {}),
+        };
+
+        await awUpdate('users', me.uid, updatePayload);
+
+        // Refresh UI
+        ntRefreshDisplay(newTokens.balance, tokens.lifetime || 0);
+        ntLoad(); // reload both values fresh from Appwrite
+        invalidateUserCache(me.uid);
+        loadUserPlan();
+        showToast(`✅ ${item.label} activated!`);
+    } catch(e) {
+        showToast('Redeem failed: ' + e.message);
     }
 }
 
-// ── Hook into finishLogin ──────────────────────────────────
-// Called from auth.js finishLogin() — loads the balance on startup
+// ── Init (called from finishLogin in auth.js) ──────────────
 function initNormTokens() {
     ntLoad();
 }
