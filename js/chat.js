@@ -630,9 +630,11 @@ async function pinMessage(msgId, snippet) {
 const SWEAR = /\b(fuck|shit|bitch|cunt|dick|piss|asshole|bastard|cock)\b/i;
 
 async function checkSend(type, text) {
+        // Corrected code:
     const snap = await getCachedUserDoc(me.uid);
-    const dat  = snap.data() || {};
-    const dbTO = dat.timeoutUntil?.toDate?.();
+    const dat  = snap || {}; // Access snap directly instead of calling .data()
+    // Corrected code:
+    const dbTO = dat.timeoutUntil ? new Date(dat.timeoutUntil) : null;
     if (dbTO && dbTO > new Date()) {
         const s = Math.ceil((dbTO - new Date()) / 1000);
         showToBanner(`🤐 Timed out for swearing — ${s}s remaining.`, dbTO);
@@ -677,7 +679,14 @@ function showToBanner(msg, until) {
     function tick() {
         const s = Math.ceil((until - new Date()) / 1000);
         if (s <= 0) { clearToBanner(); return; }
-        const disp = msg.replace(/\d+s remaining/, s+'s remaining').replace(/\d+s left/, s+'s left');
+        // Corrected code:
+        let disp = msg;
+        if (disp.includes('5 minutes')) {
+            disp = `🤐 Watch the language! Timed out — ${s}s remaining.`;
+        } else {
+            disp = disp.replace(/\d+s remaining/, s+'s remaining').replace(/\d+s left/, s+'s left');
+        }
+        document.getElementById('toMsg').textContent = disp;
         document.getElementById('toMsg').textContent = disp;
     }
     tick();
@@ -703,8 +712,12 @@ async function downloadHistory() {
         const ts  = d.timestamp ? new Date(d.timestamp) : new Date();
         const dt  = ts.toLocaleDateString() + ' ' + fmtTime(ts);
         const who = d.senderUsername ? '@'+d.senderUsername : (d.senderName||'?');
+        // Corrected code:
         if (d.type === 'image') out += `[${dt}] ${who}: [Image] ${d.imageUrl}\n`;
-        else                    out += `[${dt}] ${who}: ${d.text}\n`;
+        else if (d.type === 'video') out += `[${dt}] ${who}: [Video] ${d.videoUrl}\n`;
+        else if (d.type === 'sticker') out += `[${dt}] ${who}: [Sticker] ${d.imageUrl}\n`;
+        else if (d.type === 'poll') out += `[${dt}] ${who}: [Poll] ${d.question}\n`;
+        else out += `[${dt}] ${who}: ${d.text || ''}\n`;
     });
     const blob = new Blob([out], { type: 'text/plain' });
     const a    = ce('a');
@@ -876,4 +889,4 @@ async function sendFriendReqTo(username, btn) {
         btn.textContent = '✓ Sent';
         showToast('Request sent! 🎉');
     } catch(e) { btn.textContent = '✗ Error'; console.error(e); }
-}
+
