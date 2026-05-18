@@ -9,11 +9,17 @@ const AW_DB_ID      = 'normsg-db';  // ← Databases → your DB → Database ID
 const AW_APP_SECRET = 'normsg-2025-change-me-to-something-random';
 
 // ── SDK INIT ───────────────────────────────────────────────
-const { Client, Databases, Account, Query, ID } = Appwrite;
+// Explicitly expose these to the window object so auth.js, statuses.js, etc. can use them!
+window.awClient    = new Appwrite.Client().setEndpoint(AW_ENDPOINT).setProject(AW_PROJECT_ID);
+window.awDatabases = new Appwrite.Databases(window.awClient);
+window.awAccount   = new Appwrite.Account(window.awClient);
 
-const awClient    = new Client().setEndpoint(AW_ENDPOINT).setProject(AW_PROJECT_ID);
-const awDatabases = new Databases(awClient);
-const awAccount   = new Account(awClient);
+// Expose utilities that your scripts require
+window.Query       = Appwrite.Query;
+window.ID          = Appwrite.ID;
+
+// Expose config constants in case other files reference them
+window.AW_DB_ID    = AW_DB_ID;
 
 // ── AUTH BRIDGE ────────────────────────────────────────────
 // Called once after Firebase login. Creates (or logs into) a matching
