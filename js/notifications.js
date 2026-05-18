@@ -1,4 +1,4 @@
-// ── NOTIFICATION SETTINGS ──────────────────────────────────
+// ── NOTIFICATION SETTINGS ─────────────────────────────────
 function getNotifSettings() {
 try {
 const stored = JSON.parse(localStorage.getItem('normsg_notif') || 'null');
