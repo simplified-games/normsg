@@ -1,4 +1,4 @@
-// ── GROQ AI INTEGRATION ────────────────────────────────────
+// ── GROQ AI INTEGRATION ───────────────────────────────────
 // Key is stored securely in the Deno Deploy environment — never exposed here
 const GROQ_MODEL     = 'llama-3.1-8b-instant';        // standard
 const GROQ_MODEL_SUPER = 'llama-3.3-70b-versatile';  // NorMSG Super
