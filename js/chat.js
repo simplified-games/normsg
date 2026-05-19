@@ -922,3 +922,12 @@ async function createGroup() {
         showToast('Failed to create group.');
     }
 }
+
+function getHiddenDMs() {
+    try {
+        // Reads hidden DM configurations from localStorage, returning an empty array if none exist
+        return JSON.parse(localStorage.getItem('normsg_hidden_dms') || '[]');
+    } catch (e) {
+        return [];
+    }
+}
