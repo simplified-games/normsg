@@ -925,9 +925,9 @@ async function createGroup() {
 
 function getHiddenDMs() {
     try {
-        // Reads hidden DM configurations from localStorage, returning an empty array if none exist
-        return JSON.parse(localStorage.getItem('normsg_hidden_dms') || '[]');
+        const data = JSON.parse(localStorage.getItem('normsg_hidden_dms') || '[]');
+        return new Set(Array.isArray(data) ? data : []);
     } catch (e) {
-        return [];
+        return new Set();
     }
 }
