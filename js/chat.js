@@ -931,3 +931,13 @@ function getHiddenDMs() {
         return new Set();
     }
 }
+
+// Helper function to render text safely and parse basic formatting
+function renderMsgText(text) {
+    if (!text) return '';
+    // Escapes HTML to prevent injection, parses basic linebreaks
+    return esc(text)
+        .replace(/\n/g, '<br>')
+        .replace(/\*(.*?)\*/g, '<strong>$1</strong>') // Optional: Support *bold* text
+        .replace(/_(.*?)_/g, '<em>$1</em>');         // Optional: Support _italic_ text
+}
