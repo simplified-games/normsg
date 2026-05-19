@@ -1,4 +1,4 @@
-// ─ localStorage helpers ───────────────────────────────────
+// ─ localStorage helpers ─────────────────────────────────── 
 function aiChatsKey()      { return `normsg_aichats_${me?.uid}`; }
 function aiMsgsKey(id)     { return `normsg_aichat_${me?.uid}_${id}`; }
 
