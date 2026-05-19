@@ -30,27 +30,26 @@ function invalidateUserCache(uid) {
 }
 
 async function getCachedUid(uname) {
-        if (usernameCache[uname]) return usernameCache[uname];
-        try {
-            // Query the 'usernames' collection where the 'username' attribute or document matches
-            // If your usernames collection saves the username as the document ID, make sure your awList matches your attributes:
-            const docs = await awList('usernames', [
-                Query.equal('$id', uname) // Checks if the document ID matches the username
-            ]);
-            
-            // Fallback: If your schema stores username as an attribute inside the document instead:
-            // const docs = await awList('usernames', [Query.equal('username', uname)]);
-    
-            if (docs && docs.length > 0) {
-                usernameCache[uname] = docs[0].uid;
-                return usernameCache[uname];
-            }
-        } catch (e) { 
-            console.error('Error finding username:', e); 
-        }
-        return null;
-    }
+    if (usernameCache[uname]) return usernameCache[uname];
+    try {
+        // Query the 'usernames' collection where the 'username' attribute or document matches
+        // If your usernames collection saves the username as the document ID, make sure your awList matches your attributes:
+        const docs = await awList('usernames', [
+            Query.equal('$id', uname) // Checks if the document ID matches the username
+        ]);
+        
+        // Fallback: If your schema stores username as an attribute inside the document instead:
+        // const docs = await awList('usernames', [Query.equal('username', uname)]);
 
+        if (docs && docs.length > 0) {
+            usernameCache[uname] = docs[0].uid;
+            return usernameCache[uname];
+        }
+    } catch (e) { 
+        console.error('Error finding username:', e); 
+    }
+    return null;
+}
 async function getCachedProfile(uid) {
     const cached = userProfileCache[uid];
     if (cached && (Date.now() - cached.ts < USER_PROFILE_TTL)) return cached.data;
