@@ -326,7 +326,7 @@ async function adminCreateAccount() {
                 displayName, email: fakeEmail, photoURL: null,
                 username, createdByAdmin: me.uid, createdAt: awNow()
             }),
-            awDatabases.createDocument(AW_DB_ID, 'usernames', username, { uid: newUid }),
+            await awDatabases.createDocument(AW_DB_ID, '67be16db00187ba578fe', v, { uid: me.uid }),
         ]);
 
         mmsg('createAccMsg', `✓ Account @${username} created!`, 'ok');
