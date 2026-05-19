@@ -76,6 +76,7 @@ function activateChat() {
 // ── MESSAGES ───────────────────────────────────────────────
 const MSG_PAGE = 40;
 let _lastRenderedMsgIds = [];
+let msgUnsub = null; // 👈 ADD THIS LINE HERE
 
 function subMessages(chatIdArg, chatTypeArg) {
     if (msgUnsub) { msgUnsub(); msgUnsub = null; }
