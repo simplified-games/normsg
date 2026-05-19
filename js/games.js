@@ -939,12 +939,13 @@ function chessClickOnline(r, c, data) {
             const newBoard = chessApplyMove(chessSelected[0],chessSelected[1],r,c,data.board);
             const nextTurn = chessOnlineMyColor==='w'?'b':'w';
             const allNext  = chessAllMoves(newBoard, nextTurn);
-            await awUpdate('normgames', chessOnlineGameId, {
+            async function awUpdate('normgames', chessOnlineGameId, {
                 board:    awEncode(newBoard.flat()),
                 turn:     nextTurn,
                 lastMove: awEncode([chessSelected[0],chessSelected[1],r,c]),
                 status:   allNext.length===0 ? 'done' : 'playing',
             });
+
             chessSelected=null; chessValidMoves=[];
             return;
         }
