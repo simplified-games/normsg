@@ -890,3 +890,35 @@ async function sendFriendReqTo(username, btn) {
         showToast('Request sent! 🎉');
     } catch(e) { btn.textContent = '✗ Error'; console.error(e); }
 }
+
+async function createGroup() {
+    const nameIn = document.getElementById('grpNameIn');
+    if (!nameIn) return;
+    
+    const name = nameIn.value.trim();
+    if (!name) return showToast('Please enter a group name.');
+
+    try {
+        const groupData = {
+            name: name,
+            members: [me.uid], // Automatically adds you as the first member
+            admins: [me.uid],
+            createdBy: me.uid,
+            createdAt: awNow(),
+        };
+        
+        // Adds the group to your Appwrite 'groups' collection
+        const newGroup = await awAdd('groups', groupData);
+        
+        // Closes the modal and clears the text box
+        if (typeof closeModal === 'function') closeModal('groupModal');
+        nameIn.value = '';
+        showToast('Group created! 🎉');
+        
+        // Refresh the UI if your app has a load chats function
+        if (typeof loadChats === 'function') loadChats(); 
+    } catch (e) {
+        console.error("Failed to create group:", e);
+        showToast('Failed to create group.');
+    }
+}
