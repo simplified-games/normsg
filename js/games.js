@@ -939,7 +939,9 @@ function chessClickOnline(r, c, data) {
             const newBoard = chessApplyMove(chessSelected[0],chessSelected[1],r,c,data.board);
             const nextTurn = chessOnlineMyColor==='w'?'b':'w';
             const allNext  = chessAllMoves(newBoard, nextTurn);
-            async function awUpdate('normgames', chessOnlineGameId, {
+            
+            // 🚀 CHANGED HERE: Changed 'async function' to 'await'
+            await awUpdate('normgames', chessOnlineGameId, {
                 board:    awEncode(newBoard.flat()),
                 turn:     nextTurn,
                 lastMove: awEncode([chessSelected[0],chessSelected[1],r,c]),
@@ -950,6 +952,8 @@ function chessClickOnline(r, c, data) {
             return;
         }
     }
+    // ... remainder of your function
+}
     if (piece && piece[0]===chessOnlineMyColor) {
         chessSelected   = [r,c];
         chessValidMoves = chessGetValidMoves(data.board,r,c,chessOnlineMyColor);
