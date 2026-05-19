@@ -687,7 +687,6 @@ function showToBanner(msg, until) {
             disp = disp.replace(/\d+s remaining/, s+'s remaining').replace(/\d+s left/, s+'s left');
         }
         document.getElementById('toMsg').textContent = disp;
-        document.getElementById('toMsg').textContent = disp;
     }
     tick();
     toInterval = setInterval(tick, 1000);
@@ -848,7 +847,7 @@ function onMsgInputKeydown(e) {
             hideMentionBox();
         }
     }
-    if (e.key === 'Enter' && !e.shiftKey && box?.style.display === 'none') {
+    if (e.key === 'Enter' && !e.shiftKey && (!box || box.style.display !== 'block')) {
         e.preventDefault(); sendMsg();
     }
 }
@@ -889,4 +888,4 @@ async function sendFriendReqTo(username, btn) {
         btn.textContent = '✓ Sent';
         showToast('Request sent! 🎉');
     } catch(e) { btn.textContent = '✗ Error'; console.error(e); }
-
+}

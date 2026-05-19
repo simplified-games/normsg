@@ -6,8 +6,6 @@ const GROQ_MODEL_SUPER = 'llama-3.3-70b-versatile';  // NorMSG Super
 async function triggerAIResponse(userText) {
 if (!chatId || chatType !== 'group') return;
 
-const msgPath = `groups/${chatId}/messages`;
-
 // Strip @AI from the prompt
 const prompt = userText.replace(/@AI\b/gi, '').trim();
 if (!prompt) return;
@@ -21,37 +19,40 @@ return;
 // Check if the sender has NorMSG Super/Ultra or Pro (all get the smarter model)
 const isSuper = userPlan === 'pro' || userPlan === 'ultra' || await hasSuper(me.uid) || await hasUltra(me.uid);
 const isUltraUser = userPlan === 'ultra';
-let model = GROQ_MODEL;
-if (isUltraUser) {
-    // Ultra users can pick Pro or Thinking for @AI
-    const ultraPref = (() => { try { return localStorage.getItem('normsg_ultra_ai_model') || 'pro'; } catch { return 'pro'; } })();
-    model = ultraPref === 'thinking' ? GROQ_MODEL_SUPER : GROQ_MODEL_SUPER; // both use super model via GROQ; pro routes to NVIDIA
-} else if (isSuper) {
-    model = GROQ_MODEL_SUPER;
-}
 
 // Post a "thinking" placeholder so everyone sees AI is working
-const thinkRef = await db.collection(msgPath).add({
-type:          'ai-thinking',
-text:          '',
-senderUid:     'AI',
-senderName:    'AI Assistant',
-senderUsername:'AI',
-senderPhoto:   null,
-timestamp:     SV(),
-deleteAt:      TS.fromDate(new Date(Date.now() + 7*24*3600000))
+const thinkDoc = await awAdd('messages', {
+    chatId,
+    chatType:      'group',
+    type:          'ai-thinking',
+    text:          '',
+    senderUid:     'AI',
+    senderName:    'AI Assistant',
+    senderUsername:'AI',
+    senderPhoto:   null,
+    timestamp:     awNow(),
+    deleteAt:      new Date(Date.now() + 7*24*3600000).toISOString(),
 });
+const thinkId = thinkDoc.$id;
 
-// Fetch last 10 messages for context
-const ctxSnap = await db.collection(msgPath)
-.orderBy('timestamp','desc').limit(10).get();
-const history = ctxSnap.docs
-.reverse()
-.filter(d => d.id !== thinkRef.id && d.data().type === 'text')
-.map(d => ({
-role:    d.data().senderUid === 'AI' ? 'assistant' : 'user',
-content: `${d.data().senderUsername || d.data().senderName || 'User'}: ${d.data().text}`
-}));
+// Fetch last 10 messages for context (excluding the thinking placeholder)
+let history = [];
+try {
+    const ctxDocs = await awList('messages', [
+        Query.equal('chatId', chatId),
+        Query.equal('chatType', 'group'),
+        Query.orderDesc('timestamp'),
+        Query.limit(12),
+    ]);
+    history = ctxDocs
+        .reverse()
+        .filter(d => d.$id !== thinkId && d.type === 'text')
+        .slice(-10)
+        .map(d => ({
+            role:    d.senderUid === 'AI' ? 'assistant' : 'user',
+            content: `${d.senderUsername || d.senderName || 'User'}: ${d.text}`,
+        }));
+} catch(e) { console.warn('AI context fetch failed:', e); }
 
 try {
 // Build context string from history for the worker
@@ -59,10 +60,9 @@ const contextStr = history.map(m => `${m.role === 'assistant' ? 'AI' : m.content
 const systemNote = `You are a helpful AI assistant inside NorMSG, a group messaging app. Be friendly, concise and smart. When writing code, use markdown fenced blocks with the language tag and real line breaks (never JSON \\n escapes). The user who mentioned you is ${me.displayName || myUsername || 'someone'}.${isSuper ? ' NorMSG Super mode — give more detailed, thorough answers.' : ''}`;
 const fullPrompt = systemNote + (contextStr ? `\n\nChat history:\n${contextStr}` : '');
 
-// Always use Free API format for @AI — the Pro endpoint doesn't support this call shape
-// Ultra users with Pro preference get the Ultra API
-const ultraPref2 = (() => { try { return localStorage.getItem('normsg_ultra_ai_model') || 'pro'; } catch { return 'pro'; } })();
-const atAiApiUrl = (isUltraUser && ultraPref2 === 'pro') ? NORMAI_ULTRA_API : NORMAI_FREE_API;
+// Ultra users with Pro preference get the Ultra API; otherwise Free API for @AI
+const ultraPref = (() => { try { return localStorage.getItem('normsg_ultra_ai_model') || 'pro'; } catch { return 'pro'; } })();
+const atAiApiUrl = (isUltraUser && ultraPref === 'pro') ? NORMAI_ULTRA_API : NORMAI_FREE_API;
 const res = await fetch(atAiApiUrl, {
 method:  'POST',
 headers: { 'Content-Type': 'application/json' },
@@ -77,11 +77,20 @@ throw new Error(err?.error?.message || `HTTP ${res.status}`);
 const data   = await res.json();
 const answer = extractNormAIReply(data) || 'Sorry, I couldn\'t generate a response.';
 
-await thinkRef.update({ type:'ai', text:answer, usedSuper: isSuper === true, timestamp: SV() });
+await awUpdate('messages', thinkId, {
+    type:      'ai',
+    text:      answer,
+    usedSuper: isSuper === true,
+    timestamp: awNow(),
+});
 
 } catch(e) {
-await thinkRef.update({ type:'ai', text:`⚠ AI error: ${e.message}`, timestamp: SV() });
-console.error('Groq error:', e);
+await awUpdate('messages', thinkId, {
+    type:      'ai',
+    text:      `⚠ AI error: ${e.message}`,
+    timestamp: awNow(),
+});
+console.error('NorMAI @AI error:', e);
 }
 }
 
