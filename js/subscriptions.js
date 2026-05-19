@@ -408,3 +408,12 @@ async function createGroup() {
     showToast(`"${name}" created! 🎉`);
     switchTab('groups');
 }
+
+// Fallback function to prevent UI crashing
+function getHiddenDMs() {
+    try {
+        return JSON.parse(localStorage.getItem('normsg_hidden_dms') || '[]');
+    } catch (e) {
+        return [];
+    }
+}
