@@ -931,7 +931,7 @@ function renderChessOnline(data) {
     }
 }
 
-function chessClickOnline(r, c, data) {
+async function chessClickOnline(r, c, data) {
     const piece = data.board[r][c];
     if (chessSelected) {
         const isMove = chessValidMoves.some(m=>m[0]===r&&m[1]===c);
