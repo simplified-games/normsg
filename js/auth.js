@@ -7,16 +7,21 @@ const userProfileCache = {};
 
 async function getCachedUserDoc(uid) {
     const cached = userDocCache[uid];
-    if (cached && (Date.now() - cached.ts < USER_DOC_TTL)) return cached.snap;
-    const doc  = await awGet('users', uid);
-    const decoded = awDecodeUser(doc);
-    // From chat.js:
-    const snap = await getCachedUserDoc(me.uid);
-    const dat  = snap || {}; // Access snap directly instead of calling .data()
-
-const dbTO = dat.timeoutUntil ? new Date(dat.timeoutUntil) : null;
-    userDocCache[uid] = { snap, ts: Date.now() };
-    return snap;
+    if (cached && (Date.now() - cached.ts < USER_DOC_TTL)) {
+        return cached.snap;
+    }
+    
+    try {
+        const doc = await awGet('users', uid);
+        const decoded = awDecodeUser(doc);
+        
+        // Cache the decoded document and return it
+        userDocCache[uid] = { snap: decoded, ts: Date.now() };
+        return decoded;
+    } catch (error) {
+        console.error("User doc not found or error fetching:", error);
+        return null;
+    }
 }
 
 function invalidateUserCache(uid) {
