@@ -697,7 +697,7 @@ function showPinnedBanner(text, mid) {
 }
 
 // Subscribe to pinned message for current chat
-let pinnedUnsub = null;
+pinnedUnsub = null;
 function subscribePinned() {
   if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
   if (!chatId) return;
