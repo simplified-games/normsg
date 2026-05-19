@@ -10,7 +10,11 @@ async function getCachedUserDoc(uid) {
     if (cached && (Date.now() - cached.ts < USER_DOC_TTL)) return cached.snap;
     const doc  = await awGet('users', uid);
     const decoded = awDecodeUser(doc);
-    const snap = { data: () => decoded, exists: true, id: doc.$id };
+    // From chat.js:
+    const snap = await getCachedUserDoc(me.uid);
+    const dat  = snap || {}; // Access snap directly instead of calling .data()
+
+const dbTO = dat.timeoutUntil ? new Date(dat.timeoutUntil) : null;
     userDocCache[uid] = { snap, ts: Date.now() };
     return snap;
 }
