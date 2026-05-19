@@ -940,7 +940,6 @@ async function chessClickOnline(r, c, data) {
             const nextTurn = chessOnlineMyColor==='w'?'b':'w';
             const allNext  = chessAllMoves(newBoard, nextTurn);
             
-            // 🚀 CHANGED HERE: Changed 'async function' to 'await'
             await awUpdate('normgames', chessOnlineGameId, {
                 board:    awEncode(newBoard.flat()),
                 turn:     nextTurn,
@@ -951,9 +950,8 @@ async function chessClickOnline(r, c, data) {
             chessSelected=null; chessValidMoves=[];
             return;
         }
-    }
-    // ... remainder of your function
-}
+    } // 👈 Keeps the function open so the rest of the logic stays inside!
+
     if (piece && piece[0]===chessOnlineMyColor) {
         chessSelected   = [r,c];
         chessValidMoves = chessGetValidMoves(data.board,r,c,chessOnlineMyColor);
@@ -961,7 +959,7 @@ async function chessClickOnline(r, c, data) {
         chessSelected=null; chessValidMoves=[];
     }
     renderChessOnline(data);
-}
+} // 👈 Closes the entire async function beautifully at the very end
 
 function cancelChessOnline() {
     if (chessOnlineUnsub) { chessOnlineUnsub(); chessOnlineUnsub=null; }
