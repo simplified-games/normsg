@@ -157,8 +157,15 @@ function openAIChat(chatId) {
     document.getElementById('scheduleBtn').style.display = 'none';
     document.getElementById('normAIBtn').style.display = 'none';
     // Show model dropdown and populate it for current plan
-    populateAIModelDropdown();
-    document.getElementById('aiModelDropdownWrap').classList.add('visible');
+    function populateAIModelDropdown() {
+        const select = document.getElementById('aiModelSelect');
+        if (select) {
+            select.innerHTML = '<option value="fast">⚡ Fast</option>';
+            if (userPlan === 'pro' || userPlan === 'ultra') {
+                select.innerHTML += '<option value="pro">🧠 Pro</option>';
+            }
+        }
+    }
     // Hide pinned banner in AI chats
     if (pinnedUnsub) { pinnedUnsub(); pinnedUnsub = null; }
     document.getElementById('pinnedBanner').classList.remove('on');
