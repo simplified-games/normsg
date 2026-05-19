@@ -881,4 +881,3 @@ function loadAppearance() {
   const msb = document.getElementById('settingMsgSounds');
   if (msb) msb.checked = msgsounds;
 }
-
