@@ -409,11 +409,12 @@ async function createGroup() {
     switchTab('groups');
 }
 
-// Fallback function to prevent UI crashing
+// Updated fallback function to return a Set as expected by the rendering code
 function getHiddenDMs() {
     try {
-        return JSON.parse(localStorage.getItem('normsg_hidden_dms') || '[]');
+        const data = JSON.parse(localStorage.getItem('normsg_hidden_dms') || '[]');
+        return new Set(Array.isArray(data) ? data : []);
     } catch (e) {
-        return [];
+        return new Set();
     }
 }
