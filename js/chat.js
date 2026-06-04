@@ -114,16 +114,26 @@ function subMessages(chatIdArg, chatTypeArg) {
     msgUnsub = awSubscribe(['messages'], response => {
         const doc = response.payload;
         if (!doc || doc.chatId !== chatIdArg) return;
-        // Re-fetch to keep correct order and state
-        awList('messages', [
-            Query.equal('chatId', chatIdArg),
-            Query.orderDesc('timestamp'),
-            Query.limit(MSG_PAGE),
-        ]).then(docs => {
-            const msgs = docs.reverse().map(d => normalizeMsg(d));
-            renderMsgs(msgs);
+        
+        // If it's a brand new message, append it immediately without fetching
+        if (response.events.some(e => e.includes('.create'))) {
+            const newMsg = normalizeMsg(doc);
+            renderMsgs([newMsg], true); // true = append
             if (chatIdArg === chatId) markRead(chatIdArg);
-        });
+        } else {
+            // If it's an update or delete, wait 500ms for the DB to index before fetching
+            setTimeout(() => {
+                awList('messages', [
+                    Query.equal('chatId', chatIdArg),
+                    Query.orderDesc('timestamp'),
+                    Query.limit(MSG_PAGE),
+                ]).then(docs => {
+                    const msgs = docs.reverse().map(d => normalizeMsg(d));
+                    renderMsgs(msgs);
+                    if (chatIdArg === chatId) markRead(chatIdArg);
+                });
+            }, 500);
+        }
     });
 }
 
@@ -155,12 +165,17 @@ function normalizeMsg(d) {
     };
 }
 
-function renderMsgs(msgs) {
+// Add the append parameter
+function renderMsgs(msgs, append = false) {
     const area = document.getElementById('messagesArea');
-    area.innerHTML = '';
+    
+    // Only clear the area if we are doing a fresh load
+    if (!append) area.innerHTML = '';
+    
     const hiddenMsgs = getHiddenMsgs();
     let lastDate = null;
-
+    
+    // ... rest of the function stays exactly the same
     msgs.filter(m => !hiddenMsgs.has(m.id)).forEach((msg, i, arr) => {
         const ts   = msg.timestamp?.toDate?.() || new Date();
         const ds   = dateLabel(ts);
