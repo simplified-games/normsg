@@ -365,13 +365,26 @@ async function sendMsg() {
     if (validErr) { showToast(validErr); return; }
 
     if (!await checkSend('text', text)) return;
-    inp.value = ''; inp.style.height = '';
+
+    // Save the text to a variable, then clear the box
+    const savedText = text;
+    inp.value = ''; 
+    inp.style.height = '';
+    
     const rt = replyTo ? { ...replyTo } : null;
     clearReply();
-    await pushMsg({ type: 'text', text, ...(rt ? { replyTo: rt } : {}) });
-    ntOnMessage();
-
-    if (chatType === 'group' && /@AI\b/i.test(text)) triggerAIResponse(text);
+    
+    // Wrap the send logic in a try/catch block
+    try {
+        await pushMsg({ type: 'text', text: savedText, ...(rt ? { replyTo: rt } : {}) });
+        if (typeof ntOnMessage === 'function') ntOnMessage();
+        
+        if (chatType === 'group' && /@AI\b/i.test(savedText)) triggerAIResponse(savedText);
+    } catch (e) {
+        console.error("Message send failed:", e);
+        showToast("Failed to send: " + e.message);
+        inp.value = savedText; // Restore the text so the user doesn't lose it!
+    }
 }
 
 // ── IMAGE/VIDEO UPLOAD — CLOUDINARY ───────────────────────
