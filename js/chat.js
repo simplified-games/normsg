@@ -1,4 +1,20 @@
 // ── OPEN CHAT ──────────────────────────────────────────────
+// Creates a safe, 32-character hex hash from a string
+function hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+    }
+    return Math.abs(hash).toString(16).padStart(8, '0');
+}
+
+// Safely generates a DM ID well under Appwrite's 36-character limit
+function dmId(uid1, uid2) {
+    const sorted = [uid1, uid2].sort();
+    return hashString(sorted[0]) + '_' + hashString(sorted[1]);
+}
+
 function openDM(friend) {
     chatType = 'dm';
     chatId   = dmId(me.uid, friend.uid);
